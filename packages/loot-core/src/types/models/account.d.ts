@@ -1,6 +1,7 @@
 export type AccountEntity = {
   id: string;
   name: string;
+  account_group: string;
   offbudget: 0 | 1;
   closed: 0 | 1;
   sort_order: number;

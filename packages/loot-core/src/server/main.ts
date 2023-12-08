@@ -720,6 +720,7 @@ handlers['gocardless-accounts-connect'] = async function ({
 
 handlers['account-create'] = mutator(async function ({
   name,
+  groupId,
   balance,
   offBudget,
   closed,
@@ -727,6 +728,7 @@ handlers['account-create'] = mutator(async function ({
   return withUndo(async () => {
     const id = await db.insertAccount({
       name,
+      groupId,
       offbudget: offBudget ? 1 : 0,
       closed: closed ? 1 : 0,
     });

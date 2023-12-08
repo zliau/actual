@@ -62,8 +62,15 @@ export const schema = {
   accounts: {
     id: f('id'),
     name: f('string', { required: true }),
+    group: f('id', { ref: 'account_groups' }),
     offbudget: f('boolean'),
     closed: f('boolean'),
+    sort_order: f('float'),
+    tombstone: f('boolean'),
+  },
+  account_groups: {
+    id: f('id'),
+    name: f('string'),
     sort_order: f('float'),
     tombstone: f('boolean'),
   },
@@ -169,6 +176,9 @@ export const schemaConfig = {
 
       case 'categories':
         return 'v_categories';
+
+      case 'accounts':
+        return 'v_accounts';
 
       case 'payees':
         return 'v_payees';

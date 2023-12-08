@@ -172,6 +172,7 @@ export interface ServerHandlers {
   'account-create': (arg: {
     name: string;
     balance: number;
+    groupId?: string;
     offBudget?: boolean;
     closed?: 0 | 1;
   }) => Promise<string>;
