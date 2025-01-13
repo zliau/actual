@@ -4,6 +4,7 @@ export type AccountEntity = {
   offbudget: 0 | 1;
   closed: 0 | 1;
   sort_order: number;
+  currency: string; // FIXME type this
   tombstone: 0 | 1;
 } & (_SyncFields<true> | _SyncFields<false>);
 
