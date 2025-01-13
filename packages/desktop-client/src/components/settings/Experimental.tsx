@@ -102,6 +102,12 @@ export function ExperimentalFeatures() {
             >
               <Trans>OpenID authentication method</Trans>
             </FeatureToggle>
+            <FeatureToggle
+              flag="multiCurrency"
+              feedbackLink="https://github.com/actualbudget/actual/issues/XXXX" // FIXME
+            >
+              <Trans>Multi Currency Support</Trans>
+            </FeatureToggle>
           </View>
         ) : (
           <Link

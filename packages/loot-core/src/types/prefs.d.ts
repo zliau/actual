@@ -3,7 +3,8 @@ export type FeatureFlag =
   | 'actionTemplating'
   | 'upcomingLengthAdjustment'
   | 'contextMenus'
-  | 'openidAuth';
+  | 'openidAuth'
+  | 'multiCurrency';
 
 /**
  * Cross-device preferences. These sync across devices when they are changed.
@@ -15,6 +16,7 @@ export type SyncedPrefs = Partial<
     | 'firstDayOfWeekIdx'
     | 'dateFormat'
     | 'numberFormat'
+    | 'currency'
     | 'hideFraction'
     | 'isPrivacyEnabled'
     | `show-balances-${string}`

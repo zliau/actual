@@ -8,6 +8,7 @@ const DEFAULT_FEATURE_FLAG_STATE: Record<FeatureFlag, boolean> = {
   upcomingLengthAdjustment: false,
   contextMenus: false,
   openidAuth: false,
+  multiCurrency: false,
 };
 
 export function useFeatureFlag(name: FeatureFlag): boolean {

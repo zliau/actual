@@ -35,6 +35,7 @@ import { FormatSettings } from './Format';
 import { ResetCache, ResetSync } from './Reset';
 import { ThemeSettings } from './Themes';
 import { AdvancedToggle, Setting } from './UI';
+import { CurrencySettings } from './Currency';
 
 function About() {
   const version = useServerVersion();
@@ -195,6 +196,7 @@ export function Settings() {
         <About />
         <ThemeSettings />
         <FormatSettings />
+        <CurrencySettings />
         <AuthSettings />
         <EncryptionSettings />
         <BudgetTypeSettings />
