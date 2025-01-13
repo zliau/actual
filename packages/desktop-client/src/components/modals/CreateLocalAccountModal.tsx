@@ -7,6 +7,7 @@ import { closeModal, createAccount } from 'loot-core/client/actions';
 import { toRelaxedNumber } from 'loot-core/src/shared/util';
 
 import * as useAccounts from '../../hooks/useAccounts';
+import { useFeatureFlag } from '../../hooks/useFeatureFlag';
 import { useNavigate } from '../../hooks/useNavigate';
 import { useDispatch } from '../../redux';
 import { theme } from '../../style';
@@ -23,22 +24,33 @@ import {
   ModalHeader,
   ModalTitle,
 } from '../common/Modal';
+import { Select } from '../common/Select';
 import { Text } from '../common/Text';
 import { View } from '../common/View';
 import { Checkbox } from '../forms';
 import { validateAccountName } from '../util/accountValidation';
+import { useSyncedPref } from '../../hooks/useSyncedPref';
+
+const currencies: { value: string; label: string }[] = [
+  { value: 'USD', label: 'USD' },
+  { value: 'CAD', label: 'CAD' },
+];
 
 export function CreateLocalAccountModal() {
   const { t } = useTranslation();
+  const [currencyPref, _] = useSyncedPref('currency');
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const accounts = useAccounts.useAccounts();
   const [name, setName] = useState('');
   const [offbudget, setOffbudget] = useState(false);
   const [balance, setBalance] = useState('0');
+  const [currency, setCurrency] = useState(currencyPref);
 
   const [nameError, setNameError] = useState(null);
   const [balanceError, setBalanceError] = useState(false);
+
+  const multiCurrencyFeatureFlag = useFeatureFlag('multiCurrency');
 
   const validateBalance = balance => !isNaN(parseFloat(balance));
 
@@ -63,7 +75,7 @@ export function CreateLocalAccountModal() {
     if (!nameError && !balanceError) {
       dispatch(closeModal());
       const id = await dispatch(
-        createAccount(name, toRelaxedNumber(balance), offbudget),
+        createAccount(name, toRelaxedNumber(balance), offbudget, currency),
       );
       navigate('/accounts/' + id);
     }
@@ -174,6 +186,15 @@ export function CreateLocalAccountModal() {
                 <FormError style={{ marginLeft: 75 }}>
                   {t('Balance must be a number')}
                 </FormError>
+              )}
+              {multiCurrencyFeatureFlag && (
+                <InlineField label="Currency" width="100%">
+                  <Select
+                    onChange={value => setCurrency(value)}
+                    value={currency}
+                    options={currencies.map(c => [c.value, c.label])}
+                  />
+                </InlineField>
               )}
 
               <ModalButtons>

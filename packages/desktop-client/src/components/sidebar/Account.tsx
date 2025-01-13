@@ -34,6 +34,7 @@ import {
 } from '../sort';
 import { type SheetFields, type Binding } from '../spreadsheet';
 import { CellValue } from '../spreadsheet/CellValue';
+import { useSyncedPref } from '../../hooks/useSyncedPref';
 
 export const accountNameStyle: CSSProperties = {
   marginTop: -2,
@@ -105,6 +106,7 @@ export function Account<FieldName extends SheetFields<'account'>>({
   const dispatch = useDispatch();
 
   const [isEditing, setIsEditing] = useState(false);
+  const [currencyPref, _] = useSyncedPref('currency');
 
   const accountNote = useNotes(`account-${account?.id}`);
   const needsTooltip = !!account?.id;
@@ -208,6 +210,10 @@ export function Account<FieldName extends SheetFields<'account'>>({
                       defaultValue={name}
                     />
                   </InitialFocus>
+                ) : account &&
+                  account.currency &&
+                  account.currency !== currencyPref ? (
+                  `${name} (${account.currency})`
                 ) : (
                   name
                 )

@@ -312,9 +312,14 @@ export function updateAccount(account: AccountEntity) {
   };
 }
 
-export function createAccount(name, balance, offBudget) {
+export function createAccount(name, balance, offBudget, currency = 'USD') {
   return async (dispatch: AppDispatch) => {
-    const id = await send('account-create', { name, balance, offBudget });
+    const id = await send('account-create', {
+      name,
+      balance,
+      offBudget,
+      currency,
+    });
     await dispatch(getAccounts());
     await dispatch(getPayees());
     return id;

@@ -47,6 +47,7 @@ import { SelectedTransactionsButton } from '../transactions/SelectedTransactions
 import { type TableRef } from './Account';
 import { Balances } from './Balance';
 import { ReconcilingMessage, ReconcileMenu } from './Reconcile';
+import { useSyncedPref } from '../../hooks/useSyncedPref';
 
 type AccountHeaderProps = {
   tableRef: TableRef;
@@ -575,6 +576,15 @@ function AccountNameField({
   onExposeName,
 }: AccountNameFieldProps) {
   const { t } = useTranslation();
+  const [currencyPref, _] = useSyncedPref('currency');
+  let displayName = accountName;
+  if (account) {
+    if (account.closed) {
+      displayName = t('Closed: {{ accountName }}', { accountName });
+    } else if (account.currency && account.currency !== currencyPref) {
+      displayName = `${accountName} (${account.currency})`;
+    }
+  }
 
   if (editingName) {
     return (
@@ -628,9 +638,7 @@ function AccountNameField({
             }}
             data-testid="account-name"
           >
-            {account && account.closed
-              ? t('Closed: {{ accountName }}', { accountName })
-              : accountName}
+            {displayName}
           </View>
 
           {account && (
@@ -661,9 +669,7 @@ function AccountNameField({
           style={{ fontSize: 25, fontWeight: 500, marginBottom: -1 }}
           data-testid="account-name"
         >
-          {account && account.closed
-            ? t('Closed: {{ accountName }}', { accountName })
-            : accountName}
+          {displayName}
         </View>
       );
     }

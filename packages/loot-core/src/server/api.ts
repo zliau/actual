@@ -569,6 +569,7 @@ handlers['api/account-create'] = withMutation(async function ({
     // Current the API expects an amount but it really should expect
     // an integer
     balance: initialBalance != null ? integerToAmount(initialBalance) : null,
+    currency: account.currency,
   });
 });
 

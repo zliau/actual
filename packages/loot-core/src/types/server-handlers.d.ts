@@ -167,6 +167,7 @@ export interface ServerHandlers {
     balance?: number;
     offBudget?: boolean;
     closed?: 0 | 1;
+    currency?: string;
   }) => Promise<string>;
 
   'account-close': (arg: {

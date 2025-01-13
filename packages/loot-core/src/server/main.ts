@@ -711,12 +711,14 @@ handlers['account-create'] = mutator(async function ({
   balance,
   offBudget,
   closed,
+  currency,
 }) {
   return withUndo(async () => {
     const id = await db.insertAccount({
       name,
       offbudget: offBudget ? 1 : 0,
       closed: closed ? 1 : 0,
+      currency,
     });
 
     await db.insertPayee({
