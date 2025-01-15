@@ -87,6 +87,9 @@ import {
 } from '../table';
 
 import { TransactionMenu } from './TransactionMenu';
+import { useSyncedPref } from '../../hooks/useSyncedPref';
+import { useFeatureFlag } from '../../hooks/useFeatureFlag';
+import { round } from 'lodash';
 
 function getDisplayValue(obj, name) {
   return obj ? obj[name] : '';
@@ -176,9 +179,11 @@ const TransactionHeader = memo(
     ascDesc,
     field,
     showSelection,
+    showCurrencyHeader,
   }) => {
     const dispatchSelected = useSelectedDispatch();
     const { t } = useTranslation();
+    const [currencyPref, _] = useSyncedPref('currency');
 
     useHotkeys(
       'ctrl+a, cmd+a, meta+a',
@@ -293,26 +298,48 @@ const TransactionHeader = memo(
         )}
         <HeaderCell
           value={t('Payment')}
-          width={100}
+          width={120}
           alignItems="flex-end"
-          marginRight={-5}
           id="payment"
           icon={field === 'payment' ? ascDesc : 'clickable'}
           onClick={() =>
             onSort('payment', selectAscDesc(field, ascDesc, 'payment', 'asc'))
           }
         />
+        {showCurrencyHeader && (
+          <HeaderCell
+            value={`${t('Payment')} (${currencyPref})`}
+            width={120}
+            alignItems="flex"
+            id="payment-base-currency"
+            icon={field === 'payment' ? ascDesc : 'clickable'}
+            onClick={() =>
+              onSort('payment', selectAscDesc(field, ascDesc, 'payment', 'asc'))
+            }
+          />
+        )}
         <HeaderCell
           value={t('Deposit')}
-          width={100}
+          width={120}
           alignItems="flex-end"
-          marginRight={-5}
           id="deposit"
           icon={field === 'deposit' ? ascDesc : 'clickable'}
           onClick={() =>
             onSort('deposit', selectAscDesc(field, ascDesc, 'deposit', 'desc'))
           }
         />
+        {showCurrencyHeader && (
+          <HeaderCell
+            value={`${t('Deposit')} (${currencyPref})`}
+            width={120}
+            alignItems="flex"
+            id="deposit-base-currency"
+            icon={field === 'deposit' ? ascDesc : 'clickable'}
+            onClick={() =>
+              onSort('deposit', selectAscDesc(field, ascDesc, 'deposit', 'asc'))
+            }
+          />
+        )}
         {showBalance && (
           <HeaderCell
             value={t('Balance')}
@@ -886,10 +913,12 @@ const Transaction = memo(function Transaction({
   listContainerRef,
   showSelection,
   allowSplitTransaction,
+  showMultiCurrency,
 }) {
   const dispatch = useDispatch();
   const dispatchSelected = useSelectedDispatch();
   const triggerRef = useRef(null);
+  const [currencyPref, _] = useSyncedPref('currency');
 
   const [prevShowZero, setPrevShowZero] = useState(showZeroInDeposit);
   const [prevTransaction, setPrevTransaction] = useState(originalTransaction);
@@ -1070,6 +1099,9 @@ const Transaction = memo(function Transaction({
 
   const { setMenuOpen, menuOpen, handleContextMenu, position } =
     useContextMenu();
+
+  console.log('debit ' + evalArithmetic(debit));
+  console.log('parsed float ' + parseFloat(debit));
 
   return (
     <Row
@@ -1527,11 +1559,17 @@ const Transaction = memo(function Transaction({
       <InputCell
         /* Debit field for all transactions */
         type="input"
-        width={100}
+        width={120}
         name="debit"
         exposed={focusedField === 'debit'}
         focused={focusedField === 'debit'}
-        value={debit === '' && credit === '' ? '0.00' : debit}
+        value={
+          debit === '' && credit === ''
+            ? '0.00'
+            : debit !== '' && showMultiCurrency
+              ? `${debit} ${account.currency}`
+              : debit
+        }
         valueStyle={valueStyle}
         textAlign="right"
         title={debit}
@@ -1550,14 +1588,36 @@ const Transaction = memo(function Transaction({
         }}
       />
 
+      {showMultiCurrency && (
+        <Cell
+          name="debit-home-currency"
+          value={
+            debit === ''
+              ? debit
+              : `${integerToCurrency(amountToInteger(evalArithmetic(debit) * 1.4))} ${currencyPref}`
+          }
+          style={{ padding: 5 }}
+          valueStyle={{
+            color: theme.tableTextSubdued,
+            fontStyle: 'italic',
+          }}
+          width={120}
+          textAlign="right"
+        />
+      )}
+
       <InputCell
         /* Credit field for all transactions */
         type="input"
-        width={100}
+        width={120}
         name="credit"
         exposed={focusedField === 'credit'}
         focused={focusedField === 'credit'}
-        value={credit}
+        value={
+          credit !== '' && showMultiCurrency
+            ? `${credit} ${account.currency}`
+            : credit
+        }
         valueStyle={valueStyle}
         textAlign="right"
         title={credit}
@@ -1575,6 +1635,24 @@ const Transaction = memo(function Transaction({
           activationFilters: [!isTemporaryId(transaction.id)],
         }}
       />
+
+      {showMultiCurrency && (
+        <Cell
+          name="credit-home-currency"
+          value={
+            credit === ''
+              ? credit
+              : `${integerToCurrency(amountToInteger(evalArithmetic(credit) * 1.4))} ${currencyPref}`
+          }
+          style={{ padding: 5 }}
+          valueStyle={{
+            color: theme.tableTextSubdued,
+            fontStyle: 'italic',
+          }}
+          width={120}
+          textAlign="right"
+        />
+      )}
 
       {showBalance && (
         <Cell
@@ -1723,6 +1801,7 @@ function NewTransaction({
   onNavigateToSchedule,
   onNotesTagClick,
   balance,
+  showMultiCurrency,
 }) {
   const error = transactions[0].error;
   const isDeposit = transactions[0].amount > 0;
@@ -1785,6 +1864,7 @@ function NewTransaction({
           balance={balance}
           showSelection={true}
           allowSplitTransaction={true}
+          showMultiCurrency={showMultiCurrency}
         />
       ))}
       <View
@@ -1843,6 +1923,8 @@ function TransactionTableInner({
   const containerRef = createRef();
   const isAddingPrev = usePrevious(props.isAdding);
   const [scrollWidth, setScrollWidth] = useState(0);
+  const [currencyPref, _] = useSyncedPref('currency');
+  const multiCurrencyFeatureFlag = useFeatureFlag('multiCurrency');
 
   function saveScrollWidth(parent, child) {
     const width = parent > 0 && child > 0 && parent - child;
@@ -1888,6 +1970,15 @@ function TransactionTableInner({
         : props.transactions.filter(t => !t.reconciled),
     [props.transactions, props.showReconciled],
   );
+
+  // Determine if we should show the "home currency" column
+  // If the transactions list contains an account that has a different currency, then show it
+  const showMultiCurrency =
+    multiCurrencyFeatureFlag &&
+    transactionsToRender.some(transaction => {
+      const account = getAccountsById(props.accounts)[transaction.account];
+      return account.currency && account.currency !== currencyPref;
+    });
 
   const renderRow = ({ item, index, editing }) => {
     const {
@@ -1991,6 +2082,7 @@ function TransactionTableInner({
         listContainerRef={listContainerRef}
         showSelection={showSelection}
         allowSplitTransaction={allowSplitTransaction}
+        showMultiCurrency={showMultiCurrency}
       />
     );
   };
@@ -2016,6 +2108,7 @@ function TransactionTableInner({
           ascDesc={props.ascDesc}
           field={props.sortField}
           showSelection={props.showSelection}
+          showCurrencyHeader={showMultiCurrency}
         />
 
         {props.isAdding && (
@@ -2058,6 +2151,7 @@ function TransactionTableInner({
                   ? props.balances?.[props.transactions[0]?.id]?.balance
                   : 0
               }
+              showMultiCurrency={showMultiCurrency}
             />
           </View>
         )}
