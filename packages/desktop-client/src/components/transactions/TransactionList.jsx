@@ -60,6 +60,7 @@ export function TransactionList({
   tableRef,
   transactions,
   allTransactions,
+  rates,
   loadMoreTransactions,
   account,
   accounts,
@@ -210,6 +211,7 @@ export function TransactionList({
     <TransactionTable
       ref={tableRef}
       transactions={allTransactions}
+      rates={rates}
       loadMoreTransactions={loadMoreTransactions}
       accounts={accounts}
       categoryGroups={categoryGroups}

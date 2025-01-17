@@ -18,6 +18,7 @@ import { q, type Query } from '../shared/query';
 import { currencyToAmount, amountToInteger } from '../shared/util';
 import { type CategoryEntity, type AccountEntity } from '../types/models';
 import { type SyncedPrefs } from '../types/prefs';
+import { Currency } from 'loot-core/types/models/currency';
 
 type BudgetType<SheetName extends SheetNames> = Record<
   string,
@@ -76,6 +77,16 @@ export function transactions(
   const filter = accountFilter(accountId);
   if (filter) {
     query = query.filter(filter);
+  }
+
+  return query;
+}
+
+export function rates(toCurrency?: Currency) {
+  let query = q('rates');
+
+  if (toCurrency) {
+    query = query.filter({ to_currency: toCurrency });
   }
 
   return query;

@@ -26,6 +26,7 @@ import {
   getAccountsById,
   getPayeesById,
   getCategoriesById,
+  getRatesByCurrencyAndDate,
 } from 'loot-core/src/client/reducers/queries';
 import { evalArithmetic } from 'loot-core/src/shared/arithmetic';
 import { currentDay } from 'loot-core/src/shared/months';
@@ -873,6 +874,7 @@ function PayeeIcons({
 const Transaction = memo(function Transaction({
   allTransactions,
   transaction: originalTransaction,
+  rates,
   subtransactions,
   transferAccountsByTransaction,
   editing,
@@ -1062,6 +1064,13 @@ const Transaction = memo(function Transaction({
   const payee = payees && payeeId && getPayeesById(payees)[payeeId];
   const account = accounts && accountId && getAccountsById(accounts)[accountId];
 
+  console.log('got rates', rates);
+  const ratesByCurrencyAndDate = getRatesByCurrencyAndDate(rates || []);
+  console.log('ratesByCurrencyAndDate', ratesByCurrencyAndDate);
+  const rate = ratesByCurrencyAndDate.get(account?.currency)?.get(date);
+  const exchangeRate = rate?.rate ?? 1;
+  console.log('got rate for date', date, rate, exchangeRate);
+
   const isChild = transaction.is_child;
   const transferAcct = isTemporaryId(id)
     ? getAccountsById(accounts)[payee?.transfer_acct]
@@ -1099,9 +1108,6 @@ const Transaction = memo(function Transaction({
 
   const { setMenuOpen, menuOpen, handleContextMenu, position } =
     useContextMenu();
-
-  console.log('debit ' + evalArithmetic(debit));
-  console.log('parsed float ' + parseFloat(debit));
 
   return (
     <Row
@@ -1594,7 +1600,7 @@ const Transaction = memo(function Transaction({
           value={
             debit === ''
               ? debit
-              : `${integerToCurrency(amountToInteger(evalArithmetic(debit) * 1.4))} ${currencyPref}`
+              : `${integerToCurrency(amountToInteger(evalArithmetic(debit) * exchangeRate))} ${currencyPref}`
           }
           style={{ padding: 5 }}
           valueStyle={{
@@ -1642,7 +1648,7 @@ const Transaction = memo(function Transaction({
           value={
             credit === ''
               ? credit
-              : `${integerToCurrency(amountToInteger(evalArithmetic(credit) * 1.4))} ${currencyPref}`
+              : `${integerToCurrency(amountToInteger(evalArithmetic(credit) * exchangeRate))} ${currencyPref}`
           }
           style={{ padding: 5 }}
           valueStyle={{
@@ -1920,6 +1926,7 @@ function TransactionTableInner({
   onScroll,
   ...props
 }) {
+  console.log('got rate in transaction table inner', props.rates);
   const containerRef = createRef();
   const isAddingPrev = usePrevious(props.isAdding);
   const [scrollWidth, setScrollWidth] = useState(0);
@@ -1987,6 +1994,7 @@ function TransactionTableInner({
       accounts,
       categoryGroups,
       payees,
+      rates,
       showCleared,
       showAccount,
       showCategory,
@@ -2031,6 +2039,7 @@ function TransactionTableInner({
         allTransactions={props.transactions}
         editing={editing}
         transaction={trans}
+        rates={rates}
         transferAccountsByTransaction={props.transferAccountsByTransaction}
         subtransactions={childTransactions}
         showAccount={showAccount}
@@ -2205,6 +2214,7 @@ export const TransactionTable = forwardRef((props, ref) => {
   const tableRef = useRef(null);
   const listContainerRef = useRef(null);
   const mergedRef = useMergedRefs(tableRef, ref);
+  console.log('got rates in transaction table', props.rates);
 
   const transactionsWithExpandedSplits = useMemo(() => {
     let result;

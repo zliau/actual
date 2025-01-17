@@ -184,6 +184,13 @@ export const schema = {
     meta: f('json'),
     tombstone: f('boolean'),
   },
+  rates: {
+    id: f('id'),
+    from_currency: f('string', { required: true }),
+    to_currency: f('string', { required: true }),
+    date: f('date', { required: true }),
+    rate: f('float', { required: true }),
+  },
 };
 
 export const schemaConfig: SchemaConfig = {

@@ -45,7 +45,7 @@ export function CreateLocalAccountModal() {
   const [name, setName] = useState('');
   const [offbudget, setOffbudget] = useState(false);
   const [balance, setBalance] = useState('0');
-  const [currency, setCurrency] = useState(currencyPref);
+  const [currency, setCurrency] = useState(currencyPref); // FIXME when multicurrency not enabled it still shows the usd header
 
   const [nameError, setNameError] = useState(null);
   const [balanceError, setBalanceError] = useState(false);

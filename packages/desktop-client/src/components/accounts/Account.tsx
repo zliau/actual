@@ -1,3 +1,4 @@
+import * as d from 'date-fns';
 import React, {
   PureComponent,
   type MutableRefObject,
@@ -77,6 +78,7 @@ import { TransactionList } from '../transactions/TransactionList';
 import { validateAccountName } from '../util/accountValidation';
 
 import { AccountHeader } from './Header';
+import { RateEntity } from 'loot-core/types/models/rate';
 
 type ConditionEntity = Partial<RuleConditionEntity> | TransactionFilterEntity;
 
@@ -157,6 +159,8 @@ function AllTransactions({
   filtered,
   children,
 }: AllTransactionsProps) {
+  console.log('rendering all transactions');
+  console.log(transactions);
   const accountId = account?.id;
   const { dispatch: splitsExpandedDispatch } = useSplitsExpanded();
   const { previewTransactions, isLoading: isPreviewTransactionsLoading } =
@@ -316,6 +320,7 @@ type AccountInternalState = {
     prevAscDesc?: 'asc' | 'desc';
   } | null;
   filteredAmount: null | number;
+  rates?: RateEntity[];
 };
 
 export type TableRef = MutableRefObject<{
@@ -488,7 +493,15 @@ class AccountInternal extends PureComponent<
 
     if (this.props.accountId) {
       this.props.markAccountRead(this.props.accountId);
+
+      const account = this.props.accounts.find(
+        acct => acct.id === this.props.accountId,
+      );
+      console.log('got aaccount when fetching transactions', account);
+      // do we do the fetch from the API here?
     }
+
+    // FIXME if there's no account ID then we need to fetch all the rates
   };
 
   makeRootTransactionsQuery = () => {
@@ -543,6 +556,7 @@ class AccountInternal extends PureComponent<
               ? await this.calculateBalances()
               : null,
             filteredAmount: await this.getFilteredAmount(),
+            rates: await this.getRates(),
           },
           () => {
             if (firstLoad) {
@@ -561,6 +575,49 @@ class AccountInternal extends PureComponent<
       },
     });
   }
+
+  getRates = async () => {
+    // get min and max dates for these transactions
+    const query = this.paged?.query.select('date');
+    if (!query) {
+      return [];
+    }
+
+    const { data: dates } = await runQuery(query);
+
+    if (dates.length === 0) {
+      return [];
+    }
+
+    const sortedDates = dates
+      .map((row: TransactionEntity) => row.date)
+      .sort((a: string, b: string) =>
+        d.compareAsc(
+          d.parse(a, 'yyyy-MM-dd', new Date()),
+          d.parse(b, 'yyyy-MM-dd', new Date()),
+        ),
+      );
+    console.log('sorted dates', sortedDates);
+
+    // get low and high dates
+    const startDate = sortedDates[0];
+    const endDate = sortedDates[sortedDates.length - 1];
+
+    console.log('got start date', startDate);
+    console.log('got end date', endDate);
+
+    const { data: rates } = await runQuery(
+      queries
+        .rates()
+        .select('*')
+        .filter({
+          $and: [{ date: { $gte: startDate } }, { date: { $lte: endDate } }],
+        }),
+    );
+
+    console.log('got rates', rates);
+    return rates;
+  };
 
   UNSAFE_componentWillReceiveProps(nextProps: AccountInternalProps) {
     if (this.props.accountId !== nextProps.accountId) {
@@ -1684,7 +1741,9 @@ class AccountInternal extends PureComponent<
       showCleared,
       showReconciled,
       filteredAmount,
+      rates,
     } = this.state;
+    console.log('got rates in account state', rates);
 
     const account = accounts.find(account => account.id === accountId);
     const accountName = this.getAccountTitle(account, accountId);
@@ -1709,6 +1768,8 @@ class AccountInternal extends PureComponent<
 
     const balanceQuery = this.getBalanceQuery(accountId);
 
+    console.log('rendering account?');
+    console.log(account);
     return (
       <AllTransactions
         account={account}
@@ -1795,6 +1856,7 @@ class AccountInternal extends PureComponent<
                   account={account}
                   transactions={transactions}
                   allTransactions={allTransactions}
+                  rates={rates}
                   loadMoreTransactions={() =>
                     this.paged && this.paged.fetchNext()
                   }

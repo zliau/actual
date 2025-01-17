@@ -1,11 +1,12 @@
 // @ts-strict-ignore
 import memoizeOne from 'memoize-one';
 
-import { groupById } from '../../shared/util';
+import { groupBy, groupById, partitionByField } from '../../shared/util';
 import { type AccountEntity, type PayeeEntity } from '../../types/models';
 import * as constants from '../constants';
 import type { Action } from '../state-types';
 import type { QueriesState } from '../state-types/queries';
+import { RateEntity } from 'loot-core/types/models/rate';
 
 export const initialState: QueriesState = {
   newTransactions: [],
@@ -116,6 +117,24 @@ export const getCategoriesById = memoizeOne(categoryGroups => {
     });
   });
   return res;
+});
+
+export const getRatesByCurrencyAndDate = memoizeOne((rates: RateEntity[]) => {
+  const partitioned = partitionByField(rates, 'to_currency') as Map<
+    string,
+    RateEntity[]
+  >;
+
+  const ratesByCurrencyAndDate = new Map();
+  for (const [currency, currencyRates] of partitioned) {
+    const ratesByDate = new Map();
+    for (const rate of currencyRates) {
+      ratesByDate.set(rate.date, rate);
+    }
+    ratesByCurrencyAndDate.set(currency, ratesByDate);
+  }
+
+  return ratesByCurrencyAndDate;
 });
 
 export const getActivePayees = memoizeOne(

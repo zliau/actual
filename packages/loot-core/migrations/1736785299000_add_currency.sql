@@ -2,4 +2,12 @@ BEGIN TRANSACTION;
 
 ALTER TABLE accounts ADD COLUMN currency TEXT;
 
+CREATE TABLE rates (
+  id TEXT PRIMARY KEY,
+  from_currency TEXT NOT NULL,
+  to_currency TEXT NOT NULL,
+  rate REAL NOT NULL,
+  date INTEGER NOT NULL
+);
+
 COMMIT;
