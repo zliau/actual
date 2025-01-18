@@ -1064,12 +1064,17 @@ const Transaction = memo(function Transaction({
   const payee = payees && payeeId && getPayeesById(payees)[payeeId];
   const account = accounts && accountId && getAccountsById(accounts)[accountId];
 
-  console.log('got rates', rates);
   const ratesByCurrencyAndDate = getRatesByCurrencyAndDate(rates || []);
-  console.log('ratesByCurrencyAndDate', ratesByCurrencyAndDate);
   const rate = ratesByCurrencyAndDate.get(account?.currency)?.get(date);
-  const exchangeRate = rate?.rate ?? 1;
-  console.log('got rate for date', date, rate, exchangeRate);
+  const exchangeRate = rate?.rate;
+  const convertedDebit =
+    debit !== '' && exchangeRate
+      ? `${integerToCurrency(amountToInteger(evalArithmetic(debit) * exchangeRate))} ${currencyPref}`
+      : '';
+  const convertedCredit =
+    credit !== '' && exchangeRate
+      ? `${integerToCurrency(amountToInteger(evalArithmetic(credit) * exchangeRate))} ${currencyPref}`
+      : '';
 
   const isChild = transaction.is_child;
   const transferAcct = isTemporaryId(id)
@@ -1597,11 +1602,7 @@ const Transaction = memo(function Transaction({
       {showMultiCurrency && (
         <Cell
           name="debit-home-currency"
-          value={
-            debit === ''
-              ? debit
-              : `${integerToCurrency(amountToInteger(evalArithmetic(debit) * exchangeRate))} ${currencyPref}`
-          }
+          value={convertedDebit}
           style={{ padding: 5 }}
           valueStyle={{
             color: theme.tableTextSubdued,
@@ -1645,11 +1646,7 @@ const Transaction = memo(function Transaction({
       {showMultiCurrency && (
         <Cell
           name="credit-home-currency"
-          value={
-            credit === ''
-              ? credit
-              : `${integerToCurrency(amountToInteger(evalArithmetic(credit) * exchangeRate))} ${currencyPref}`
-          }
+          value={convertedCredit}
           style={{ padding: 5 }}
           valueStyle={{
             color: theme.tableTextSubdued,
