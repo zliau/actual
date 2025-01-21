@@ -960,6 +960,22 @@ handlers['gocardless-status'] = async function () {
   );
 };
 
+handlers['synth-status'] = async function () {
+  const userToken = await asyncStorage.getItem('user-token');
+
+  if (!userToken) {
+    return { error: 'unauthorized' };
+  }
+
+  return post(
+    getServer().SYNTH_SERVER + '/status',
+    {},
+    {
+      'X-ACTUAL-TOKEN': userToken,
+    },
+  );
+};
+
 handlers['simplefin-status'] = async function () {
   const userToken = await asyncStorage.getItem('user-token');
 

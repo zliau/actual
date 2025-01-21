@@ -229,6 +229,8 @@ export interface ServerHandlers {
     | { error: 'failed' }
   >;
 
+  'synth-status': () => Promise<{ configured: boolean }>;
+
   'accounts-bank-sync': (arg: { ids?: AccountEntity['id'][] }) => Promise<{
     errors;
     newTransactions;

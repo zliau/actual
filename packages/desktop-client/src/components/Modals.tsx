@@ -75,6 +75,7 @@ import { PostsOfflineNotification } from './schedules/PostsOfflineNotification';
 import { ScheduleDetails } from './schedules/ScheduleDetails';
 import { ScheduleLink } from './schedules/ScheduleLink';
 import { NamespaceContext } from './spreadsheet/NamespaceContext';
+import { SynthInitialiseModal } from './modals/SynthInitialiseModal';
 
 export function Modals() {
   const location = useLocation();
@@ -217,6 +218,11 @@ export function Modals() {
               key={name}
               onSuccess={options.onSuccess}
             />
+          );
+
+        case 'synth-init':
+          return (
+            <SynthInitialiseModal key={name} onSuccess={options.onSuccess} />
           );
 
         case 'gocardless-external-msg':

@@ -4,6 +4,7 @@ import React, {
   Fragment,
   type ReactNode,
   type ComponentProps,
+  useEffect,
 } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { Trans, useTranslation } from 'react-i18next';
@@ -48,6 +49,10 @@ import { type TableRef } from './Account';
 import { Balances } from './Balance';
 import { ReconcilingMessage, ReconcileMenu } from './Reconcile';
 import { useSyncedPref } from '../../hooks/useSyncedPref';
+import { useFeatureFlag } from '../../hooks/useFeatureFlag';
+import { useSynthStatus } from '../../hooks/useSynthStatus';
+import { useDispatch } from 'react-redux';
+import { pushModal } from 'loot-core/client/actions/modals';
 
 type AccountHeaderProps = {
   tableRef: TableRef;
@@ -194,6 +199,17 @@ export function AccountHeader({
   const isUsingServer = syncServerStatus !== 'no-server';
   const isServerOffline = syncServerStatus === 'offline';
   const [_, setExpandSplitsPref] = useLocalPref('expand-splits');
+  const multiCurrencyEnabled = useFeatureFlag('multiCurrency');
+
+  const { configuredSynth } = useSynthStatus();
+  const [isSynthConfigured, setIsSynthConfigured] = useState<boolean | null>(
+    null,
+  );
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    setIsSynthConfigured(configuredSynth);
+  }, [configuredSynth]);
 
   let canSync = !!(account?.account_id && isUsingServer);
   if (!account) {
@@ -340,6 +356,27 @@ export function AccountHeader({
               <Trans>Add New</Trans>
             </Button>
           )}
+
+          {multiCurrencyEnabled && (
+            <Button
+              variant="bare"
+              onPress={() => {
+                isSynthConfigured
+                  ? console.log('fetch')
+                  : dispatch(
+                      pushModal('synth-init', {
+                        onSuccess: () => setIsSynthConfigured(true),
+                      }),
+                    );
+              }}
+            >
+              <AnimatedRefresh width={13} height={13} animating={false} />{' '}
+              {isSynthConfigured
+                ? t('Fetch Exchange Rates')
+                : t('Configure Synth')}
+            </Button>
+          )}
+
           <View style={{ flexShrink: 0 }}>
             {/* @ts-expect-error fix me */}
             <FilterButton onApply={onApplyFilter} />
