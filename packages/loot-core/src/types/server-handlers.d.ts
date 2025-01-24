@@ -18,6 +18,7 @@ import {
   PayeeEntity,
 } from './models';
 import { OpenIdConfig } from './models/openid';
+import { RateEntity, SynthExchangeRate } from './models/rate';
 import { GlobalPrefs, MetadataPrefs } from './prefs';
 // eslint-disable-next-line import/no-unresolved
 import { Query } from './query';
@@ -230,6 +231,13 @@ export interface ServerHandlers {
   >;
 
   'synth-status': () => Promise<{ configured: boolean }>;
+
+  'synth-update-rates': ({
+    startDate: string,
+    endDate: string,
+    fromCurrency: string,
+    toCurrency: string,
+  }) => Promise<{ error?: string; rates?: RateEntity[] }>;
 
   'accounts-bank-sync': (arg: { ids?: AccountEntity['id'][] }) => Promise<{
     errors;

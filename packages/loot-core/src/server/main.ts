@@ -80,6 +80,7 @@ import {
   idFromBudgetName,
   validateBudgetName,
 } from './util/budget-name';
+import { RateEntity } from 'loot-core/types/models/rate';
 
 const DEMO_BUDGET_ID = '_demo-budget';
 const TEST_BUDGET_ID = '_test-budget';
@@ -975,6 +976,53 @@ handlers['synth-status'] = async function () {
     },
   );
 };
+
+handlers['synth-update-rates'] = mutator(async function ({
+  startDate,
+  endDate,
+  fromCurrency,
+  toCurrency,
+}) {
+  // fetch rates from server
+  const userToken = await asyncStorage.getItem('user-token');
+
+  if (!userToken) {
+    return { error: 'unauthorized' };
+  }
+
+  const response = await post(
+    getServer().SYNTH_SERVER + '/rates',
+    { startDate, endDate, fromCurrency, toCurrency },
+    {
+      'X-ACTUAL-TOKEN': userToken,
+    },
+  );
+
+  await batchMessages(async () => {
+    const ratesInsert =
+      'INSERT INTO rates (id, from_currency, to_currency, date, rate) VALUES (?, ?, ?, ?, ?) ' +
+      'ON CONFLICT(from_currency, to_currency, date) DO UPDATE SET rate=excluded.rate;';
+
+    for (const [date, rate] of Object.entries(response.rates)) {
+      db.runQuery(ratesInsert, [
+        uuidv4(),
+        fromCurrency,
+        toCurrency,
+        date,
+        rate,
+      ]);
+    }
+  });
+
+  const rates = Object.entries(response.rates).map(([date, rate]) => ({
+    from_currency: fromCurrency,
+    to_currency: toCurrency,
+    date,
+    rate,
+  })) as RateEntity[];
+
+  return { rates };
+});
 
 handlers['simplefin-status'] = async function () {
   const userToken = await asyncStorage.getItem('user-token');

@@ -1,4 +1,3 @@
-import * as d from 'date-fns';
 import React, {
   PureComponent,
   type MutableRefObject,
@@ -10,6 +9,7 @@ import React, {
 import { Trans } from 'react-i18next';
 import { Navigate, useParams, useLocation } from 'react-router-dom';
 
+import * as d from 'date-fns';
 import { debounce } from 'debounce';
 import { t } from 'i18next';
 import { v4 as uuidv4 } from 'uuid';
@@ -49,6 +49,7 @@ import {
   type TransactionEntity,
   type TransactionFilterEntity,
 } from 'loot-core/src/types/models';
+import { type RateEntity } from 'loot-core/types/models/rate';
 
 import { useAccountPreviewTransactions } from '../../hooks/useAccountPreviewTransactions';
 import { useAccounts } from '../../hooks/useAccounts';
@@ -78,7 +79,6 @@ import { TransactionList } from '../transactions/TransactionList';
 import { validateAccountName } from '../util/accountValidation';
 
 import { AccountHeader } from './Header';
-import { RateEntity } from 'loot-core/types/models/rate';
 
 type ConditionEntity = Partial<RuleConditionEntity> | TransactionFilterEntity;
 
@@ -258,6 +258,7 @@ type AccountInternalProps = {
   filterConditions: RuleConditionEntity[];
   showBalances?: boolean;
   setShowBalances: (newValue: boolean) => void;
+  baseCurrency?: string;
   showCleared?: boolean;
   setShowCleared: (newValue: boolean) => void;
   showReconciled: boolean;
@@ -1233,6 +1234,31 @@ class AccountInternal extends PureComponent<
     });
   };
 
+  onUpdateExchangeRates = async () => {
+    const account = this.props.accounts.find(
+      a => a.id === this.props.accountId,
+    );
+
+    const transactions = this.state.transactions;
+
+    // Get the first and last date of these transactions to get the exchange rates
+    const transactionDates = transactions.map(transaction =>
+      d.parseISO(transaction.date),
+    );
+    const startDate = d.min(transactionDates);
+    const endDate = d.max(transactionDates);
+
+    // FIXME this should handle the case where accounts is null cause it's multiple
+    const response = await send('synth-update-rates', {
+      startDate: d.format(startDate, 'yyyy-MM-dd'),
+      endDate: d.format(endDate, 'yyyy-MM-dd'),
+      fromCurrency: this.props.baseCurrency,
+      toCurrency: account?.currency,
+    });
+
+    this.setState({ rates: response.rates });
+  };
+
   checkForReconciledTransactions = async (
     ids: string[],
     confirmReason: string,
@@ -1847,6 +1873,7 @@ class AccountInternal extends PureComponent<
                 onSetTransfer={this.onSetTransfer}
                 onMakeAsSplitTransaction={this.onMakeAsSplitTransaction}
                 onMakeAsNonSplitTransactions={this.onMakeAsNonSplitTransactions}
+                onUpdateExchangeRates={this.onUpdateExchangeRates}
               />
 
               <View style={{ flex: 1 }}>
@@ -1973,6 +2000,7 @@ export function Account() {
   const failedAccounts = useFailedAccounts();
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
   const [hideFraction] = useSyncedPref('hideFraction');
+  const [baseCurrency] = useSyncedPref('currency');
   const [expandSplits] = useLocalPref('expand-splits');
   const [showBalances, setShowBalances] = useSyncedPref(
     `show-balances-${params.id}`,
@@ -2012,6 +2040,7 @@ export function Account() {
           hideFraction={String(hideFraction) === 'true'}
           expandSplits={expandSplits}
           showBalances={String(showBalances) === 'true'}
+          baseCurrency={baseCurrency || 'USD'}
           setShowBalances={showBalances =>
             setShowBalances(String(showBalances))
           }

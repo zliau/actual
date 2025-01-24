@@ -5,3 +5,9 @@ export interface RateEntity {
   to_currency: string;
   rate: number;
 }
+
+export type SynthExchangeRate = {
+  rates: {
+    [key: string]: number;
+  };
+};

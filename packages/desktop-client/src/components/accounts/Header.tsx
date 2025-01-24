@@ -113,6 +113,7 @@ type AccountHeaderProps = {
     typeof SelectedTransactionsButton
   >['onUnlinkSchedule'];
   onApplyFilter: (filter: RuleConditionEntity) => void;
+  onUpdateExchangeRates: () => void;
 } & Pick<
   ComponentProps<typeof SelectedTransactionsButton>,
   | 'onCreateRule'
@@ -187,6 +188,7 @@ export function AccountHeader({
   onRunRules,
   onMakeAsSplitTransaction,
   onMakeAsNonSplitTransactions,
+  onUpdateExchangeRates,
 }: AccountHeaderProps) {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -362,10 +364,10 @@ export function AccountHeader({
               variant="bare"
               onPress={() => {
                 isSynthConfigured
-                  ? console.log('fetch')
+                  ? onUpdateExchangeRates()
                   : dispatch(
                       pushModal('synth-init', {
-                        onSuccess: () => setIsSynthConfigured(true),
+                        onSuccess: onUpdateExchangeRates,
                       }),
                     );
               }}

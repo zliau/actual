@@ -1923,7 +1923,6 @@ function TransactionTableInner({
   onScroll,
   ...props
 }) {
-  console.log('got rate in transaction table inner', props.rates);
   const containerRef = createRef();
   const isAddingPrev = usePrevious(props.isAdding);
   const [scrollWidth, setScrollWidth] = useState(0);
