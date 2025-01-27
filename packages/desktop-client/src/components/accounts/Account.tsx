@@ -515,6 +515,7 @@ class AccountInternal extends PureComponent<
     if (this.paged) {
       this.paged.unsubscribe();
     }
+    console.log('running update query');
 
     // Filter out reconciled transactions if they are hidden
     // and we're not showing balances.
@@ -578,6 +579,7 @@ class AccountInternal extends PureComponent<
   }
 
   getRates = async () => {
+    console.log('getting rates from table');
     // get min and max dates for these transactions
     const query = this.paged?.query.select('date');
     if (!query) {
@@ -611,12 +613,9 @@ class AccountInternal extends PureComponent<
       queries
         .rates()
         .select('*')
-        .filter({
-          $and: [{ date: { $gte: startDate } }, { date: { $lte: endDate } }],
-        }),
     );
 
-    console.log('got rates', rates);
+    console.log('got rates from table', rates);
     return rates;
   };
 
@@ -1235,6 +1234,7 @@ class AccountInternal extends PureComponent<
   };
 
   onUpdateExchangeRates = async () => {
+    console.log('fetching rates from synth');
     const account = this.props.accounts.find(
       a => a.id === this.props.accountId,
     );
@@ -1247,6 +1247,14 @@ class AccountInternal extends PureComponent<
     );
     const startDate = d.min(transactionDates);
     const endDate = d.max(transactionDates);
+
+    console.log(
+      'sending to synth',
+      startDate,
+      endDate,
+      this.props.baseCurrency,
+      account?.currency,
+    );
 
     // FIXME this should handle the case where accounts is null cause it's multiple
     const response = await send('synth-update-rates', {

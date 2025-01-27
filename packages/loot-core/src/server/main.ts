@@ -30,7 +30,12 @@ import * as rules from './accounts/transaction-rules';
 import { batchUpdateTransactions } from './accounts/transactions';
 import { app as adminApp } from './admin/app';
 import { installAPI } from './api';
-import { runQuery as aqlQuery } from './aql';
+import {
+  runQuery as aqlQuery,
+  convertForInsert,
+  schema,
+  schemaConfig,
+} from './aql';
 import {
   getAvailableBackups,
   loadBackup,
@@ -1004,12 +1009,20 @@ handlers['synth-update-rates'] = mutator(async function ({
       'ON CONFLICT(from_currency, to_currency, date) DO UPDATE SET rate=excluded.rate;';
 
     for (const [date, rate] of Object.entries(response.rates)) {
-      db.runQuery(ratesInsert, [
-        uuidv4(),
-        fromCurrency,
-        toCurrency,
+      const row = convertForInsert(schema, schemaConfig, 'rates', {
+        id: uuidv4(),
+        from_currency: fromCurrency,
+        to_currency: toCurrency,
         date,
         rate,
+      });
+
+      db.runQuery(ratesInsert, [
+        row.id,
+        row.from_currency,
+        row.to_currency,
+        row.date,
+        row.rate,
       ]);
     }
   });
