@@ -613,6 +613,9 @@ class AccountInternal extends PureComponent<
       queries
         .rates()
         .select('*')
+        .filter({
+          $and: [{ date: { $gte: startDate } }, { date: { $lte: endDate } }],
+        }),
     );
 
     console.log('got rates from table', rates);
@@ -1260,8 +1263,8 @@ class AccountInternal extends PureComponent<
     const response = await send('synth-update-rates', {
       startDate: d.format(startDate, 'yyyy-MM-dd'),
       endDate: d.format(endDate, 'yyyy-MM-dd'),
-      fromCurrency: this.props.baseCurrency,
-      toCurrency: account?.currency,
+      toCurrency: this.props.baseCurrency,
+      fromCurrency: account?.currency,
     });
 
     this.setState({ rates: response.rates });

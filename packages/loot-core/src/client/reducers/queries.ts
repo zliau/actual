@@ -120,7 +120,7 @@ export const getCategoriesById = memoizeOne(categoryGroups => {
 });
 
 export const getRatesByCurrencyAndDate = memoizeOne((rates: RateEntity[]) => {
-  const partitioned = partitionByField(rates, 'to_currency') as Map<
+  const partitioned = partitionByField(rates, 'from_currency') as Map<
     string,
     RateEntity[]
   >;
