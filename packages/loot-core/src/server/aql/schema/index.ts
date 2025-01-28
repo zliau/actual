@@ -53,6 +53,7 @@ export const schema = {
     reconciled: f('boolean', { default: false }),
     tombstone: f('boolean'),
     schedule: f('id', { ref: 'schedules' }),
+    converted_amount: f('integer'),
     // subtransactions is a special field added if the table has the
     // `splits: grouped` option
   },
@@ -347,12 +348,15 @@ export const schemaConfig: SchemaConfig = {
           category: `CASE WHEN _.isParent = 1 THEN NULL ELSE cm.transferId END`,
           amount: `IFNULL(_.amount, 0)`,
           parent_id: 'CASE WHEN _.isChild = 0 THEN NULL ELSE _.parent_id END',
+          converted_amount: `CASE WHEN r.rate IS NOT NULL THEN ROUND(_.amount * r.rate) ELSE _.amount END`,
         });
 
         return `
           SELECT ${fields} FROM transactions _
           LEFT JOIN category_mapping cm ON cm.id = _.category
           LEFT JOIN payee_mapping pm ON pm.id = _.description
+          LEFT JOIN accounts a ON (a.id = _.acct AND a.tombstone = 0)
+          LEFT JOIN rates r ON (r.date = _.date AND r.from_currency = a.currency)
           WHERE
            _.date IS NOT NULL AND
            _.acct IS NOT NULL AND

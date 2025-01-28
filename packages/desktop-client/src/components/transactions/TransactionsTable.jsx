@@ -26,7 +26,6 @@ import {
   getAccountsById,
   getPayeesById,
   getCategoriesById,
-  getRatesByCurrencyAndDate,
 } from 'loot-core/src/client/reducers/queries';
 import { evalArithmetic } from 'loot-core/src/shared/arithmetic';
 import { currentDay } from 'loot-core/src/shared/months';
@@ -97,7 +96,11 @@ function getDisplayValue(obj, name) {
 }
 
 function serializeTransaction(transaction, showZeroInDeposit) {
-  const { amount, date: originalDate } = transaction;
+  const {
+    amount,
+    date: originalDate,
+    converted_amount: convertedAmount,
+  } = transaction;
 
   let debit = amount < 0 ? -amount : null;
   let credit = amount > 0 ? amount : null;
@@ -125,6 +128,10 @@ function serializeTransaction(transaction, showZeroInDeposit) {
     date,
     debit: debit != null ? integerToCurrency(debit) : '',
     credit: credit != null ? integerToCurrency(credit) : '',
+    convertedDebit:
+      convertedAmount < 0 ? integerToCurrency(-convertedAmount) : '',
+    convertedCredit:
+      convertedAmount > 0 ? integerToCurrency(convertedAmount) : '',
   };
 }
 
@@ -874,7 +881,6 @@ function PayeeIcons({
 const Transaction = memo(function Transaction({
   allTransactions,
   transaction: originalTransaction,
-  rates,
   subtransactions,
   transferAccountsByTransaction,
   editing,
@@ -1048,6 +1054,8 @@ const Transaction = memo(function Transaction({
     amount,
     debit,
     credit,
+    convertedDebit,
+    convertedCredit,
     payee: payeeId,
     imported_payee: importedPayee,
     notes,
@@ -1063,18 +1071,6 @@ const Transaction = memo(function Transaction({
   // Join in some data
   const payee = payees && payeeId && getPayeesById(payees)[payeeId];
   const account = accounts && accountId && getAccountsById(accounts)[accountId];
-
-  const ratesByCurrencyAndDate = getRatesByCurrencyAndDate(rates || []);
-  const rate = ratesByCurrencyAndDate.get(account?.currency)?.get(date);
-  const exchangeRate = rate?.rate;
-  const convertedDebit =
-    debit !== '' && exchangeRate
-      ? `${integerToCurrency(amountToInteger(evalArithmetic(debit) * exchangeRate))} ${currencyPref}`
-      : '';
-  const convertedCredit =
-    credit !== '' && exchangeRate
-      ? `${integerToCurrency(amountToInteger(evalArithmetic(credit) * exchangeRate))} ${currencyPref}`
-      : '';
 
   const isChild = transaction.is_child;
   const transferAcct = isTemporaryId(id)
@@ -1602,7 +1598,7 @@ const Transaction = memo(function Transaction({
       {showMultiCurrency && (
         <Cell
           name="debit-home-currency"
-          value={convertedDebit}
+          value={convertedDebit && `${convertedDebit} ${currencyPref}`}
           style={{ padding: 5 }}
           valueStyle={{
             color: theme.tableTextSubdued,
@@ -1646,7 +1642,7 @@ const Transaction = memo(function Transaction({
       {showMultiCurrency && (
         <Cell
           name="credit-home-currency"
-          value={convertedCredit}
+          value={convertedCredit && `${convertedCredit} ${currencyPref}`}
           style={{ padding: 5 }}
           valueStyle={{
             color: theme.tableTextSubdued,
@@ -1990,7 +1986,6 @@ function TransactionTableInner({
       accounts,
       categoryGroups,
       payees,
-      rates,
       showCleared,
       showAccount,
       showCategory,
@@ -2035,7 +2030,6 @@ function TransactionTableInner({
         allTransactions={props.transactions}
         editing={editing}
         transaction={trans}
-        rates={rates}
         transferAccountsByTransaction={props.transferAccountsByTransaction}
         subtransactions={childTransactions}
         showAccount={showAccount}
@@ -2210,7 +2204,6 @@ export const TransactionTable = forwardRef((props, ref) => {
   const tableRef = useRef(null);
   const listContainerRef = useRef(null);
   const mergedRef = useMergedRefs(tableRef, ref);
-  console.log('got rates in transaction table', props.rates);
 
   const transactionsWithExpandedSplits = useMemo(() => {
     let result;

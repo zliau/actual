@@ -321,7 +321,6 @@ type AccountInternalState = {
     prevAscDesc?: 'asc' | 'desc';
   } | null;
   filteredAmount: null | number;
-  rates?: RateEntity[];
 };
 
 export type TableRef = MutableRefObject<{
@@ -558,7 +557,6 @@ class AccountInternal extends PureComponent<
               ? await this.calculateBalances()
               : null,
             filteredAmount: await this.getFilteredAmount(),
-            rates: await this.getRates(),
           },
           () => {
             if (firstLoad) {
@@ -577,50 +575,6 @@ class AccountInternal extends PureComponent<
       },
     });
   }
-
-  getRates = async () => {
-    console.log('getting rates from table');
-    // get min and max dates for these transactions
-    const query = this.paged?.query.select('date');
-    if (!query) {
-      return [];
-    }
-
-    const { data: dates } = await runQuery(query);
-
-    if (dates.length === 0) {
-      return [];
-    }
-
-    const sortedDates = dates
-      .map((row: TransactionEntity) => row.date)
-      .sort((a: string, b: string) =>
-        d.compareAsc(
-          d.parse(a, 'yyyy-MM-dd', new Date()),
-          d.parse(b, 'yyyy-MM-dd', new Date()),
-        ),
-      );
-    console.log('sorted dates', sortedDates);
-
-    // get low and high dates
-    const startDate = sortedDates[0];
-    const endDate = sortedDates[sortedDates.length - 1];
-
-    console.log('got start date', startDate);
-    console.log('got end date', endDate);
-
-    const { data: rates } = await runQuery(
-      queries
-        .rates()
-        .select('*')
-        .filter({
-          $and: [{ date: { $gte: startDate } }, { date: { $lte: endDate } }],
-        }),
-    );
-
-    console.log('got rates from table', rates);
-    return rates;
-  };
 
   UNSAFE_componentWillReceiveProps(nextProps: AccountInternalProps) {
     if (this.props.accountId !== nextProps.accountId) {
@@ -1778,9 +1732,7 @@ class AccountInternal extends PureComponent<
       showCleared,
       showReconciled,
       filteredAmount,
-      rates,
     } = this.state;
-    console.log('got rates in account state', rates);
 
     const account = accounts.find(account => account.id === accountId);
     const accountName = this.getAccountTitle(account, accountId);
@@ -1894,7 +1846,6 @@ class AccountInternal extends PureComponent<
                   account={account}
                   transactions={transactions}
                   allTransactions={allTransactions}
-                  rates={rates}
                   loadMoreTransactions={() =>
                     this.paged && this.paged.fetchNext()
                   }
