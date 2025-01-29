@@ -73,6 +73,9 @@ type AccountHeaderProps = {
   showReconciled: boolean;
   showEmptyMessage: boolean;
   balanceQuery: ComponentProps<typeof ReconcilingMessage>['balanceQuery'];
+  convertedBalanceQuery: ComponentProps<
+    typeof ReconcilingMessage
+  >['convertedBalanceQuery'];
   reconcileAmount?: number | null;
   canCalculateBalance?: () => boolean;
   isFiltered: boolean;
@@ -150,6 +153,7 @@ export function AccountHeader({
   showReconciled,
   showEmptyMessage,
   balanceQuery,
+  convertedBalanceQuery,
   reconcileAmount,
   canCalculateBalance,
   isFiltered,
@@ -309,6 +313,7 @@ export function AccountHeader({
 
         <Balances
           balanceQuery={balanceQuery}
+          convertedBalanceQuery={convertedBalanceQuery}
           showExtraBalances={showExtraBalances}
           onToggleExtraBalances={onToggleExtraBalances}
           account={account}

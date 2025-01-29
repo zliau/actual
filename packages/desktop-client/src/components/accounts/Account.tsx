@@ -916,6 +916,15 @@ class AccountInternal extends PureComponent<
     } as const;
   }
 
+  getConvertedBalanceQuery(id?: string) {
+    return {
+      name: `balance-query-converted-${id}`,
+      query: this.makeRootTransactionsQuery().calculate({
+        $sum: '$converted_amount',
+      }),
+    } as const;
+  }
+
   getFilteredAmount = async () => {
     const { data: amount } = await runQuery(
       this.paged?.query.calculate({ $sum: '$amount' }),
@@ -1756,9 +1765,8 @@ class AccountInternal extends PureComponent<
       : false;
 
     const balanceQuery = this.getBalanceQuery(accountId);
+    const convertedBalanceQuery = this.getConvertedBalanceQuery(accountId);
 
-    console.log('rendering account?');
-    console.log(account);
     return (
       <AllTransactions
         account={account}
@@ -1795,6 +1803,7 @@ class AccountInternal extends PureComponent<
                 showReconciled={showReconciled ?? false}
                 showEmptyMessage={showEmptyMessage ?? false}
                 balanceQuery={balanceQuery}
+                convertedBalanceQuery={convertedBalanceQuery}
                 canCalculateBalance={this?.canCalculateBalance ?? undefined}
                 filteredAmount={filteredAmount}
                 isFiltered={transactionsFiltered ?? false}

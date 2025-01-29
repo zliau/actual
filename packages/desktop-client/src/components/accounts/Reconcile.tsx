@@ -18,6 +18,10 @@ import { useSheetValue } from '../spreadsheet/useSheetValue';
 
 type ReconcilingMessageProps = {
   balanceQuery: { name: `balance-query-${string}`; query: Query };
+  convertedBalanceQuery?: {
+    name: `balance-query-converted-${string}`;
+    query: Query;
+  };
   targetBalance: number;
   onDone: () => void;
   onCreateTransaction: (targetDiff: number) => void;

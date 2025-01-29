@@ -20,6 +20,8 @@ import { type Binding } from '../spreadsheet';
 import { CellValue, CellValueText } from '../spreadsheet/CellValue';
 import { useFormat } from '../spreadsheet/useFormat';
 import { useSheetValue } from '../spreadsheet/useSheetValue';
+import { useFeatureFlag } from '../../hooks/useFeatureFlag';
+import { useSyncedPref } from '../../hooks/useSyncedPref';
 
 type DetailedBalanceProps = {
   name: string;
@@ -173,6 +175,10 @@ function MoreBalances({ balanceQuery }: MoreBalancesProps) {
 
 type BalancesProps = {
   balanceQuery: { name: `balance-query-${string}`; query: Query };
+  convertedBalanceQuery: {
+    name: `balance-query-converted-${string}`;
+    query: Query;
+  };
   showExtraBalances: boolean;
   onToggleExtraBalances: () => void;
   account?: AccountEntity;
@@ -182,6 +188,7 @@ type BalancesProps = {
 
 export function Balances({
   balanceQuery,
+  convertedBalanceQuery,
   showExtraBalances,
   onToggleExtraBalances,
   account,
@@ -191,6 +198,8 @@ export function Balances({
   const selectedItems = useSelectedItems();
   const buttonRef = useRef(null);
   const isButtonHovered = useHover(buttonRef);
+  const multiCurrencyEnabled = useFeatureFlag('multiCurrency');
+  const [currencyPref] = useSyncedPref('currency');
 
   return (
     <View
@@ -236,6 +245,61 @@ export function Balances({
             />
           )}
         </CellValue>
+
+        {multiCurrencyEnabled && currencyPref !== account?.currency && (
+          <>
+            <View
+              style={{
+                fontSize: 22,
+                fontWeight: 400,
+                marginLeft: 5,
+                marginRight: 5,
+              }}
+              data-testid="account-currency"
+            >
+              {account?.currency}
+            </View>
+
+            <View
+              style={{
+                fontSize: 22,
+                fontWeight: 300,
+                marginLeft: 5,
+                marginRight: 5,
+                flexDirection: 'row',
+                fontStyle: 'italic',
+                color: theme.pageTextSubdued,
+              }}
+            >
+              (
+              <CellValue
+                binding={
+                  { ...convertedBalanceQuery, value: 0 } as Binding<
+                    'balance',
+                    `balance-query-converted-${string}`
+                  >
+                }
+                type="financial"
+              >
+                {props => (
+                  <CellValueText
+                    {...props}
+                    style={{
+                      marginRight: 5,
+                      color:
+                        props.value < 0
+                          ? theme.errorText
+                          : props.value > 0
+                            ? theme.noticeTextLight
+                            : theme.pageTextSubdued,
+                    }}
+                  />
+                )}
+              </CellValue>
+              {currencyPref})
+            </View>
+          </>
+        )}
 
         <SvgArrowButtonRight1
           style={{
