@@ -136,7 +136,14 @@ function serializeTransaction(transaction, showZeroInDeposit) {
 }
 
 function deserializeTransaction(transaction, originalTransaction) {
-  const { debit, credit, date: originalDate, ...realTransaction } = transaction;
+  const {
+    debit,
+    credit,
+    convertedDebit,
+    convertedCredit,
+    date: originalDate,
+    ...realTransaction
+  } = transaction;
 
   let amount;
   if (debit !== '') {
