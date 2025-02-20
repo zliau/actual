@@ -1037,6 +1037,21 @@ handlers['synth-update-rates'] = mutator(async function ({
   return { rates };
 });
 
+handlers['update-exchange-rates'] = mutator(async function ({ transaction }) {
+  // use transaction to date difference
+  const result = await db.first(
+    'SELECT MAX(date) as max_date, MIN(date) as min_date FROM transactions WHERE acct = ? AND isParent = 0 AND tombstone = 0',
+    [transaction.account],
+  );
+
+  console.log('update-exchange-rates', result);
+
+  // get the base currency
+
+  // call the handler to use synth to fetch and save the enchange rates
+  return {};
+});
+
 handlers['simplefin-status'] = async function () {
   const userToken = await asyncStorage.getItem('user-token');
 

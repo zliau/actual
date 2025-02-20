@@ -66,9 +66,11 @@ export function createSpreadsheet(
               .select([
                 { date: { $month: '$date' } },
                 { amount: { $sum: '$amount' } },
+                { converted_amount: { $sum: '$converted_amount' } },
               ]),
           ).then(({ data }) => data),
         ]);
+          console.log('got balances in net worth', balances);
 
         return {
           id: acct.id,

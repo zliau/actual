@@ -239,6 +239,8 @@ export interface ServerHandlers {
     toCurrency: string,
   }) => Promise<{ error?: string; rates?: RateEntity[] }>;
 
+  'update-exchange-rates': ({ transaction }) => Promise<EmptyObject>;
+
   'accounts-bank-sync': (arg: { ids?: AccountEntity['id'][] }) => Promise<{
     errors;
     newTransactions;

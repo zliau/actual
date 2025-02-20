@@ -16,6 +16,7 @@ import { useDispatch } from '../../redux';
 import { theme } from '../../style';
 
 import { TransactionTable } from './TransactionsTable';
+import { getRatesByCurrencyAndDate } from 'loot-core/client/reducers/queries';
 
 // When data changes, there are two ways to update the UI:
 //
@@ -108,13 +109,19 @@ export function TransactionList({
   }, [transactions]);
 
   const onAdd = useCallback(async newTransactions => {
+    console.log('on add adding', newTransactions);
     newTransactions = realizeTempTransactions(newTransactions);
+    // use the latest tranactions and diff with this one to find teh dates
+    // if this date does not exist in the rates
+    // FIXME handle multiple?
+    await send('update-exchange-rates', { transaction: newTransactions[0] });
 
     await saveDiff({ added: newTransactions });
     onRefetch();
   }, []);
 
   const onSave = useCallback(async transaction => {
+    console.log('saving', transaction);
     const changes = updateTransaction(transactionsLatest.current, transaction);
     transactionsLatest.current = changes.data;
 

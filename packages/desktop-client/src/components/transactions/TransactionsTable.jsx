@@ -2004,6 +2004,7 @@ function TransactionTableInner({
       isExpanded,
       showSelection,
       allowSplitTransaction,
+      rates,
     } = props;
 
     const trans = item;
@@ -2037,6 +2038,7 @@ function TransactionTableInner({
         allTransactions={props.transactions}
         editing={editing}
         transaction={trans}
+        rates={rates}
         transferAccountsByTransaction={props.transferAccountsByTransaction}
         subtransactions={childTransactions}
         showAccount={showAccount}
@@ -2520,6 +2522,7 @@ export const TransactionTable = forwardRef((props, ref) => {
         }
 
         const newTrans = latestState.current.newTransactions;
+        console.log("new transaction", newTrans);
         // Future refactor: we shouldn't need to iterate through the entire
         // transaction list to ungroup, just the new transactions.
         setNewTransactions(
