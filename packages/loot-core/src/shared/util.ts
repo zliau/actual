@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { formatDistanceToNow } from 'date-fns';
+
 export function last<T>(arr: Array<T>) {
   return arr[arr.length - 1];
 }
@@ -45,7 +47,7 @@ export function hasFieldsChanged<T extends object>(
 export type Diff<T extends { id: string }> = {
   added: T[];
   updated: Partial<T>[];
-  deleted: Partial<T>[];
+  deleted: Pick<T, 'id'>[];
 };
 
 export function applyChanges<T extends { id: string }>(
@@ -129,9 +131,9 @@ export function diffItems<T extends { id: string }>(
   const added: T[] = [];
   const updated: Partial<T>[] = [];
 
-  const deleted: Partial<T>[] = items
+  const deleted: Pick<T, 'id'>[] = items
     .filter(item => !newGrouped.has(item.id))
-    .map(item => ({ id: item.id }) as Partial<T>);
+    .map(item => ({ id: item.id }));
 
   newItems.forEach(newItem => {
     const item = grouped.get(newItem.id);
@@ -210,7 +212,7 @@ export function appendDecimals(
   amountText: string,
   hideDecimals = false,
 ): string {
-  const { separator } = getNumberFormat();
+  const { decimalSeparator: separator } = getNumberFormat();
   let result = amountText;
   if (result.slice(-1) === separator) {
     result = result.slice(0, -1);
@@ -283,51 +285,63 @@ export function getNumberFormat({
   format?: NumberFormats;
   hideFraction: boolean;
 } = numberFormatConfig) {
-  let locale, regex, separator, separatorRegex;
+  let locale, thousandsSeparator, decimalSeparator;
 
   switch (format) {
     case 'space-comma':
       locale = 'en-SE';
-      regex = /[^-0-9,.]/g;
-      separator = ',';
-      separatorRegex = /[,.]/g;
+      thousandsSeparator = '\xa0';
+      decimalSeparator = ',';
       break;
     case 'dot-comma':
       locale = 'de-DE';
-      regex = /[^-0-9,]/g;
-      separator = ',';
+      thousandsSeparator = '.';
+      decimalSeparator = ',';
       break;
     case 'apostrophe-dot':
       locale = 'de-CH';
-      regex = /[^-0-9,.]/g;
-      separator = '.';
-      separatorRegex = /[,.]/g;
+      thousandsSeparator = '’';
+      decimalSeparator = '.';
       break;
     case 'comma-dot-in':
       locale = 'en-IN';
-      regex = /[^-0-9.]/g;
-      separator = '.';
+      thousandsSeparator = ',';
+      decimalSeparator = '.';
       break;
     case 'comma-dot':
     default:
       locale = 'en-US';
-      regex = /[^-0-9.]/g;
-      separator = '.';
+      thousandsSeparator = ',';
+      decimalSeparator = '.';
   }
 
   return {
     value: format,
-    separator,
+    thousandsSeparator,
+    decimalSeparator,
     formatter: new Intl.NumberFormat(locale, {
       minimumFractionDigits: hideFraction ? 0 : 2,
       maximumFractionDigits: hideFraction ? 0 : 2,
     }),
-    regex,
-    separatorRegex,
   };
 }
 
 // Number utilities
+
+/**
+ * The exact amount.
+ */
+export type Amount = number;
+/**
+ * The exact amount that is formatted based on the configured number format.
+ * For example, 123.45 would be '123.45' or '123,45'.
+ */
+export type CurrencyAmount = string;
+/**
+ * The amount with the decimal point removed.
+ * For example, 123.45 would be 12345.
+ */
+export type IntegerAmount = number;
 
 // We dont use `Number.MAX_SAFE_NUMBER` and such here because those
 // numbers are so large that it's not safe to convert them to floats
@@ -353,52 +367,58 @@ export function safeNumber(value: number) {
   return value;
 }
 
-export function toRelaxedNumber(value: string) {
-  return integerToAmount(currencyToInteger(value) || 0);
+export function toRelaxedNumber(currencyAmount: CurrencyAmount): Amount {
+  return integerToAmount(currencyToInteger(currencyAmount) || 0);
 }
 
 export function integerToCurrency(
-  n: number,
+  integerAmount: IntegerAmount,
   formatter = getNumberFormat().formatter,
 ) {
-  return formatter.format(safeNumber(n) / 100);
+  return formatter.format(safeNumber(integerAmount) / 100);
 }
 
-export function amountToCurrency(n) {
-  return getNumberFormat().formatter.format(n);
+export function amountToCurrency(amount: Amount): CurrencyAmount {
+  return getNumberFormat().formatter.format(amount);
 }
 
-export function amountToCurrencyNoDecimal(n) {
+export function amountToCurrencyNoDecimal(amount: Amount): CurrencyAmount {
   return getNumberFormat({
     ...numberFormatConfig,
     hideFraction: true,
-  }).formatter.format(n);
+  }).formatter.format(amount);
 }
 
-export function currencyToAmount(str: string) {
-  let amount;
-  if (getNumberFormat().separatorRegex) {
-    amount = parseFloat(
-      str
-        .replace(getNumberFormat().regex, '')
-        .replace(getNumberFormat().separatorRegex, '.'),
-    );
+export function currencyToAmount(currencyAmount: string): Amount | null {
+  let integer, fraction;
+
+  // match the last dot or comma in the string
+  const match = currencyAmount.match(/[,.](?=[^.,]*$)/);
+
+  if (
+    !match ||
+    (match[0] === getNumberFormat().thousandsSeparator &&
+      match.index + 4 <= currencyAmount.length)
+  ) {
+    fraction = null;
+    integer = currencyAmount.replace(/[^\d-]/g, '');
   } else {
-    amount = parseFloat(
-      str
-        .replace(getNumberFormat().regex, '')
-        .replace(getNumberFormat().separator, '.'),
-    );
+    integer = currencyAmount.slice(0, match.index).replace(/[^\d-]/g, '');
+    fraction = currencyAmount.slice(match.index + 1);
   }
+
+  const amount = parseFloat(integer + '.' + fraction);
   return isNaN(amount) ? null : amount;
 }
 
-export function currencyToInteger(str: string) {
-  const amount = currencyToAmount(str);
+export function currencyToInteger(
+  currencyAmount: CurrencyAmount,
+): IntegerAmount | null {
+  const amount = currencyToAmount(currencyAmount);
   return amount == null ? null : amountToInteger(amount);
 }
 
-export function stringToInteger(str: string) {
+export function stringToInteger(str: string): number | null {
   const amount = parseInt(str.replace(/[^-0-9.,]/g, ''));
   if (!isNaN(amount)) {
     return amount;
@@ -406,12 +426,12 @@ export function stringToInteger(str: string) {
   return null;
 }
 
-export function amountToInteger(n: number) {
-  return Math.round(n * 100);
+export function amountToInteger(amount: Amount): IntegerAmount {
+  return Math.round(amount * 100);
 }
 
-export function integerToAmount(n) {
-  return parseFloat((safeNumber(n) / 100).toFixed(2));
+export function integerToAmount(integerAmount: IntegerAmount): Amount {
+  return parseFloat((safeNumber(integerAmount) / 100).toFixed(2));
 }
 
 // This is used when the input format could be anything (from
@@ -462,4 +482,26 @@ export function sortByKey<T>(arr: T[], key: keyof T): T[] {
     }
     return 0;
   });
+}
+
+// Date utilities
+
+export function tsToRelativeTime(
+  ts: string | null,
+  locale: Locale,
+  options: {
+    capitalize: boolean;
+  } = { capitalize: false },
+): string {
+  if (!ts) return 'Unknown';
+
+  const parsed = new Date(parseInt(ts, 10));
+
+  let distance = formatDistanceToNow(parsed, { addSuffix: true, locale });
+
+  if (options.capitalize) {
+    distance = distance.charAt(0).toUpperCase() + distance.slice(1);
+  }
+
+  return distance;
 }

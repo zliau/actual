@@ -1,33 +1,33 @@
 // @ts-strict-ignore
 import React, { useCallback, useEffect, useState } from 'react';
 
+import { AnimatedLoading } from '@actual-app/components/icons/AnimatedLoading';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { sync } from 'loot-core/client/app/appSlice';
+import { collapseModals, pushModal } from 'loot-core/client/modals/modalsSlice';
 import {
   applyBudgetAction,
-  collapseModals,
   createCategory,
   createGroup,
   deleteCategory,
   deleteGroup,
-  getCategories,
   moveCategory,
   moveCategoryGroup,
-  pushModal,
   updateCategory,
   updateGroup,
-  sync,
-} from 'loot-core/client/actions';
-import { useSpreadsheet } from 'loot-core/src/client/SpreadsheetProvider';
-import { send, listen } from 'loot-core/src/platform/client/fetch';
-import * as monthUtils from 'loot-core/src/shared/months';
+} from 'loot-core/client/queries/queriesSlice';
+import { useSpreadsheet } from 'loot-core/client/SpreadsheetProvider';
+import { send } from 'loot-core/platform/client/fetch';
+import * as monthUtils from 'loot-core/shared/months';
 
 import { useCategories } from '../../../hooks/useCategories';
+import { useLocale } from '../../../hooks/useLocale';
 import { useLocalPref } from '../../../hooks/useLocalPref';
 import { useSyncedPref } from '../../../hooks/useSyncedPref';
-import { AnimatedLoading } from '../../../icons/AnimatedLoading';
 import { useDispatch } from '../../../redux';
-import { theme } from '../../../style';
 import { prewarmMonth } from '../../budget/util';
-import { View } from '../../common/View';
 import { NamespaceContext } from '../../spreadsheet/NamespaceContext';
 import { SyncRefresh } from '../../SyncRefresh';
 
@@ -38,6 +38,7 @@ function isBudgetType(input?: string): input is 'rollover' | 'report' {
 }
 
 export function Budget() {
+  const locale = useLocale();
   const { list: categories, grouped: categoryGroups } = useCategories();
   const [budgetTypePref] = useSyncedPref('budgetType');
   const budgetType = isBudgetType(budgetTypePref) ? budgetTypePref : 'rollover';
@@ -68,27 +69,11 @@ export function Budget() {
     }
 
     init();
-
-    const unlisten = listen('sync-event', event => {
-      if (event.type === 'success') {
-        const tables = event.tables;
-        if (
-          tables.includes('categories') ||
-          tables.includes('category_mapping') ||
-          tables.includes('category_groups')
-        ) {
-          // TODO: is this loading every time?
-          dispatch(getCategories());
-        }
-      }
-    });
-
-    return () => unlisten();
   }, [budgetType, startMonth, dispatch, spreadsheet]);
 
   const onBudgetAction = useCallback(
     async (month, type, args) => {
-      dispatch(applyBudgetAction(month, type, args));
+      dispatch(applyBudgetAction({ month, type, args }));
     },
     [dispatch],
   );
@@ -96,15 +81,25 @@ export function Budget() {
   const onShowBudgetSummary = useCallback(() => {
     if (budgetType === 'report') {
       dispatch(
-        pushModal('tracking-budget-summary', {
-          month: startMonth,
+        pushModal({
+          modal: {
+            name: 'tracking-budget-summary',
+            options: {
+              month: startMonth,
+            },
+          },
         }),
       );
     } else {
       dispatch(
-        pushModal('envelope-budget-summary', {
-          month: startMonth,
-          onBudgetAction,
+        pushModal({
+          modal: {
+            name: 'envelope-budget-summary',
+            options: {
+              month: startMonth,
+              onBudgetAction,
+            },
+          },
         }),
       );
     }
@@ -112,11 +107,16 @@ export function Budget() {
 
   const onOpenNewCategoryGroupModal = useCallback(() => {
     dispatch(
-      pushModal('new-category-group', {
-        onValidate: name => (!name ? 'Name is required.' : null),
-        onSubmit: async name => {
-          dispatch(collapseModals('budget-page-menu'));
-          dispatch(createGroup(name));
+      pushModal({
+        modal: {
+          name: 'new-category-group',
+          options: {
+            onValidate: name => (!name ? 'Name is required.' : null),
+            onSubmit: async name => {
+              dispatch(collapseModals({ rootModalName: 'budget-page-menu' }));
+              dispatch(createGroup({ name }));
+            },
+          },
         },
       }),
     );
@@ -125,11 +125,20 @@ export function Budget() {
   const onOpenNewCategoryModal = useCallback(
     (groupId, isIncome) => {
       dispatch(
-        pushModal('new-category', {
-          onValidate: name => (!name ? 'Name is required.' : null),
-          onSubmit: async name => {
-            dispatch(collapseModals('category-group-menu'));
-            dispatch(createCategory(name, groupId, isIncome, false));
+        pushModal({
+          modal: {
+            name: 'new-category',
+            options: {
+              onValidate: name => (!name ? 'Name is required.' : null),
+              onSubmit: async name => {
+                dispatch(
+                  collapseModals({ rootModalName: 'category-group-menu' }),
+                );
+                dispatch(
+                  createCategory({ name, groupId, isIncome, isHidden: false }),
+                );
+              },
+            },
           },
         }),
       );
@@ -139,7 +148,7 @@ export function Budget() {
 
   const onSaveGroup = useCallback(
     group => {
-      dispatch(updateGroup(group));
+      dispatch(updateGroup({ group }));
     },
     [dispatch],
   );
@@ -162,17 +171,26 @@ export function Budget() {
 
       if (mustTransfer) {
         dispatch(
-          pushModal('confirm-category-delete', {
-            group: groupId,
-            onDelete: transferCategory => {
-              dispatch(collapseModals('category-group-menu'));
-              dispatch(deleteGroup(groupId, transferCategory));
+          pushModal({
+            modal: {
+              name: 'confirm-category-delete',
+              options: {
+                group: groupId,
+                onDelete: transferCategory => {
+                  dispatch(
+                    collapseModals({ rootModalName: 'category-group-menu' }),
+                  );
+                  dispatch(
+                    deleteGroup({ id: groupId, transferId: transferCategory }),
+                  );
+                },
+              },
             },
           }),
         );
       } else {
-        dispatch(collapseModals('category-group-menu'));
-        dispatch(deleteGroup(groupId));
+        dispatch(collapseModals({ rootModalName: 'category-group-menu' }));
+        dispatch(deleteGroup({ id: groupId }));
       }
     },
     [categoryGroups, dispatch],
@@ -185,14 +203,14 @@ export function Budget() {
         ...group,
         hidden: !!!group.hidden,
       });
-      dispatch(collapseModals('category-group-menu'));
+      dispatch(collapseModals({ rootModalName: 'category-group-menu' }));
     },
     [categoryGroups, dispatch, onSaveGroup],
   );
 
   const onSaveCategory = useCallback(
     category => {
-      dispatch(updateCategory(category));
+      dispatch(updateCategory({ category }));
     },
     [dispatch],
   );
@@ -205,19 +223,31 @@ export function Budget() {
 
       if (mustTransfer) {
         dispatch(
-          pushModal('confirm-category-delete', {
-            category: categoryId,
-            onDelete: transferCategory => {
-              if (categoryId !== transferCategory) {
-                dispatch(collapseModals('category-menu'));
-                dispatch(deleteCategory(categoryId, transferCategory));
-              }
+          pushModal({
+            modal: {
+              name: 'confirm-category-delete',
+              options: {
+                category: categoryId,
+                onDelete: transferCategory => {
+                  if (categoryId !== transferCategory) {
+                    dispatch(
+                      collapseModals({ rootModalName: 'category-menu' }),
+                    );
+                    dispatch(
+                      deleteCategory({
+                        id: categoryId,
+                        transferId: transferCategory,
+                      }),
+                    );
+                  }
+                },
+              },
             },
           }),
         );
       } else {
-        dispatch(collapseModals('category-menu'));
-        dispatch(deleteCategory(categoryId));
+        dispatch(collapseModals({ rootModalName: 'category-menu' }));
+        dispatch(deleteCategory({ id: categoryId }));
       }
     },
     [dispatch],
@@ -230,7 +260,7 @@ export function Budget() {
         ...category,
         hidden: !!!category.hidden,
       });
-      dispatch(collapseModals('category-menu'));
+      dispatch(collapseModals({ rootModalName: 'category-menu' }));
     },
     [categories, dispatch, onSaveCategory],
   );
@@ -263,7 +293,7 @@ export function Budget() {
         targetId = catId;
       }
 
-      dispatch(moveCategory(id, groupId, targetId));
+      dispatch(moveCategory({ id, groupId, targetId }));
     },
     [categoryGroups, dispatch],
   );
@@ -276,7 +306,7 @@ export function Budget() {
           idx < categoryGroups.length - 1 ? categoryGroups[idx + 1].id : null;
       }
 
-      dispatch(moveCategoryGroup(id, targetId));
+      dispatch(moveCategoryGroup({ id, targetId }));
     },
     [categoryGroups, dispatch],
   );
@@ -294,6 +324,12 @@ export function Budget() {
     setStartMonthPref(month);
     setInitialized(true);
   }, [budgetType, setStartMonthPref, spreadsheet, startMonth]);
+
+  const onCurrentMonth = useCallback(async () => {
+    await prewarmMonth(budgetType, spreadsheet, currMonth);
+    setStartMonthPref(currMonth);
+    setInitialized(true);
+  }, [budgetType, setStartMonthPref, spreadsheet, currMonth]);
 
   // const onOpenMonthActionMenu = () => {
   //   const options = [
@@ -342,10 +378,15 @@ export function Budget() {
     id => {
       const group = categoryGroups.find(g => g.id === id);
       dispatch(
-        pushModal('notes', {
-          id,
-          name: group.name,
-          onSave: onSaveNotes,
+        pushModal({
+          modal: {
+            name: 'notes',
+            options: {
+              id,
+              name: group.name,
+              onSave: onSaveNotes,
+            },
+          },
         }),
       );
     },
@@ -356,10 +397,15 @@ export function Budget() {
     id => {
       const category = categories.find(c => c.id === id);
       dispatch(
-        pushModal('notes', {
-          id,
-          name: category.name,
-          onSave: onSaveNotes,
+        pushModal({
+          modal: {
+            name: 'notes',
+            options: {
+              id,
+              name: category.name,
+              onSave: onSaveNotes,
+            },
+          },
         }),
       );
     },
@@ -370,13 +416,18 @@ export function Budget() {
     id => {
       const group = categoryGroups.find(g => g.id === id);
       dispatch(
-        pushModal('category-group-menu', {
-          groupId: group.id,
-          onSave: onSaveGroup,
-          onAddCategory: onOpenNewCategoryModal,
-          onEditNotes: onOpenCategoryGroupNotesModal,
-          onDelete: onDeleteGroup,
-          onToggleVisibility: onToggleGroupVisibility,
+        pushModal({
+          modal: {
+            name: 'category-group-menu',
+            options: {
+              groupId: group.id,
+              onSave: onSaveGroup,
+              onAddCategory: onOpenNewCategoryModal,
+              onEditNotes: onOpenCategoryGroupNotesModal,
+              onDelete: onDeleteGroup,
+              onToggleVisibility: onToggleGroupVisibility,
+            },
+          },
         }),
       );
     },
@@ -395,20 +446,23 @@ export function Budget() {
     id => {
       const category = categories.find(c => c.id === id);
       dispatch(
-        pushModal('category-menu', {
-          categoryId: category.id,
-          onSave: onSaveCategory,
-          onEditNotes: onOpenCategoryNotesModal,
-          onDelete: onDeleteCategory,
-          onToggleVisibility: onToggleCategoryVisibility,
-          onBudgetAction,
+        pushModal({
+          modal: {
+            name: 'category-menu',
+            options: {
+              categoryId: category.id,
+              onSave: onSaveCategory,
+              onEditNotes: onOpenCategoryNotesModal,
+              onDelete: onDeleteCategory,
+              onToggleVisibility: onToggleCategoryVisibility,
+            },
+          },
         }),
       );
     },
     [
       categories,
       dispatch,
-      onBudgetAction,
       onDeleteCategory,
       onOpenCategoryNotesModal,
       onSaveCategory,
@@ -422,37 +476,44 @@ export function Budget() {
 
   const onToggleHiddenCategories = useCallback(() => {
     setShowHiddenCategoriesPref(!showHiddenCategories);
-    dispatch(collapseModals('budget-page-menu'));
+    dispatch(collapseModals({ rootModalName: 'budget-page-menu' }));
   }, [dispatch, setShowHiddenCategoriesPref, showHiddenCategories]);
 
   const onOpenBudgetMonthNotesModal = useCallback(
     month => {
       dispatch(
-        pushModal('notes', {
-          id: `budget-${month}`,
-          name: monthUtils.format(month, 'MMMM ‘yy'),
-          onSave: onSaveNotes,
+        pushModal({
+          modal: {
+            name: 'notes',
+            options: {
+              id: `budget-${month}`,
+              name: monthUtils.format(month, 'MMMM ‘yy', locale),
+              onSave: onSaveNotes,
+            },
+          },
         }),
       );
     },
-    [dispatch, onSaveNotes],
+    [dispatch, onSaveNotes, locale],
   );
 
   const onSwitchBudgetFile = useCallback(() => {
-    dispatch(pushModal('budget-list'));
+    dispatch(pushModal({ modal: { name: 'budget-file-selection' } }));
   }, [dispatch]);
 
   const onOpenBudgetMonthMenu = useCallback(
     month => {
       dispatch(
-        pushModal(
-          `${budgetType === 'report' ? 'tracking' : 'envelope'}-budget-month-menu`,
-          {
-            month,
-            onBudgetAction,
-            onEditNotes: onOpenBudgetMonthNotesModal,
+        pushModal({
+          modal: {
+            name: `${budgetType === 'report' ? 'tracking' : 'envelope'}-budget-month-menu`,
+            options: {
+              month,
+              onBudgetAction,
+              onEditNotes: onOpenBudgetMonthNotesModal,
+            },
           },
-        ),
+        }),
       );
     },
     [budgetType, dispatch, onBudgetAction, onOpenBudgetMonthNotesModal],
@@ -460,10 +521,15 @@ export function Budget() {
 
   const onOpenBudgetPageMenu = useCallback(() => {
     dispatch(
-      pushModal('budget-page-menu', {
-        onAddCategoryGroup: onOpenNewCategoryGroupModal,
-        onToggleHiddenCategories,
-        onSwitchBudgetFile,
+      pushModal({
+        modal: {
+          name: 'budget-page-menu',
+          options: {
+            onAddCategoryGroup: onOpenNewCategoryGroupModal,
+            onToggleHiddenCategories,
+            onSwitchBudgetFile,
+          },
+        },
       }),
     );
   }, [
@@ -509,6 +575,7 @@ export function Budget() {
             onShowBudgetSummary={onShowBudgetSummary}
             onPrevMonth={onPrevMonth}
             onNextMonth={onNextMonth}
+            onCurrentMonth={onCurrentMonth}
             onSaveGroup={onSaveGroup}
             onDeleteGroup={onDeleteGroup}
             onAddCategory={onOpenNewCategoryModal}

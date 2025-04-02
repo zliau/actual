@@ -1,17 +1,17 @@
 // @ts-strict-ignore
 import keyBy from 'lodash/keyBy';
 
-import { runQuery } from 'loot-core/src/client/query-helpers';
-import { type useSpreadsheet } from 'loot-core/src/client/SpreadsheetProvider';
-import { send } from 'loot-core/src/platform/client/fetch';
-import * as monthUtils from 'loot-core/src/shared/months';
-import { q } from 'loot-core/src/shared/query';
-import { integerToAmount } from 'loot-core/src/shared/util';
-import { type RuleConditionEntity } from 'loot-core/src/types/models';
+import { runQuery } from 'loot-core/client/query-helpers';
+import { type useSpreadsheet } from 'loot-core/client/SpreadsheetProvider';
+import { send } from 'loot-core/platform/client/fetch';
+import * as monthUtils from 'loot-core/shared/months';
+import { q } from 'loot-core/shared/query';
+import { integerToAmount } from 'loot-core/shared/util';
 import {
+  type RuleConditionEntity,
   type SpendingMonthEntity,
   type SpendingEntity,
-} from 'loot-core/src/types/models/reports';
+} from 'loot-core/types/models';
 
 import { makeQuery } from './makeQuery';
 
@@ -45,6 +45,17 @@ export function createSpendingSpreadsheet({
     const { filters } = await send('make-filters-from-conditions', {
       conditions: conditions.filter(cond => !cond.customName),
     });
+
+    const { filters: budgetFilters } = await send(
+      'make-filters-from-conditions',
+      {
+        conditions: conditions.filter(
+          cond => !cond.customName && cond.field === 'category',
+        ),
+        applySpecialCases: false,
+      },
+    );
+
     const conditionsOpKey = conditionsOp === 'or' ? '$or' : '$and';
 
     const [assets, debts] = await Promise.all([
@@ -109,7 +120,7 @@ export function createSpendingSpreadsheet({
             $and: [{ month: { $eq: budgetMonth } }],
           })
           .filter({
-            [conditionsOpKey]: filters.filter(filter => filter.category),
+            [conditionsOpKey]: budgetFilters,
           })
           .groupBy([{ $id: '$category' }])
           .select([

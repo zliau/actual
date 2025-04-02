@@ -1,16 +1,18 @@
 import React, { useCallback, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
-import { addNotification } from 'loot-core/client/actions';
+import { Button, ButtonWithLoading } from '@actual-app/components/button';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { addNotification } from 'loot-core/client/notifications/notificationsSlice';
 
 import { useGlobalPref } from '../../../hooks/useGlobalPref';
 import { useDispatch } from '../../../redux';
-import { theme, styles } from '../../../style';
 import { Information } from '../../alerts';
-import { Button, ButtonWithLoading } from '../../common/Button2';
 import { Modal, ModalCloseButton, ModalHeader } from '../../common/Modal';
-import { Text } from '../../common/Text';
-import { View } from '../../common/View';
 import { Checkbox } from '../../forms';
 
 function DirectoryDisplay({ directory }: { directory: string }) {
@@ -51,7 +53,7 @@ export function ConfirmChangeDocumentDirModal({
   const dispatch = useDispatch();
 
   const restartElectronServer = useCallback(() => {
-    globalThis.window.Actual?.restartElectronServer();
+    globalThis.window.Actual.restartElectronServer();
   }, []);
 
   const [_documentDir, setDocumentDirPref] = useGlobalPref(
@@ -64,7 +66,7 @@ export function ConfirmChangeDocumentDirModal({
     setLoading(true);
     try {
       if (moveFiles) {
-        await globalThis.window.Actual?.moveBudgetDirectory(
+        await globalThis.window.Actual.moveBudgetDirectory(
           currentBudgetDirectory,
           newDirectory,
         );
@@ -74,8 +76,10 @@ export function ConfirmChangeDocumentDirModal({
 
       dispatch(
         addNotification({
-          type: 'message',
-          message: t('Actual’s data directory successfully changed.'),
+          notification: {
+            type: 'message',
+            message: t('Actual’s data directory successfully changed.'),
+          },
         }),
       );
       close();
@@ -197,7 +201,7 @@ export function ConfirmChangeDocumentDirModal({
                 }}
                 onPress={() => moveDirectory(close)}
               >
-                <Trans>Change Directory</Trans>
+                <Trans>Change directory</Trans>
               </ButtonWithLoading>
             </View>
           </View>

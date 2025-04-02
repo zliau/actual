@@ -1,15 +1,16 @@
 import React from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
-import { closeBudget } from 'loot-core/client/actions';
+import { Button } from '@actual-app/components/button';
+import { Paragraph } from '@actual-app/components/paragraph';
+import { Text } from '@actual-app/components/text';
+import { View } from '@actual-app/components/view';
+
+import { closeBudget } from 'loot-core/client/budgets/budgetsSlice';
 
 import { useDispatch } from '../../redux';
-import { Button } from '../common/Button2';
 import { Link } from '../common/Link';
 import { Modal, ModalHeader, ModalTitle } from '../common/Modal';
-import { Paragraph } from '../common/Paragraph';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
 
 export function OutOfSyncMigrationsModal() {
   const dispatch = useDispatch();
@@ -43,7 +44,7 @@ export function OutOfSyncMigrationsModal() {
                 <Trans>
                   It looks like you&apos;re using an outdated version of the
                   Actual client. Your budget data has been updated by another
-                  client, but this client is still on the old verison. For the
+                  client, but this client is still on the old version. For the
                   best experience, please update Actual to the latest version.
                 </Trans>
               </Paragraph>

@@ -3,33 +3,63 @@ import { t } from 'i18next';
 
 import { listen, send } from '../platform/client/fetch';
 
-import type { Notification } from './state-types/notifications';
+import { resetSync, sync } from './app/appSlice';
+import { closeAndDownloadBudget, uploadBudget } from './budgets/budgetsSlice';
+import { pushModal } from './modals/modalsSlice';
+import {
+  addNotification,
+  type Notification,
+} from './notifications/notificationsSlice';
+import { loadPrefs } from './prefs/prefsSlice';
+import { getAccounts, getCategories, getPayees } from './queries/queriesSlice';
+import { type AppStore } from './store';
+import { signOut } from './users/usersSlice';
 
-export function listenForSyncEvent(actions, store) {
+export function listenForSyncEvent(store: AppStore) {
+  // TODO: Should this run on mobile too?
+  const unlistenUnauthorized = listen('sync-event', async ({ type }) => {
+    if (type === 'unauthorized') {
+      store.dispatch(
+        addNotification({
+          notification: {
+            type: 'warning',
+            message: 'Unable to authenticate with server',
+            sticky: true,
+            id: 'auth-issue',
+          },
+        }),
+      );
+    }
+  });
+
   let attemptedSyncRepair = false;
 
-  listen('sync-event', event => {
+  const unlistenSuccess = listen('sync-event', event => {
     const prefs = store.getState().prefs.local;
     if (!prefs || !prefs.id) {
       // Do nothing if no budget is loaded
       return;
     }
 
-    if (event.type === 'success') {
+    if (event.type === 'success' || event.type === 'applied') {
       if (attemptedSyncRepair) {
         attemptedSyncRepair = false;
 
-        actions.addNotification({
-          title: t('Syncing has been fixed!'),
-          message: t('Happy budgeting!'),
-          type: 'message',
-        });
+        store.dispatch(
+          addNotification({
+            notification: {
+              title: t('Syncing has been fixed!'),
+              message: t('Happy budgeting!'),
+              type: 'message',
+            },
+          }),
+        );
       }
 
       const tables = event.tables;
 
       if (tables.includes('prefs')) {
-        actions.loadPrefs();
+        store.dispatch(loadPrefs());
       }
 
       if (
@@ -37,15 +67,20 @@ export function listenForSyncEvent(actions, store) {
         tables.includes('category_groups') ||
         tables.includes('category_mapping')
       ) {
-        actions.getCategories();
+        store.dispatch(getCategories());
       }
 
-      if (tables.includes('payees') || tables.includes('payee_mapping')) {
-        actions.getPayees();
+      if (
+        // Sync on accounts change because so that transfer payees are updated
+        tables.includes('accounts') ||
+        tables.includes('payees') ||
+        tables.includes('payee_mapping')
+      ) {
+        store.dispatch(getPayees());
       }
 
       if (tables.includes('accounts')) {
-        actions.getAccounts();
+        store.dispatch(getAccounts());
       }
     } else if (event.type === 'error') {
       let notif: Notification | null = null;
@@ -68,7 +103,9 @@ export function listenForSyncEvent(actions, store) {
               id: 'reset-sync',
               button: {
                 title: t('Reset sync'),
-                action: actions.resetSync,
+                action: () => {
+                  store.dispatch(resetSync());
+                },
               },
             };
           } else {
@@ -90,7 +127,7 @@ export function listenForSyncEvent(actions, store) {
                 action: async () => {
                   attemptedSyncRepair = true;
                   await send('sync-repair');
-                  actions.sync();
+                  store.dispatch(sync());
                 },
               },
             };
@@ -111,13 +148,20 @@ export function listenForSyncEvent(actions, store) {
                 'Old encryption keys are not migrated. If using encryption, [reset encryption here](#makeKey).',
             ),
             messageActions: {
-              makeKey: () => actions.pushModal('create-encryption-key'),
+              makeKey: () =>
+                store.dispatch(
+                  pushModal({
+                    modal: { name: 'create-encryption-key', options: {} },
+                  }),
+                ),
             },
             sticky: true,
             id: 'old-file',
             button: {
               title: t('Reset sync'),
-              action: actions.resetSync,
+              action: () => {
+                store.dispatch(resetSync());
+              },
             },
           };
           break;
@@ -136,7 +180,13 @@ export function listenForSyncEvent(actions, store) {
             id: 'invalid-key-state',
             button: {
               title: t('Reset key'),
-              action: () => actions.pushModal('create-encryption-key'),
+              action: () => {
+                store.dispatch(
+                  pushModal({
+                    modal: { name: 'create-encryption-key', options: {} },
+                  }),
+                );
+              },
             },
           };
 
@@ -159,9 +209,9 @@ export function listenForSyncEvent(actions, store) {
             button: {
               title: t('Register'),
               action: async () => {
-                await actions.uploadBudget();
-                actions.sync();
-                actions.loadPrefs();
+                await store.dispatch(uploadBudget({}));
+                store.dispatch(sync());
+                store.dispatch(loadPrefs());
               },
             },
           };
@@ -181,7 +231,9 @@ export function listenForSyncEvent(actions, store) {
             id: 'upload-file',
             button: {
               title: t('Upload'),
-              action: actions.resetSync,
+              action: () => {
+                store.dispatch(resetSync());
+              },
             },
           };
           break;
@@ -204,12 +256,14 @@ export function listenForSyncEvent(actions, store) {
               ) +
               ' ' +
               learnMore,
-            messageActions: { upload: actions.resetSync },
+            messageActions: { upload: () => store.dispatch(resetSync()) },
             sticky: true,
             id: 'needs-revert',
             button: {
               title: t('Revert'),
-              action: () => actions.closeAndDownloadBudget(cloudFileId),
+              action: () => {
+                store.dispatch(closeAndDownloadBudget({ cloudFileId }));
+              },
             },
           };
           break;
@@ -226,10 +280,18 @@ export function listenForSyncEvent(actions, store) {
               id: 'encrypt-failure-missing',
               button: {
                 title: t('Create key'),
-                action: () =>
-                  actions.pushModal('fix-encryption-key', {
-                    onSuccess: () => actions.sync(),
-                  }),
+                action: () => {
+                  store.dispatch(
+                    pushModal({
+                      modal: {
+                        name: 'fix-encryption-key',
+                        options: {
+                          onSuccess: () => store.dispatch(sync()),
+                        },
+                      },
+                    }),
+                  );
+                },
               },
             };
           } else {
@@ -243,10 +305,13 @@ export function listenForSyncEvent(actions, store) {
               id: 'encrypt-failure',
               button: {
                 title: t('Reset key'),
-                action: () =>
-                  actions.pushModal('create-encryption-key', {
-                    onSuccess: () => actions.sync(),
-                  }),
+                action: () => {
+                  store.dispatch(
+                    pushModal({
+                      modal: { name: 'create-encryption-key', options: {} },
+                    }),
+                  );
+                },
               },
             };
           }
@@ -266,7 +331,7 @@ export function listenForSyncEvent(actions, store) {
           console.trace('apply-failure', event.meta);
           notif = {
             message: t(
-              'We couldn’t apply that change to the database. Please report this as a bug by [opening a Github issue]({{githubIssueLink}}).',
+              'We couldn’t apply that change to the database. Please report this as a bug by [opening a GitHub issue]({{githubIssueLink}}).',
               { githubIssueLink },
             ),
           };
@@ -282,7 +347,9 @@ export function listenForSyncEvent(actions, store) {
             id: 'login-expired',
             button: {
               title: 'Go to login',
-              action: () => actions.signOut(),
+              action: () => {
+                store.dispatch(signOut());
+              },
             },
           };
           break;
@@ -290,15 +357,22 @@ export function listenForSyncEvent(actions, store) {
           console.trace('unknown error', event);
           notif = {
             message: t(
-              'We had problems syncing your changes. Please report this as a bug by [opening a Github issue]({{githubIssueLink}}).',
+              'We had problems syncing your changes. Please report this as a bug by [opening a GitHub issue]({{githubIssueLink}}).',
               { githubIssueLink },
             ),
           };
       }
 
       if (notif) {
-        actions.addNotification({ type: 'error', ...notif });
+        store.dispatch(
+          addNotification({ notification: { type: 'error', ...notif } }),
+        );
       }
     }
   });
+
+  return () => {
+    unlistenUnauthorized();
+    unlistenSuccess();
+  };
 }

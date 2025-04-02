@@ -30,7 +30,12 @@ export class CategoryTemplate {
   // Class interface
 
   // set up the class and check all templates
-  static async init(templates: Template[], category: CategoryEntity, month) {
+  static async init(
+    templates: Template[],
+    category: CategoryEntity,
+    month,
+    budgeted: number,
+  ) {
     // get all the needed setup values
     const lastMonthSheet = monthUtils.sheetForMonth(
       monthUtils.subMonths(month, 1),
@@ -46,6 +51,9 @@ export class CategoryTemplate {
     let fromLastMonth;
     if (lastMonthBalance < 0 && !carryover) {
       fromLastMonth = 0;
+    } else if (category.is_income) {
+      //for tracking budget
+      fromLastMonth = 0;
     } else {
       fromLastMonth = lastMonthBalance;
     }
@@ -53,9 +61,23 @@ export class CategoryTemplate {
     await CategoryTemplate.checkByAndScheduleAndSpend(templates, month);
     await CategoryTemplate.checkPercentage(templates);
     // call the private constructor
-    return new CategoryTemplate(templates, category, month, fromLastMonth);
+    return new CategoryTemplate(
+      templates,
+      category,
+      month,
+      fromLastMonth,
+      budgeted,
+    );
   }
 
+  getGoalOnly(): boolean {
+    // if there is only a goal
+    return (
+      this.templates.length === 0 &&
+      this.remainder.length === 0 &&
+      this.goals.length > 0
+    );
+  }
   getPriorities(): number[] {
     return this.priorities;
   }
@@ -90,45 +112,45 @@ export class CategoryTemplate {
     const t = this.templates.filter(t => t.priority === priority);
     let available = budgetAvail || 0;
     let toBudget = 0;
-    let first = true; // needed for by templates
+    let byFlag = false;
     let remainder = 0;
     let scheduleFlag = false;
     // switch on template type and calculate the amount for the line
     for (let i = 0; i < t.length; i++) {
+      let newBudget = 0;
       switch (t[i].type) {
         case 'simple': {
-          toBudget += this.runSimple(t[i], this.limitAmount);
+          newBudget = this.runSimple(t[i], this.limitAmount);
           break;
         }
         case 'copy': {
-          toBudget += await this.runCopy(t[i]);
+          newBudget = await this.runCopy(t[i]);
           break;
         }
         case 'week': {
-          toBudget += this.runWeek(t[i]);
+          newBudget = this.runWeek(t[i]);
           break;
         }
         case 'spend': {
-          toBudget += await this.runSpend(t[i]);
+          newBudget = await this.runSpend(t[i]);
           break;
         }
         case 'percentage': {
-          toBudget += await this.runPercentage(t[i], availStart);
+          newBudget = await this.runPercentage(t[i], availStart);
           break;
         }
         case 'by': {
-          //TODO add the logic to run all of these at once or whatever is needed
-          const ret = this.runBy(t[i], first, remainder);
-          toBudget += ret.ret;
-          remainder = ret.remainder;
-          first = false;
+          // all by's get run at once
+          if (!byFlag) {
+            newBudget = this.runBy();
+          } else {
+            newBudget = 0;
+          }
+          byFlag = true;
           break;
         }
         case 'schedule': {
-          const budgeted = await getSheetValue(
-            monthUtils.sheetForMonth(this.month),
-            `leftover-${this.category.id}`,
-          );
+          const budgeted = this.fromLastMonth + toBudget;
           const ret = await goalsSchedule(
             scheduleFlag,
             t,
@@ -140,18 +162,21 @@ export class CategoryTemplate {
             [],
             this.category,
           );
-          toBudget = ret.to_budget;
+          // Schedules assume that its to budget value is the whole thing so this
+          // needs to remove the previous funds so they aren't double counted
+          newBudget = ret.to_budget - toBudget;
           remainder = ret.remainder;
           scheduleFlag = ret.scheduleFlag;
           break;
         }
         case 'average': {
-          toBudget += await this.runAverage(t[i]);
+          newBudget = await this.runAverage(t[i]);
           break;
         }
       }
 
-      available = available - toBudget;
+      available = available - newBudget;
+      toBudget += newBudget;
     }
 
     //check limit
@@ -221,16 +246,19 @@ export class CategoryTemplate {
   private limitAmount = 0;
   private limitCheck = false;
   private limitHold = false;
+  readonly previouslyBudgeted: number = 0;
 
   private constructor(
     templates: Template[],
     category: CategoryEntity,
     month: string,
     fromLastMonth: number,
+    budgeted: number,
   ) {
     this.category = category;
     this.month = month;
     this.fromLastMonth = fromLastMonth;
+    this.previouslyBudgeted = budgeted;
     // sort the template lines into regular template, goals, and remainder templates
     if (templates) {
       templates.forEach(t => {
@@ -276,6 +304,7 @@ export class CategoryTemplate {
 
   private runGoal() {
     if (this.goals.length > 0) {
+      if (this.getGoalOnly()) this.toBudgetAmount = this.previouslyBudgeted;
       this.isLongGoal = true;
       this.goalAmount = amountToInteger(this.goals[0].amount);
       return;
@@ -542,39 +571,62 @@ export class CategoryTemplate {
     return -Math.round(sum / template.numMonths);
   }
 
-  private runBy(
-    template,
-    first: boolean,
-    remainder: number,
-  ): { ret: number; remainder: number } {
-    let target = 0;
-    let targetMonth = `${template.month}`;
-    let numMonths = monthUtils.differenceInCalendarMonths(
-      targetMonth,
-      this.month,
-    );
-    const repeat = template.annual
-      ? (template.repeat || 1) * 12
-      : template.repeat;
-    while (numMonths < 0 && repeat) {
-      targetMonth = monthUtils.addMonths(targetMonth, repeat);
-      numMonths = monthUtils.differenceInCalendarMonths(
+  private runBy(): number {
+    const byTemplates = this.templates.filter(t => t.type === 'by');
+    const savedInfo = [];
+    let totalNeeded = 0;
+    let shortNumMonths;
+    //find shortest time period
+    for (let i = 0; i < byTemplates.length; i++) {
+      const template = byTemplates[i];
+      let targetMonth = `${template.month}`;
+      const period = template.annual
+        ? (template.repeat || 1) * 12
+        : template.repeat != null
+          ? template.repeat
+          : null;
+      let numMonths = monthUtils.differenceInCalendarMonths(
         targetMonth,
         this.month,
       );
+      while (numMonths < 0 && period) {
+        targetMonth = monthUtils.addMonths(targetMonth, period);
+        numMonths = monthUtils.differenceInCalendarMonths(
+          targetMonth,
+          this.month,
+        );
+      }
+      savedInfo.push({ numMonths, period });
+      if (numMonths < shortNumMonths || !shortNumMonths) {
+        shortNumMonths = numMonths;
+      }
     }
-    if (first) remainder = this.fromLastMonth;
-    remainder = amountToInteger(template.amount) - remainder;
-    if (remainder >= 0) {
-      target = remainder;
-      remainder = 0;
-    } else {
-      target = 0;
-      remainder = Math.abs(remainder);
-    }
-    const ret = numMonths >= 0 ? Math.round(target / (numMonths + 1)) : 0;
-    return { ret, remainder };
-  }
 
-  //private async runSchedule(template_lines) {}
+    // calculate needed funds per template
+    for (let i = 0; i < byTemplates.length; i++) {
+      const template = byTemplates[i];
+      const numMonths = savedInfo[i].numMonths;
+      const period = savedInfo[i].period;
+      let amount;
+      // back interpolate what is needed in the short window
+      if (numMonths > shortNumMonths && period) {
+        amount = Math.round(
+          (amountToInteger(template.amount) / period) *
+            (period - numMonths + shortNumMonths),
+        );
+        // fallback to this.  This matches what the prior math accomplished, just more round about
+      } else if (numMonths > shortNumMonths) {
+        amount = Math.round(
+          (amountToInteger(template.amount) / (numMonths + 1)) *
+            (shortNumMonths + 1),
+        );
+      } else {
+        amount = amountToInteger(template.amount);
+      }
+      totalNeeded += amount;
+    }
+    return Math.round(
+      (totalNeeded - this.fromLastMonth) / (shortNumMonths + 1),
+    );
+  }
 }

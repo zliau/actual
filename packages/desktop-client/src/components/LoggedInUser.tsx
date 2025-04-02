@@ -2,7 +2,17 @@ import React, { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 
-import { closeBudget, getUserData, signOut } from 'loot-core/client/actions';
+import { Button } from '@actual-app/components/button';
+import { Menu } from '@actual-app/components/menu';
+import { Popover } from '@actual-app/components/popover';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { closeBudget } from 'loot-core/client/budgets/budgetsSlice';
+import { getUserData, signOut } from 'loot-core/client/users/usersSlice';
+import { listen } from 'loot-core/platform/client/fetch';
 import { type RemoteFile, type SyncedLocalFile } from 'loot-core/types/file';
 import { type TransObjectLiteral } from 'loot-core/types/util';
 
@@ -11,13 +21,7 @@ import { Permissions } from '../auth/types';
 import { useMetadataPref } from '../hooks/useMetadataPref';
 import { useNavigate } from '../hooks/useNavigate';
 import { useSelector, useDispatch } from '../redux';
-import { theme, styles } from '../style';
 
-import { Button } from './common/Button2';
-import { Menu } from './common/Menu';
-import { Popover } from './common/Popover';
-import { Text } from './common/Text';
-import { View } from './common/View';
 import { PrivacyFilter } from './PrivacyFilter';
 import { useMultiuserEnabled, useServerURL } from './ServerContext';
 
@@ -52,13 +56,40 @@ export function LoggedInUser({
   const currentFile = remoteFiles.find(f => f.cloudFileId === cloudFileId);
   const hasSyncedPrefs = useSelector(state => state.prefs.synced);
 
-  useEffect(() => {
-    async function init() {
+  const initializeUserData = async () => {
+    try {
       await dispatch(getUserData());
+    } catch (error) {
+      console.error('Failed to initialize user data:', error);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    init().then(() => setLoading(false));
+  useEffect(() => {
+    initializeUserData();
   }, []);
+
+  useEffect(() => {
+    return listen('sync-event', ({ type }) => {
+      if (type === 'start') {
+        setLoading(true);
+
+        return;
+      }
+
+      const shouldReinitialize =
+        userData &&
+        ((type === 'success' && userData.offline) ||
+          (type === 'error' && !userData.offline));
+
+      if (shouldReinitialize) {
+        initializeUserData();
+      } else {
+        setLoading(false);
+      }
+    });
+  }, [userData]);
 
   async function onCloseBudget() {
     await dispatch(closeBudget());

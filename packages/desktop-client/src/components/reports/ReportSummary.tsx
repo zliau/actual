@@ -1,20 +1,23 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
-import * as monthUtils from 'loot-core/src/shared/months';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import * as monthUtils from 'loot-core/shared/months';
 import {
   amountToCurrency,
   integerToCurrency,
   amountToInteger,
-} from 'loot-core/src/shared/util';
+} from 'loot-core/shared/util';
 import {
   type balanceTypeOpType,
   type DataEntity,
-} from 'loot-core/src/types/models/reports';
+} from 'loot-core/types/models';
 
-import { theme, styles } from '../../style';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
+import { useLocale } from '../../hooks/useLocale';
 import { PrivacyFilter } from '../PrivacyFilter';
 
 import { ReportOptions } from './ReportOptions';
@@ -36,6 +39,7 @@ export function ReportSummary({
   interval,
   intervalsCount,
 }: ReportSummaryProps) {
+  const locale = useLocale();
   const { t } = useTranslation();
   const net =
     balanceTypeOp === 'netAssets'
@@ -72,19 +76,23 @@ export function ReportSummary({
           {monthUtils.format(
             startDate,
             ReportOptions.intervalFormat.get(interval) || '',
+            locale,
           )}
           {monthUtils.format(
             startDate,
             ReportOptions.intervalFormat.get(interval) || '',
+            locale,
           ) !==
             monthUtils.format(
               endDate,
               ReportOptions.intervalFormat.get(interval) || '',
+              locale,
             ) &&
-            ' to ' +
+            ` ${t('to')} ` +
               monthUtils.format(
                 endDate,
                 ReportOptions.intervalFormat.get(interval) || '',
+                locale,
               )}
         </Text>
       </View>

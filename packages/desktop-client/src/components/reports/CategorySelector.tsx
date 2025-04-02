@@ -2,20 +2,21 @@
 import React, { Fragment, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import {
-  type CategoryEntity,
-  type CategoryGroupEntity,
-} from 'loot-core/src/types/models';
-
+import { Button } from '@actual-app/components/button';
 import {
   SvgCheckAll,
   SvgUncheckAll,
   SvgViewHide,
   SvgViewShow,
-} from '../../icons/v2';
-import { Button } from '../common/Button2';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
+} from '@actual-app/components/icons/v2';
+import { Text } from '@actual-app/components/text';
+import { View } from '@actual-app/components/view';
+
+import {
+  type CategoryEntity,
+  type CategoryGroupEntity,
+} from 'loot-core/types/models';
+
 import { Checkbox } from '../forms';
 
 import { GraphButton } from './GraphButton';
@@ -89,13 +90,27 @@ export function CategorySelector({
                 <Text>{t('Show unchecked')}</Text>
               </View>
             ) : (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                }}
+              >
                 <SvgViewHide
                   width={15}
                   height={15}
                   style={{ marginRight: 5 }}
                 />
-                <Text>{t('Hide unchecked')}</Text>
+                <Text
+                  style={{
+                    maxWidth: 100,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {t('Hide unchecked')}
+                </Text>
               </View>
             )}
           </View>

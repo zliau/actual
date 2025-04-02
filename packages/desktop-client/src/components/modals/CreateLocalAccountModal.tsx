@@ -1,21 +1,25 @@
 // @ts-strict-ignore
 import { type FormEvent, useState } from 'react';
 import { Form } from 'react-aria-components';
-import { useTranslation } from 'react-i18next';
+import { useTranslation, Trans } from 'react-i18next';
 
-import { closeModal, createAccount } from 'loot-core/client/actions';
-import { toRelaxedNumber } from 'loot-core/src/shared/util';
+import { Button } from '@actual-app/components/button';
+import { FormError } from '@actual-app/components/form-error';
+import { InitialFocus } from '@actual-app/components/initial-focus';
+import { InlineField } from '@actual-app/components/inline-field';
+import { Input } from '@actual-app/components/input';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { closeModal } from 'loot-core/client/modals/modalsSlice';
+import { createAccount } from 'loot-core/client/queries/queriesSlice';
+import { toRelaxedNumber } from 'loot-core/shared/util';
 
 import * as useAccounts from '../../hooks/useAccounts';
 import { useFeatureFlag } from '../../hooks/useFeatureFlag';
 import { useNavigate } from '../../hooks/useNavigate';
 import { useDispatch } from '../../redux';
-import { theme } from '../../style';
-import { Button } from '../common/Button2';
-import { FormError } from '../common/FormError';
-import { InitialFocus } from '../common/InitialFocus';
-import { InlineField } from '../common/InlineField';
-import { Input } from '../common/Input';
 import { Link } from '../common/Link';
 import {
   Modal,
@@ -75,8 +79,13 @@ export function CreateLocalAccountModal() {
     if (!nameError && !balanceError) {
       dispatch(closeModal());
       const id = await dispatch(
-        createAccount(name, toRelaxedNumber(balance), offbudget, currency),
-      );
+        createAccount({
+          name,
+          balance: toRelaxedNumber(balance),
+          offBudget: offbudget,
+          currency,
+        }),
+      ).unwrap();
       navigate('/accounts/' + id);
     }
   };
@@ -92,7 +101,7 @@ export function CreateLocalAccountModal() {
           />
           <View>
             <Form onSubmit={onSubmit}>
-              <InlineField label="Name" width="100%">
+              <InlineField label={t('Name')} width="100%">
                 <InitialFocus>
                   <Input
                     name="name"
@@ -139,7 +148,7 @@ export function CreateLocalAccountModal() {
                         verticalAlign: 'center',
                       }}
                     >
-                      {t('Off budget')}
+                      <Trans>Off budget</Trans>
                     </label>
                   </View>
                   <div
@@ -151,22 +160,23 @@ export function CreateLocalAccountModal() {
                     }}
                   >
                     <Text>
-                      {t('This cannot be changed later.')} <br /> {'\n'}
-                      {t('See')}{' '}
-                      <Link
-                        variant="external"
-                        linkColor="muted"
-                        to="https://actualbudget.org/docs/accounts/#off-budget-accounts"
-                      >
-                        {t('Accounts Overview')}
-                      </Link>{' '}
-                      {t('for more information.')}
+                      <Trans>
+                        This cannot be changed later. See{' '}
+                        <Link
+                          variant="external"
+                          linkColor="muted"
+                          to="https://actualbudget.org/docs/accounts/#off-budget-accounts"
+                        >
+                          Accounts Overview
+                        </Link>{' '}
+                        for more information.
+                      </Trans>
                     </Text>
                   </div>
                 </View>
               </View>
 
-              <InlineField label="Balance" width="100%">
+              <InlineField label={t('Balance')} width="100%">
                 <Input
                   name="balance"
                   inputMode="decimal"

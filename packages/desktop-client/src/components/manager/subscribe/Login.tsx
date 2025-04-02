@@ -3,22 +3,25 @@ import React, { useState, useEffect } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
+import { Button, ButtonWithLoading } from '@actual-app/components/button';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { AnimatedLoading } from '@actual-app/components/icons/AnimatedLoading';
+import { BigInput } from '@actual-app/components/input';
+import { Label } from '@actual-app/components/label';
+import { Select } from '@actual-app/components/select';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { loggedIn } from 'loot-core/client/users/usersSlice';
+import { send } from 'loot-core/platform/client/fetch';
 import { isElectron } from 'loot-core/shared/environment';
-import { loggedIn } from 'loot-core/src/client/actions/user';
-import { send } from 'loot-core/src/platform/client/fetch';
-import { type OpenIdConfig } from 'loot-core/types/models/openid';
+import { type OpenIdConfig } from 'loot-core/types/models';
 
 import { useNavigate } from '../../../hooks/useNavigate';
-import { AnimatedLoading } from '../../../icons/AnimatedLoading';
 import { useDispatch } from '../../../redux';
-import { styles, theme } from '../../../style';
-import { Button, ButtonWithLoading } from '../../common/Button2';
-import { BigInput } from '../../common/Input';
-import { Label } from '../../common/Label';
 import { Link } from '../../common/Link';
-import { Select } from '../../common/Select';
-import { Text } from '../../common/Text';
-import { View } from '../../common/View';
 import { useAvailableLoginMethods, useLoginMethod } from '../../ServerContext';
 
 import { useBootstrapped, Title } from './common';
@@ -28,6 +31,7 @@ function PasswordLogin({ setError, dispatch }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { t } = useTranslation();
+  const { isNarrowWidth } = useResponsive();
 
   async function onSubmitPassword() {
     if (password === '' || loading) {
@@ -50,19 +54,25 @@ function PasswordLogin({ setError, dispatch }) {
   }
 
   return (
-    <View style={{ flexDirection: 'row', marginTop: 5 }}>
+    <View
+      style={{
+        flexDirection: isNarrowWidth ? 'column' : 'row',
+        marginTop: 5,
+        gap: '1rem',
+      }}
+    >
       <BigInput
         autoFocus={true}
         placeholder={t('Password')}
         type="password"
         onChangeValue={newValue => setPassword(newValue)}
-        style={{ flex: 1, marginRight: 10 }}
+        style={{ flex: 1 }}
         onEnter={onSubmitPassword}
       />
       <ButtonWithLoading
         variant="primary"
         isLoading={loading}
-        style={{ fontSize: 15, width: 170 }}
+        style={{ fontSize: 15, width: isNarrowWidth ? '100%' : 170 }}
         onPress={onSubmitPassword}
       >
         <Trans>Sign in</Trans>
@@ -187,7 +197,7 @@ function HeaderLogin({ error }) {
           style={{ fontSize: 15 }}
           to={'/login/password?error=' + error}
         >
-          <Trans>Login with Password</Trans>
+          <Trans>Log in with password</Trans>
         </Link>
       ) : (
         <span>
@@ -209,6 +219,10 @@ export function Login() {
   const [error, setError] = useState(null);
   const { checked } = useBootstrapped();
   const loginMethods = useAvailableLoginMethods();
+
+  useEffect(() => {
+    setMethod(defaultLoginMethod);
+  }, [defaultLoginMethod]);
 
   useEffect(() => {
     if (checked && !searchParams.has('error')) {

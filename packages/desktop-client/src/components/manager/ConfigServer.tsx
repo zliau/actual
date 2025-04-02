@@ -2,21 +2,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
-import { createBudget, loggedIn, signOut } from 'loot-core/client/actions';
+import { Button, ButtonWithLoading } from '@actual-app/components/button';
+import { BigInput } from '@actual-app/components/input';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { createBudget } from 'loot-core/client/budgets/budgetsSlice';
+import { loggedIn, signOut } from 'loot-core/client/users/usersSlice';
 import {
   isNonProductionEnvironment,
   isElectron,
-} from 'loot-core/src/shared/environment';
+} from 'loot-core/shared/environment';
 
 import { useGlobalPref } from '../../hooks/useGlobalPref';
 import { useNavigate } from '../../hooks/useNavigate';
 import { useDispatch } from '../../redux';
-import { theme } from '../../style';
-import { Button, ButtonWithLoading } from '../common/Button2';
-import { BigInput } from '../common/Input';
 import { Link } from '../common/Link';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
 import { useServerURL, useSetServerURL } from '../ServerContext';
 
 import { Title } from './subscribe/common';
@@ -88,7 +90,7 @@ export function ConfigServer() {
   }
 
   async function onSelectSelfSignedCertificate() {
-    const selfSignedCertificateLocation = await window.Actual?.openFileDialog({
+    const selfSignedCertificateLocation = await window.Actual.openFileDialog({
       properties: ['openFile'],
       filters: [
         {

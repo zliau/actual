@@ -1,46 +1,39 @@
 import React, { useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
-import {
-  addNotification,
-  duplicateBudget,
-  uniqueBudgetName,
-  validateBudgetName,
-} from 'loot-core/client/actions';
-import { type File } from 'loot-core/src/types/file';
+import { Button, ButtonWithLoading } from '@actual-app/components/button';
+import { FormError } from '@actual-app/components/form-error';
+import { InitialFocus } from '@actual-app/components/initial-focus';
+import { InlineField } from '@actual-app/components/inline-field';
+import { Input } from '@actual-app/components/input';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { duplicateBudget } from 'loot-core/client/budgets/budgetsSlice';
+import { type Modal as ModalType } from 'loot-core/client/modals/modalsSlice';
+import { addNotification } from 'loot-core/client/notifications/notificationsSlice';
+import { send } from 'loot-core/platform/client/fetch';
 
 import { useDispatch } from '../../../redux';
-import { theme } from '../../../style';
-import { Button, ButtonWithLoading } from '../../common/Button2';
-import { FormError } from '../../common/FormError';
-import { InitialFocus } from '../../common/InitialFocus';
-import { InlineField } from '../../common/InlineField';
-import { Input } from '../../common/Input';
 import {
   Modal,
   ModalButtons,
   ModalCloseButton,
   ModalHeader,
 } from '../../common/Modal';
-import { Text } from '../../common/Text';
-import { View } from '../../common/View';
 
-type DuplicateFileProps = {
-  file: File;
-  managePage?: boolean;
-  loadBudget?: 'none' | 'original' | 'copy';
-  onComplete?: (event: {
-    status: 'success' | 'failed' | 'canceled';
-    error?: object;
-  }) => void;
-};
+type DuplicateFileModalProps = Extract<
+  ModalType,
+  { name: 'duplicate-budget' }
+>['options'];
 
 export function DuplicateFileModal({
   file,
   managePage,
   loadBudget = 'none',
   onComplete,
-}: DuplicateFileProps) {
+}: DuplicateFileModalProps) {
   const { t } = useTranslation();
   const fileEndingTranslation = ' - ' + t('copy');
   const [newName, setNewName] = useState(file.name + fileEndingTranslation);
@@ -95,19 +88,23 @@ export function DuplicateFileModal({
         );
         dispatch(
           addNotification({
-            type: 'message',
-            message: t('Duplicate file “{{newName}}” created.', { newName }),
+            notification: {
+              type: 'message',
+              message: t('Duplicate file “{{newName}}” created.', { newName }),
+            },
           }),
         );
         if (onComplete) onComplete({ status: 'success' });
       } catch (e) {
-        const newError = new Error(t('Failed to duplicate budget'));
+        const newError = new Error(t('Failed to duplicate budget file'));
         if (onComplete) onComplete({ status: 'failed', error: newError });
-        else console.error('Failed to duplicate budget:', e);
+        else console.error('Failed to duplicate budget file:', e);
         dispatch(
           addNotification({
-            type: 'error',
-            message: t('Failed to duplicate budget file.'),
+            notification: {
+              type: 'error',
+              message: t('Failed to duplicate budget file.'),
+            },
           }),
         );
       } finally {
@@ -240,4 +237,15 @@ export function DuplicateFileModal({
       )}
     </Modal>
   );
+}
+
+async function validateBudgetName(name: string): Promise<{
+  valid: boolean;
+  message?: string;
+}> {
+  return send('validate-budget-name', { name });
+}
+
+async function uniqueBudgetName(name: string): Promise<string> {
+  return send('unique-budget-name', { name });
 }

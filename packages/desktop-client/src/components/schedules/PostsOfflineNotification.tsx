@@ -2,18 +2,19 @@ import React from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 
-import { popModal } from 'loot-core/client/actions';
-import { send } from 'loot-core/src/platform/client/fetch';
+import { Button } from '@actual-app/components/button';
+import { Paragraph } from '@actual-app/components/paragraph';
+import { Stack } from '@actual-app/components/stack';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+
+import { popModal } from 'loot-core/client/modals/modalsSlice';
+import { send } from 'loot-core/platform/client/fetch';
 import { type PayeeEntity } from 'loot-core/types/models';
 
 import { useFormatList } from '../../hooks/useFormatList';
 import { useDispatch } from '../../redux';
-import { theme } from '../../style';
-import { Button } from '../common/Button2';
 import { Modal, ModalCloseButton, ModalHeader } from '../common/Modal';
-import { Paragraph } from '../common/Paragraph';
-import { Stack } from '../common/Stack';
-import { Text } from '../common/Text';
 import { DisplayId } from '../util/DisplayId';
 
 export function PostsOfflineNotification() {
@@ -78,8 +79,8 @@ export function PostsOfflineNotification() {
           <Paragraph>
             <Trans>
               You can always manually post a transaction later for a due
-              schedule by selecting the schedule and clicking “Post transaction”
-              in the action menu.
+              schedule by selecting the schedule and clicking “Post transaction
+              today” in the action menu.
             </Trans>
           </Paragraph>
           <Stack

@@ -1,13 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import * as monthUtils from 'loot-core/src/shared/months';
+import { View } from '@actual-app/components/view';
+
+import * as monthUtils from 'loot-core/shared/months';
 import {
   type SummaryContent,
   type SummaryWidget,
 } from 'loot-core/types/models';
 
-import { View } from '../../common/View';
+import { useLocale } from '../../../hooks/useLocale';
 import { DateRange } from '../DateRange';
 import { LoadingIndicator } from '../LoadingIndicator';
 import { ReportCard } from '../ReportCard';
@@ -32,6 +34,7 @@ export function SummaryCard({
   onMetaChange,
   onRemove,
 }: SummaryCardProps) {
+  const locale = useLocale();
   const { t } = useTranslation();
   const [start, end] = calculateTimeRange(meta?.timeFrame, {
     start: monthUtils.dayFromDate(monthUtils.currentMonth()),
@@ -62,8 +65,9 @@ export function SummaryCard({
         meta?.conditions,
         meta?.conditionsOp,
         content,
+        locale,
       ),
-    [start, end, meta?.conditions, meta?.conditionsOp, content],
+    [start, end, meta?.conditions, meta?.conditionsOp, content, locale],
   );
 
   const data = useReport('summary', params);

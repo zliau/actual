@@ -23,7 +23,8 @@ interface ByTemplate extends BaseTemplate {
   type: 'by';
   amount: number;
   month: string;
-  repeat?: { annual: boolean; repeat?: number };
+  annual?: boolean;
+  repeat?: number;
   from?: string;
 }
 
@@ -45,6 +46,7 @@ interface ScheduleTemplate extends BaseTemplate {
   type: 'schedule';
   name: string;
   full?: boolean;
+  adjustment?: number;
 }
 
 interface RemainderTemplate extends BaseTemplate {
@@ -59,7 +61,7 @@ interface AverageTemplate extends BaseTemplate {
 }
 
 interface GoalTemplate extends BaseTemplate {
-  type: 'simple';
+  type: 'goal';
   amount: number;
 }
 

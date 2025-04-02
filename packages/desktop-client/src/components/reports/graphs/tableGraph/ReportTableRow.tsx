@@ -5,24 +5,25 @@ import React, {
   type CSSProperties,
 } from 'react';
 
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
 import {
   amountToCurrency,
   amountToInteger,
   integerToCurrency,
-} from 'loot-core/src/shared/util';
+} from 'loot-core/shared/util';
 import {
   type balanceTypeOpType,
   type GroupedEntity,
-} from 'loot-core/types/models/reports';
-import { type RuleConditionEntity } from 'loot-core/types/models/rule';
+  type RuleConditionEntity,
+} from 'loot-core/types/models';
 
 import { useAccounts } from '../../../../hooks/useAccounts';
 import { useCategories } from '../../../../hooks/useCategories';
 import { useNavigate } from '../../../../hooks/useNavigate';
-import { theme } from '../../../../style';
-import { Text } from '../../../common/Text';
-import { View } from '../../../common/View';
-import { useResponsive } from '../../../responsive/ResponsiveProvider';
 import { Row, Cell } from '../../../table';
 import { showActivity } from '../showActivity';
 

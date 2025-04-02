@@ -1,17 +1,19 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { integerToCurrency } from 'loot-core/src/shared/util';
+import { Block } from '@actual-app/components/block';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { styles } from '@actual-app/components/styles';
+import { View } from '@actual-app/components/view';
+
+import { integerToCurrency } from 'loot-core/shared/util';
 import {
   type AccountEntity,
   type NetWorthWidget,
-} from 'loot-core/src/types/models';
+} from 'loot-core/types/models';
 
-import { styles } from '../../../style';
-import { Block } from '../../common/Block';
-import { View } from '../../common/View';
+import { useLocale } from '../../../hooks/useLocale';
 import { PrivacyFilter } from '../../PrivacyFilter';
-import { useResponsive } from '../../responsive/ResponsiveProvider';
 import { Change } from '../Change';
 import { DateRange } from '../DateRange';
 import { NetWorthGraph } from '../graphs/NetWorthGraph';
@@ -39,6 +41,7 @@ export function NetWorthCard({
   onMetaChange,
   onRemove,
 }: NetWorthCardProps) {
+  const locale = useLocale();
   const { t } = useTranslation();
   const { isNarrowWidth } = useResponsive();
 
@@ -57,8 +60,9 @@ export function NetWorthCard({
         accounts,
         meta?.conditions,
         meta?.conditionsOp,
+        locale,
       ),
-    [start, end, accounts, meta?.conditions, meta?.conditionsOp],
+    [start, end, accounts, meta?.conditions, meta?.conditionsOp, locale],
   );
   const data = useReport('net_worth', params);
 

@@ -1,43 +1,71 @@
-import { combineReducers, configureStore } from '@reduxjs/toolkit';
+import {
+  combineReducers,
+  configureStore,
+  createListenerMiddleware,
+  isRejected,
+} from '@reduxjs/toolkit';
 
-import * as constants from '../constants';
-import { reducers } from '../reducers';
-import { initialState as initialAccountState } from '../reducers/account';
-import { initialState as initialAppState } from '../reducers/app';
-import { initialState as initialBudgetsState } from '../reducers/budgets';
-import { initialState as initialModalsState } from '../reducers/modals';
-import { initialState as initialNotificationsState } from '../reducers/notifications';
-import { initialState as initialPrefsState } from '../reducers/prefs';
-import { initialState as initialQueriesState } from '../reducers/queries';
-import { initialState as initialUserState } from '../reducers/user';
+import {
+  name as accountsSliceName,
+  reducer as accountsSliceReducer,
+} from '../accounts/accountsSlice';
+import {
+  name as appSliceName,
+  reducer as appSliceReducer,
+} from '../app/appSlice';
+import {
+  name as budgetsSliceName,
+  reducer as budgetsSliceReducer,
+} from '../budgets/budgetsSlice';
+import {
+  name as modalsSliceName,
+  reducer as modalsSliceReducer,
+} from '../modals/modalsSlice';
+import {
+  name as notificationsSliceName,
+  reducer as notificationsSliceReducer,
+  addNotification,
+} from '../notifications/notificationsSlice';
+import {
+  name as prefsSliceName,
+  reducer as prefsSliceReducer,
+} from '../prefs/prefsSlice';
+import {
+  name as queriesSliceName,
+  reducer as queriesSliceReducer,
+} from '../queries/queriesSlice';
+import {
+  name as usersSliceName,
+  reducer as usersSliceReducer,
+} from '../users/usersSlice';
 
-const appReducer = combineReducers(reducers);
-const rootReducer: typeof appReducer = (state, action) => {
-  if (action.type === constants.CLOSE_BUDGET) {
-    // Reset the state and only keep around things intentionally. This
-    // blows away everything else
-    state = {
-      account: initialAccountState,
-      modals: initialModalsState,
-      notifications: initialNotificationsState,
-      queries: initialQueriesState,
-      budgets: state?.budgets || initialBudgetsState,
-      user: state?.user || initialUserState,
-      prefs: {
-        local: initialPrefsState.local,
-        global: state?.prefs?.global || initialPrefsState.global,
-        synced: initialPrefsState.synced,
-      },
-      app: {
-        ...initialAppState,
-        managerHasInitialized: state?.app?.managerHasInitialized || false,
-        loadingText: state?.app?.loadingText || null,
-      },
-    };
-  }
+const rootReducer = combineReducers({
+  [accountsSliceName]: accountsSliceReducer,
+  [appSliceName]: appSliceReducer,
+  [budgetsSliceName]: budgetsSliceReducer,
+  [modalsSliceName]: modalsSliceReducer,
+  [notificationsSliceName]: notificationsSliceReducer,
+  [prefsSliceName]: prefsSliceReducer,
+  [queriesSliceName]: queriesSliceReducer,
+  [usersSliceName]: usersSliceReducer,
+});
 
-  return appReducer(state, action);
-};
+const notifyOnRejectedActionsMiddleware = createListenerMiddleware();
+notifyOnRejectedActionsMiddleware.startListening({
+  matcher: isRejected,
+  effect: (action, { dispatch }) => {
+    console.error(action.error);
+    dispatch(
+      addNotification({
+        notification: {
+          id: action.type,
+          type: 'error',
+          message: action.error.message || 'An unexpected error occurred.',
+        },
+      }),
+    );
+  },
+});
 
 export const store = configureStore({
   reducer: rootReducer,
@@ -45,9 +73,10 @@ export const store = configureStore({
     getDefaultMiddleware({
       // TODO: Fix this in a separate PR. Remove non-serializable states in the store.
       serializableCheck: false,
-    }),
+    }).prepend(notifyOnRejectedActionsMiddleware.middleware),
 });
 
+export type AppStore = typeof store;
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
 export type GetRootState = typeof store.getState;

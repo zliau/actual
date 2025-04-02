@@ -1,23 +1,26 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { styles } from '../../style';
-import { Button } from '../common/Button2';
-import { InitialFocus } from '../common/InitialFocus';
-import { Modal, ModalCloseButton, ModalHeader } from '../common/Modal';
-import { Paragraph } from '../common/Paragraph';
-import { View } from '../common/View';
-import { useResponsive } from '../responsive/ResponsiveProvider';
+import { Button } from '@actual-app/components/button';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { InitialFocus } from '@actual-app/components/initial-focus';
+import { Paragraph } from '@actual-app/components/paragraph';
+import { styles } from '@actual-app/components/styles';
+import { View } from '@actual-app/components/view';
 
-type ConfirmTransactionDeleteProps = {
-  message?: string;
-  onConfirm: () => void;
-};
+import { type Modal as ModalType } from 'loot-core/client/modals/modalsSlice';
+
+import { Modal, ModalCloseButton, ModalHeader } from '../common/Modal';
+
+type ConfirmTransactionDeleteModalProps = Extract<
+  ModalType,
+  { name: 'confirm-transaction-delete' }
+>['options'];
 
 export function ConfirmTransactionDeleteModal({
   message = 'Are you sure you want to delete the transaction?',
   onConfirm,
-}: ConfirmTransactionDeleteProps) {
+}: ConfirmTransactionDeleteModalProps) {
   const { t } = useTranslation();
   const { isNarrowWidth } = useResponsive();
   const narrowButtonStyle = isNarrowWidth

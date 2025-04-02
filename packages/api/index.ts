@@ -1,23 +1,19 @@
 import type {
   RequestInfo as FetchInfo,
   RequestInit as FetchInit,
-  // @ts-ignore: false-positive commonjs module error on build until typescript 5.3
-} from 'node-fetch'; // with { 'resolution-mode': 'import' };
+} from 'node-fetch';
 
 // loot-core types
 import type { InitConfig } from 'loot-core/server/main';
 
 // @ts-ignore: bundle not available until we build it
-// eslint-disable-next-line import/extensions, import/no-unresolved
+// eslint-disable-next-line import/extensions
 import * as bundle from './app/bundle.api.js';
 import * as injected from './injected';
 import { validateNodeVersion } from './validateNodeVersion';
 
 let actualApp: null | typeof bundle.lib;
 export const internal = bundle.lib;
-
-// DEPRECATED: remove the next line in @actual-app/api v7
-export * as methods from './methods';
 
 export * from './methods';
 export * as utils from './utils';

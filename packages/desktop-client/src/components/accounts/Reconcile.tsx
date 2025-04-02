@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
 import { Trans } from 'react-i18next';
 
-import * as queries from 'loot-core/src/client/queries';
-import { type Query } from 'loot-core/src/shared/query';
-import { currencyToInteger } from 'loot-core/src/shared/util';
-import { type AccountEntity } from 'loot-core/types/models';
+import { Button } from '@actual-app/components/button';
+import { SvgCheckCircle1 } from '@actual-app/components/icons/v2';
+import { InitialFocus } from '@actual-app/components/initial-focus';
+import { Input } from '@actual-app/components/input';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { SvgCheckCircle1 } from '../../icons/v2';
-import { styles, theme } from '../../style';
-import { Button } from '../common/Button2';
-import { InitialFocus } from '../common/InitialFocus';
-import { Input } from '../common/Input';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
+import * as queries from 'loot-core/client/queries';
+import { type Query } from 'loot-core/shared/query';
+import { currencyToInteger } from 'loot-core/shared/util';
+import { type AccountEntity } from 'loot-core/types/models';
+import { type TransObjectLiteral } from 'loot-core/types/util';
+
 import { useFormat } from '../spreadsheet/useFormat';
 import { useSheetValue } from '../spreadsheet/useSheetValue';
 
@@ -86,23 +89,27 @@ export function ReconcilingMessage({
           <View style={{ color: theme.tableText }}>
             <Text style={{ fontStyle: 'italic', textAlign: 'center' }}>
               <Trans>
-                Your cleared balance <strong>{clearedBalance}</strong> needs{' '}
-                <strong>{difference}</strong> to match
+                Your cleared balance{' '}
+                <strong>{{ clearedBalance } as TransObjectLiteral}</strong>{' '}
+                needs <strong>{{ difference } as TransObjectLiteral}</strong> to
+                match
                 <br /> your bank&apos;s balance of{' '}
-                <Text style={{ fontWeight: 700 }}>{bankBalance}</Text>
+                <Text style={{ fontWeight: 700 }}>
+                  {{ bankBalance } as TransObjectLiteral}
+                </Text>
               </Trans>
             </Text>
           </View>
         )}
         <View style={{ marginLeft: 15 }}>
           <Button variant="primary" onPress={onDone}>
-            <Trans>Done Reconciling</Trans>
+            <Trans>Done reconciling</Trans>
           </Button>
         </View>
         {targetDiff !== 0 && (
           <View style={{ marginLeft: 15 }}>
             <Button onPress={() => onCreateTransaction(targetDiff)}>
-              <Trans>Create Reconciliation Transaction</Trans>
+              <Trans>Create reconciliation transaction</Trans>
             </Button>
           </View>
         )}
@@ -130,11 +137,9 @@ export function ReconcileMenu({
   });
   const format = useFormat();
   const [inputValue, setInputValue] = useState<string | null>(null);
-  const [inputFocused, setInputFocused] = useState(false);
 
   function onSubmit() {
     if (inputValue === '') {
-      setInputFocused(true);
       return;
     }
 
@@ -159,7 +164,6 @@ export function ReconcileMenu({
             defaultValue={format(clearedBalance, 'financial')}
             onChangeValue={setInputValue}
             style={{ margin: '7px 0' }}
-            focused={inputFocused}
             onEnter={onSubmit}
           />
         </InitialFocus>

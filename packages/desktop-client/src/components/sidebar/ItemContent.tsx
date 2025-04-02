@@ -1,14 +1,16 @@
 import React, {
   type MouseEventHandler,
   type ReactNode,
-  type CSSProperties,
+  type ComponentProps,
 } from 'react';
 
+import { type CSSProperties } from '@actual-app/components/styles';
+import { View } from '@actual-app/components/view';
+
 import { Link } from '../common/Link';
-import { View } from '../common/View';
 
 type ItemContentProps = {
-  style: CSSProperties;
+  style: ComponentProps<typeof View>['style'];
   to: string;
   onClick: MouseEventHandler<HTMLDivElement>;
   activeStyle: CSSProperties;

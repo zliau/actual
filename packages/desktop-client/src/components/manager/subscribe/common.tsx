@@ -2,11 +2,12 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
-import { send } from 'loot-core/src/platform/client/fetch';
+import { theme } from '@actual-app/components/theme';
+
+import { send } from 'loot-core/platform/client/fetch';
 import { type Handlers } from 'loot-core/types/handlers';
 
 import { useNavigate } from '../../../hooks/useNavigate';
-import { theme } from '../../../style';
 import {
   useSetLoginMethods,
   useSetMultiuserEnabled,

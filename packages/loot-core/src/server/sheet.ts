@@ -5,6 +5,12 @@ import { captureBreadcrumb } from '../platform/exceptions';
 import * as sqlite from '../platform/server/sqlite';
 import { sheetForMonth } from '../shared/months';
 
+import {
+  DbPreference,
+  DbReflectBudget,
+  DbZeroBudget,
+  DbZeroBudgetMonth,
+} from './db';
 import * as Platform from './platform';
 import { Spreadsheet } from './spreadsheet/spreadsheet';
 import { resolveName } from './spreadsheet/util';
@@ -189,19 +195,22 @@ export async function reloadSpreadsheet(db): Promise<Spreadsheet> {
   }
 }
 
-export async function loadUserBudgets(db): Promise<void> {
+export async function loadUserBudgets(
+  db: typeof import('./db'),
+): Promise<void> {
   const sheet = globalSheet;
 
   // TODO: Clear out the cache here so make sure future loads of the app
   // don't load any extra values that aren't set here
 
   const { value: budgetType = 'rollover' } =
-    (await db.first('SELECT value from preferences WHERE id = ?', [
-      'budgetType',
-    ])) ?? {};
+    (await db.first<Pick<DbPreference, 'value'>>(
+      'SELECT value from preferences WHERE id = ?',
+      ['budgetType'],
+    )) ?? {};
 
   const table = budgetType === 'report' ? 'reflect_budgets' : 'zero_budgets';
-  const budgets = await db.all(`
+  const budgets = await db.all<DbReflectBudget | DbZeroBudget>(`
       SELECT * FROM ${table} b
       LEFT JOIN categories c ON c.id = b.category
       WHERE c.tombstone = 0
@@ -225,7 +234,9 @@ export async function loadUserBudgets(db): Promise<void> {
 
   // For zero-based budgets, load the buffered amounts
   if (budgetType !== 'report') {
-    const budgetMonths = await db.all('SELECT * FROM zero_budget_months');
+    const budgetMonths = await db.all<DbZeroBudgetMonth>(
+      'SELECT * FROM zero_budget_months',
+    );
     for (const budgetMonth of budgetMonths) {
       const sheetName = sheetForMonth(budgetMonth.id);
       sheet.set(`${sheetName}!buffered`, budgetMonth.buffered);

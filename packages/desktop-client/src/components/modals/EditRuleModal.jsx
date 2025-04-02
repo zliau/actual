@@ -1,18 +1,35 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 
+import { Button } from '@actual-app/components/button';
+import {
+  SvgDelete,
+  SvgAdd,
+  SvgSubtract,
+} from '@actual-app/components/icons/v0';
+import {
+  SvgAlignLeft,
+  SvgCode,
+  SvgInformationOutline,
+} from '@actual-app/components/icons/v1';
+import { Menu } from '@actual-app/components/menu';
+import { Select } from '@actual-app/components/select';
+import { Stack } from '@actual-app/components/stack';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { Tooltip } from '@actual-app/components/tooltip';
+import { View } from '@actual-app/components/view';
 import { css } from '@emotion/css';
 import { v4 as uuid } from 'uuid';
 
-import {
-  initiallyLoadPayees,
-  setUndoEnabled,
-} from 'loot-core/src/client/actions/queries';
-import { useSchedules } from 'loot-core/src/client/data-hooks/schedules';
-import { runQuery } from 'loot-core/src/client/query-helpers';
-import { send } from 'loot-core/src/platform/client/fetch';
-import * as monthUtils from 'loot-core/src/shared/months';
-import { q } from 'loot-core/src/shared/query';
+import { useSchedules } from 'loot-core/client/data-hooks/schedules';
+import { initiallyLoadPayees } from 'loot-core/client/queries/queriesSlice';
+import { runQuery } from 'loot-core/client/query-helpers';
+import { enableUndo, disableUndo } from 'loot-core/client/undo';
+import { send } from 'loot-core/platform/client/fetch';
+import * as monthUtils from 'loot-core/shared/months';
+import { q } from 'loot-core/shared/query';
 import {
   mapField,
   friendlyOp,
@@ -24,28 +41,18 @@ import {
   ALLOCATION_METHODS,
   isValidOp,
   getValidOps,
-} from 'loot-core/src/shared/rules';
+} from 'loot-core/shared/rules';
 import {
   integerToCurrency,
   integerToAmount,
   amountToInteger,
-} from 'loot-core/src/shared/util';
+} from 'loot-core/shared/util';
 
 import { useDateFormat } from '../../hooks/useDateFormat';
 import { useFeatureFlag } from '../../hooks/useFeatureFlag';
 import { useSelected, SelectedProvider } from '../../hooks/useSelected';
-import { SvgDelete, SvgAdd, SvgSubtract } from '../../icons/v0';
-import { SvgAlignLeft, SvgCode, SvgInformationOutline } from '../../icons/v1';
 import { useDispatch } from '../../redux';
-import { styles, theme } from '../../style';
-import { Button } from '../common/Button2';
-import { Menu } from '../common/Menu';
 import { Modal, ModalCloseButton, ModalHeader } from '../common/Modal';
-import { Select } from '../common/Select';
-import { Stack } from '../common/Stack';
-import { Text } from '../common/Text';
-import { Tooltip } from '../common/Tooltip';
-import { View } from '../common/View';
 import { StatusBadge } from '../schedules/StatusBadge';
 import { SimpleTransactionsTable } from '../transactions/SimpleTransactionsTable';
 import { BetweenAmountInput } from '../util/AmountInput';
@@ -203,14 +210,7 @@ function FieldError({ type }) {
 function Editor({ error, style, children }) {
   return (
     <View style={style} data-testid="editor-row">
-      <Stack
-        direction="row"
-        align="center"
-        spacing={1}
-        style={{
-          padding: '3px 5px',
-        }}
-      >
+      <Stack direction="row" align="center" spacing={1}>
         {children}
       </Stack>
       {error && <FieldError type={error} />}
@@ -311,7 +311,7 @@ function ScheduleDescription({ id }) {
   );
   const {
     schedules,
-    statuses: scheduleStatuses,
+    statusLabels,
     isLoading: isSchedulesLoading,
   } = useSchedules({ query: scheduleQuery });
 
@@ -324,7 +324,7 @@ function ScheduleDescription({ id }) {
   }
 
   const [schedule] = schedules;
-  const status = schedule && scheduleStatuses.get(schedule.id);
+  const status = schedule && statusLabels.get(schedule.id);
 
   return (
     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
@@ -336,7 +336,7 @@ function ScheduleDescription({ id }) {
             textOverflow: 'ellipsis',
           }}
         >
-          <Trans>Payee</Trans>:{' '}
+          <Trans>Payee:</Trans>{' '}
           <DisplayId
             type="payees"
             id={schedule._payee}
@@ -345,12 +345,13 @@ function ScheduleDescription({ id }) {
         </Text>
         <Text style={{ margin: '0 5px' }}> — </Text>
         <Text style={{ flexShrink: 0 }}>
-          <Trans>Amount</Trans>: {formatAmount(schedule._amount)}
+          <Trans>Amount:</Trans> {formatAmount(schedule._amount)}
         </Text>
         <Text style={{ margin: '0 5px' }}> — </Text>
         <Text style={{ flexShrink: 0 }}>
-          <Trans>Next</Trans>:{' '}
-          {monthUtils.format(schedule.next_date, dateFormat)}
+          <Trans>
+            Next: {{ month: monthUtils.format(schedule.next_date, dateFormat) }}
+          </Trans>
         </Text>
       </View>
       <StatusBadge status={status} />
@@ -763,7 +764,10 @@ const conditionFields = [
     ['amount-outflow', mapField('amount', { outflow: true })],
   ]);
 
-export function EditRuleModal({ defaultRule, onSave: originalOnSave }) {
+export function EditRuleModal({
+  rule: defaultRule,
+  onSave: originalOnSave = undefined,
+}) {
   const { t } = useTranslation();
   const [conditions, setConditions] = useState(
     defaultRule.conditions.map(parse).map(c => ({ ...c, inputKey: uuid() })),
@@ -795,8 +799,8 @@ export function EditRuleModal({ defaultRule, onSave: originalOnSave }) {
     dispatch(initiallyLoadPayees());
 
     // Disable undo while this modal is open
-    setUndoEnabled(false);
-    return () => setUndoEnabled(true);
+    disableUndo();
+    return () => enableUndo();
   }, [dispatch]);
 
   useEffect(() => {
@@ -890,7 +894,10 @@ export function EditRuleModal({ defaultRule, onSave: originalOnSave }) {
           } else {
             a[field] = value;
             if (a.options?.template !== undefined) {
-              a.options.template = value;
+              a.options = {
+                ...a.options,
+                template: value,
+              };
             }
 
             if (field === 'field') {
@@ -1009,12 +1016,6 @@ export function EditRuleModal({ defaultRule, onSave: originalOnSave }) {
     }
   }
 
-  const editorStyle = {
-    color: theme.pillText,
-    backgroundColor: theme.pillBackground,
-    borderRadius: 4,
-  };
-
   // Enable editing existing split rules even if the feature has since been disabled.
   const showSplitButton = actionSplits.length > 0;
 
@@ -1105,7 +1106,7 @@ export function EditRuleModal({ defaultRule, onSave: originalOnSave }) {
                   <ConditionsList
                     conditionsOp={conditionsOp}
                     conditions={conditions}
-                    editorStyle={editorStyle}
+                    editorStyle={styles.editorPill}
                     isSchedule={isSchedule}
                     onChangeConditions={conds => setConditions(conds)}
                   />
@@ -1186,7 +1187,7 @@ export function EditRuleModal({ defaultRule, onSave: originalOnSave }) {
                                   'append-notes',
                                 ]}
                                 action={action}
-                                editorStyle={editorStyle}
+                                editorStyle={styles.editorPill}
                                 onChange={(name, value) => {
                                   onChangeAction(action, name, value);
                                 }}

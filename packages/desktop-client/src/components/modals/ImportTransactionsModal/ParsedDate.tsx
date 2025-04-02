@@ -1,8 +1,8 @@
 import React from 'react';
 import { Trans } from 'react-i18next';
 
-import { theme } from '../../../style';
-import { Text } from '../../common/Text';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
 
 import { formatDate, parseDate } from './utils';
 

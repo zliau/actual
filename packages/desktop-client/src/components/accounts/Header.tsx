@@ -6,9 +6,34 @@ import React, {
   type ComponentProps,
   useEffect,
 } from 'react';
+import { Dialog, DialogTrigger } from 'react-aria-components';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { Trans, useTranslation } from 'react-i18next';
 
+import { Button } from '@actual-app/components/button';
+import { AnimatedLoading } from '@actual-app/components/icons/AnimatedLoading';
+import {
+  SvgAdd,
+  SvgDotsHorizontalTriple,
+} from '@actual-app/components/icons/v1';
+import {
+  SvgArrowsExpand3,
+  SvgArrowsShrink3,
+  SvgDownloadThickBottom,
+  SvgLockClosed,
+  SvgPencil1,
+} from '@actual-app/components/icons/v2';
+import { InitialFocus } from '@actual-app/components/initial-focus';
+import { Input } from '@actual-app/components/input';
+import { Menu } from '@actual-app/components/menu';
+import { Popover } from '@actual-app/components/popover';
+import { Stack } from '@actual-app/components/stack';
+import { styles } from '@actual-app/components/styles';
+import { theme } from '@actual-app/components/theme';
+import { Tooltip } from '@actual-app/components/tooltip';
+import { View } from '@actual-app/components/view';
+
+import { tsToRelativeTime } from 'loot-core/shared/util';
 import {
   type AccountEntity,
   type RuleConditionEntity,
@@ -16,29 +41,12 @@ import {
   type TransactionFilterEntity,
 } from 'loot-core/types/models';
 
+import { useLocale } from '../../hooks/useLocale';
 import { useLocalPref } from '../../hooks/useLocalPref';
 import { useSplitsExpanded } from '../../hooks/useSplitsExpanded';
 import { useSyncServerStatus } from '../../hooks/useSyncServerStatus';
-import { AnimatedLoading } from '../../icons/AnimatedLoading';
-import { SvgAdd } from '../../icons/v1';
-import {
-  SvgArrowsExpand3,
-  SvgArrowsShrink3,
-  SvgDownloadThickBottom,
-  SvgLockClosed,
-  SvgPencil1,
-} from '../../icons/v2';
-import { theme, styles } from '../../style';
 import { AnimatedRefresh } from '../AnimatedRefresh';
-import { Button } from '../common/Button2';
-import { InitialFocus } from '../common/InitialFocus';
-import { Input } from '../common/Input';
-import { Menu } from '../common/Menu';
-import { MenuButton } from '../common/MenuButton';
-import { Popover } from '../common/Popover';
 import { Search } from '../common/Search';
-import { Stack } from '../common/Stack';
-import { View } from '../common/View';
 import { FilterButton } from '../filters/FiltersMenu';
 import { FiltersStack } from '../filters/FiltersStack';
 import { type SavedFilter } from '../filters/SavedFilterMenuButton';
@@ -195,10 +203,9 @@ export function AccountHeader({
   onUpdateExchangeRates,
 }: AccountHeaderProps) {
   const { t } = useTranslation();
-  const [menuOpen, setMenuOpen] = useState(false);
+
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
-  const triggerRef = useRef(null);
   const reconcileRef = useRef(null);
   const splitsExpanded = useSplitsExpanded();
   const syncServerStatus = useSyncServerStatus();
@@ -216,6 +223,8 @@ export function AccountHeader({
   useEffect(() => {
     setIsSynthConfigured(configuredSynth);
   }, [configuredSynth]);
+
+  const locale = useLocale();
 
   let canSync = !!(account?.account_id && isUsingServer);
   if (!account) {
@@ -417,19 +426,33 @@ export function AccountHeader({
               onMakeAsNonSplitTransactions={onMakeAsNonSplitTransactions}
             />
           )}
-          <View style={{ flex: '0 0 auto' }}>
+          <View style={{ flex: '0 0 auto', marginLeft: 10 }}>
             {account && (
-              <>
+              <Tooltip
+                style={{
+                  ...styles.tooltip,
+                  marginBottom: 10,
+                }}
+                content={
+                  account?.last_reconciled
+                    ? `${t('Reconciled')} ${tsToRelativeTime(account.last_reconciled, locale)}`
+                    : t('Not yet reconciled')
+                }
+                placement="top"
+                triggerProps={{
+                  isDisabled: reconcileOpen,
+                }}
+              >
                 <Button
                   ref={reconcileRef}
                   variant="bare"
                   aria-label={t('Reconcile')}
-                  style={{ padding: 6, marginLeft: 10 }}
+                  style={{ padding: 6 }}
                   onPress={() => {
                     setReconcileOpen(true);
                   }}
                 >
-                  <View title={t('Reconcile')}>
+                  <View>
                     <SvgLockClosed width={14} height={14} />
                   </View>
                 </Button>
@@ -446,7 +469,7 @@ export function AccountHeader({
                     onReconcile={onReconcile}
                   />
                 </Popover>
-              </>
+              </Tooltip>
             )}
           </View>
           <Button
@@ -456,7 +479,6 @@ export function AccountHeader({
                 ? t('Collapse split transactions')
                 : t('Expand split transactions')
             }
-            isDisabled={search !== '' || filterConditions.length > 0}
             style={{ padding: 6 }}
             onPress={onToggleSplits}
           >
@@ -476,66 +498,64 @@ export function AccountHeader({
           </Button>
           {account ? (
             <View style={{ flex: '0 0 auto' }}>
-              <MenuButton
-                aria-label={t('Account menu')}
-                ref={triggerRef}
-                onPress={() => setMenuOpen(true)}
-              />
+              <DialogTrigger>
+                <Button variant="bare" aria-label={t('Account menu')}>
+                  <SvgDotsHorizontalTriple
+                    width={15}
+                    height={15}
+                    style={{ transform: 'rotateZ(90deg)' }}
+                  />
+                </Button>
 
-              <Popover
-                triggerRef={triggerRef}
-                style={{ width: 275 }}
-                isOpen={menuOpen}
-                onOpenChange={() => setMenuOpen(false)}
-              >
-                <AccountMenu
-                  account={account}
-                  canSync={canSync}
-                  canShowBalances={
-                    canCalculateBalance ? canCalculateBalance() : false
-                  }
-                  isSorted={isSorted}
-                  showBalances={showBalances}
-                  showCleared={showCleared}
-                  showReconciled={showReconciled}
-                  onMenuSelect={item => {
-                    setMenuOpen(false);
-                    onMenuSelect(item);
-                  }}
-                />
-              </Popover>
+                <Popover style={{ width: 275 }}>
+                  <Dialog>
+                    <AccountMenu
+                      account={account}
+                      canSync={canSync}
+                      canShowBalances={
+                        canCalculateBalance ? canCalculateBalance() : false
+                      }
+                      isSorted={isSorted}
+                      showBalances={showBalances}
+                      showCleared={showCleared}
+                      showReconciled={showReconciled}
+                      onMenuSelect={onMenuSelect}
+                    />
+                  </Dialog>
+                </Popover>
+              </DialogTrigger>
             </View>
           ) : (
             <View style={{ flex: '0 0 auto' }}>
-              <MenuButton
-                aria-label={t('Account menu')}
-                ref={triggerRef}
-                onPress={() => setMenuOpen(true)}
-              />
+              <DialogTrigger>
+                <Button variant="bare" aria-label={t('Account menu')}>
+                  <SvgDotsHorizontalTriple
+                    width={15}
+                    height={15}
+                    style={{ transform: 'rotateZ(90deg)' }}
+                  />
+                </Button>
 
-              <Popover
-                triggerRef={triggerRef}
-                isOpen={menuOpen}
-                onOpenChange={() => setMenuOpen(false)}
-              >
-                <Menu
-                  onMenuSelect={item => {
-                    setMenuOpen(false);
-                    onMenuSelect(item);
-                  }}
-                  items={[
-                    ...(isSorted
-                      ? [
-                          {
-                            name: 'remove-sorting',
-                            text: t('Remove all sorting'),
-                          } as const,
-                        ]
-                      : []),
-                    { name: 'export', text: t('Export') },
-                  ]}
-                />
-              </Popover>
+                <Popover>
+                  <Dialog>
+                    <Menu
+                      slot="close"
+                      onMenuSelect={onMenuSelect}
+                      items={[
+                        ...(isSorted
+                          ? [
+                              {
+                                name: 'remove-sorting',
+                                text: t('Remove all sorting'),
+                              } as const,
+                            ]
+                          : []),
+                        { name: 'export', text: t('Export') },
+                      ]}
+                    />
+                  </Dialog>
+                </Popover>
+              </DialogTrigger>
             </View>
           )}
         </Stack>
@@ -757,6 +777,7 @@ function AccountMenu({
 
   return (
     <Menu
+      slot="close"
       onMenuSelect={item => {
         onMenuSelect(item);
       }}

@@ -9,8 +9,13 @@ import {
   useHref,
 } from 'react-router-dom';
 
-import { addNotification, sync } from 'loot-core/client/actions';
-import * as undo from 'loot-core/src/platform/client/undo';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { sync } from 'loot-core/client/app/appSlice';
+import { addNotification } from 'loot-core/client/notifications/notificationsSlice';
+import * as undo from 'loot-core/platform/client/undo';
 
 import { ProtectedRoute } from '../auth/ProtectedRoute';
 import { Permissions } from '../auth/types';
@@ -19,12 +24,11 @@ import { useLocalPref } from '../hooks/useLocalPref';
 import { useMetaThemeColor } from '../hooks/useMetaThemeColor';
 import { useNavigate } from '../hooks/useNavigate';
 import { useSelector, useDispatch } from '../redux';
-import { theme } from '../style';
 import { getIsOutdated, getLatestVersion } from '../util/versions';
 
 import { UserAccessPage } from './admin/UserAccess/UserAccessPage';
+import { BankSync } from './banksync';
 import { BankSyncStatus } from './BankSyncStatus';
-import { View } from './common/View';
 import { GlobalKeys } from './GlobalKeys';
 import { ManageRulesPage } from './ManageRulesPage';
 import { Category } from './mobile/budget/Category';
@@ -35,7 +39,6 @@ import { ManagePayeesPage } from './payees/ManagePayeesPage';
 import { Reports } from './reports';
 import { LoadingIndicator } from './reports/LoadingIndicator';
 import { NarrowAlternate, WideComponent } from './responsive';
-import { useResponsive } from './responsive/ResponsiveProvider';
 import { UserDirectoryPage } from './responsive/wide';
 import { ScrollProvider } from './ScrollProvider';
 import { useMultiuserEnabled } from './ServerContext';
@@ -110,15 +113,19 @@ export function FinancesApp() {
       await global.Actual.waitForUpdateReadyForDownload();
       dispatch(
         addNotification({
-          type: 'message',
-          title: t('A new version of Actual is available!'),
-          message: t('Click the button below to reload and apply the update.'),
-          sticky: true,
-          id: 'update-reload-notification',
-          button: {
-            title: t('Update now'),
-            action: async () => {
-              await global.Actual.applyAppUpdate();
+          notification: {
+            type: 'message',
+            title: t('A new version of Actual is available!'),
+            message: t(
+              'Click the button below to reload and apply the update.',
+            ),
+            sticky: true,
+            id: 'update-reload-notification',
+            button: {
+              title: t('Update now'),
+              action: async () => {
+                await global.Actual.applyAppUpdate();
+              },
             },
           },
         }),
@@ -136,22 +143,24 @@ export function FinancesApp() {
       if (isOutdated && lastUsedVersion !== latestVersion) {
         dispatch(
           addNotification({
-            type: 'message',
-            title: t('A new version of Actual is available!'),
-            message: t(
-              'Version {{latestVersion}} of Actual was recently released.',
-              { latestVersion },
-            ),
-            sticky: true,
-            id: 'update-notification',
-            button: {
-              title: t('Open changelog'),
-              action: () => {
-                window.open('https://actualbudget.org/docs/releases');
+            notification: {
+              type: 'message',
+              title: t('A new version of Actual is available!'),
+              message: t(
+                'Version {{latestVersion}} of Actual was recently released.',
+                { latestVersion },
+              ),
+              sticky: true,
+              id: 'update-notification',
+              button: {
+                title: t('Open changelog'),
+                action: () => {
+                  window.open('https://actualbudget.org/docs/releases');
+                },
               },
-            },
-            onClose: () => {
-              setLastUsedVersion(latestVersion);
+              onClose: () => {
+                setLastUsedVersion(latestVersion);
+              },
             },
           }),
         );
@@ -247,6 +256,7 @@ export function FinancesApp() {
 
                 <Route path="/payees" element={<ManagePayeesPage />} />
                 <Route path="/rules" element={<ManageRulesPage />} />
+                <Route path="/bank-sync" element={<BankSync />} />
                 <Route path="/settings" element={<Settings />} />
 
                 <Route

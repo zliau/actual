@@ -1,28 +1,35 @@
 import { useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
-import { addNotification, closeAndLoadBudget } from 'loot-core/client/actions';
+import { Button } from '@actual-app/components/button';
+import { Select } from '@actual-app/components/select';
+import { Stack } from '@actual-app/components/stack';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { closeAndLoadBudget } from 'loot-core/client/budgets/budgetsSlice';
+import {
+  type Modal as ModalType,
+  popModal,
+} from 'loot-core/client/modals/modalsSlice';
+import { addNotification } from 'loot-core/client/notifications/notificationsSlice';
 import { send } from 'loot-core/platform/client/fetch';
 import { getUserAccessErrors } from 'loot-core/shared/errors';
 import { type Budget } from 'loot-core/types/budget';
 import { type RemoteFile, type SyncedLocalFile } from 'loot-core/types/file';
 import { type Handlers } from 'loot-core/types/handlers';
 
-import { useActions } from '../../hooks/useActions';
 import { useMetadataPref } from '../../hooks/useMetadataPref';
 import { useDispatch, useSelector } from '../../redux';
-import { styles, theme } from '../../style';
-import { Button } from '../common/Button2';
 import { Modal, ModalCloseButton, ModalHeader } from '../common/Modal';
-import { Select } from '../common/Select';
-import { Stack } from '../common/Stack';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
 import { FormField, FormLabel } from '../forms';
 
-type TransferOwnershipProps = {
-  onSave?: () => void;
-};
+type TransferOwnershipProps = Extract<
+  ModalType,
+  { name: 'transfer-ownership' }
+>['options'];
 
 export function TransferOwnership({
   onSave: originalOnSave,
@@ -30,7 +37,6 @@ export function TransferOwnership({
   const { t } = useTranslation();
 
   const userData = useSelector(state => state.user.data);
-  const actions = useActions();
   const [userId, setUserId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [availableUsers, setAvailableUsers] = useState<[string, string][]>([]);
@@ -49,14 +55,18 @@ export function TransferOwnership({
         if (!data) {
           setAvailableUsers([]);
         } else if ('error' in data) {
-          addNotification({
-            type: 'error',
-            title: t('Error getting users'),
-            message: t(
-              'Failed to complete ownership transfer. Please try again.',
-            ),
-            sticky: true,
-          });
+          dispatch(
+            addNotification({
+              notification: {
+                type: 'error',
+                title: t('Error getting users'),
+                message: t(
+                  'Failed to complete ownership transfer. Please try again.',
+                ),
+                sticky: true,
+              },
+            }),
+          );
         } else {
           setAvailableUsers(
             data
@@ -71,7 +81,7 @@ export function TransferOwnership({
         }
       },
     );
-  }, [userData?.userId, currentFile?.owner, t]);
+  }, [userData?.userId, currentFile?.owner, t, dispatch]);
 
   async function onSave() {
     if (cloudFileId) {
@@ -165,7 +175,10 @@ export function TransferOwnership({
             style={{ marginTop: 20 }}
           >
             {error && <Text style={{ color: theme.errorText }}>{error}</Text>}
-            <Button style={{ marginRight: 10 }} onPress={actions.popModal}>
+            <Button
+              style={{ marginRight: 10 }}
+              onPress={() => dispatch(popModal())}
+            >
               <Trans>Cancel</Trans>
             </Button>
 
@@ -179,18 +192,22 @@ export function TransferOwnership({
                 try {
                   await onSave();
                   await dispatch(
-                    closeAndLoadBudget((currentFile as Budget).id),
+                    closeAndLoadBudget({ fileId: (currentFile as Budget).id }),
                   );
                   close();
                 } catch (error) {
-                  addNotification({
-                    type: 'error',
-                    title: t('Failed to transfer ownership'),
-                    message: t(
-                      'Failed to complete ownership transfer. Please try again.',
-                    ),
-                    sticky: true,
-                  });
+                  dispatch(
+                    addNotification({
+                      notification: {
+                        type: 'error',
+                        title: t('Failed to transfer ownership'),
+                        message: t(
+                          'Failed to complete ownership transfer. Please try again.',
+                        ),
+                        sticky: true,
+                      },
+                    }),
+                  );
                   setIsTransferring(false);
                 }
               }}

@@ -1,10 +1,10 @@
 import * as d from 'date-fns';
 
-import { runQuery } from 'loot-core/src/client/query-helpers';
-import { type useSpreadsheet } from 'loot-core/src/client/SpreadsheetProvider';
-import { send } from 'loot-core/src/platform/client/fetch';
-import * as monthUtils from 'loot-core/src/shared/months';
-import { q } from 'loot-core/src/shared/query';
+import { runQuery } from 'loot-core/client/query-helpers';
+import { type useSpreadsheet } from 'loot-core/client/SpreadsheetProvider';
+import { send } from 'loot-core/platform/client/fetch';
+import * as monthUtils from 'loot-core/shared/months';
+import { q } from 'loot-core/shared/query';
 import {
   type SummaryContent,
   type RuleConditionEntity,
@@ -16,6 +16,7 @@ export function summarySpreadsheet(
   conditions: RuleConditionEntity[] = [],
   conditionsOp: 'and' | 'or' = 'and',
   summaryContent: SummaryContent,
+  locale: Locale,
 ) {
   return async (
     spreadsheet: ReturnType<typeof useSpreadsheet>,
@@ -27,7 +28,7 @@ export function summarySpreadsheet(
       toRange: string;
     }) => void,
   ) => {
-    let filters = [];
+    let filters: unknown[] = [];
     try {
       const response = await send('make-filters-from-conditions', {
         conditions: conditions.filter(cond => !cond.customName),
@@ -48,7 +49,10 @@ export function summarySpreadsheet(
       );
 
       endDay = d.parse(
-        monthUtils.lastDayOfMonth(end),
+        monthUtils.getMonth(end) ===
+          monthUtils.getMonth(monthUtils.currentDay())
+          ? monthUtils.currentDay()
+          : monthUtils.lastDayOfMonth(end),
         'yyyy-MM-dd',
         new Date(),
       );
@@ -118,8 +122,8 @@ export function summarySpreadsheet(
     }
 
     const dateRanges = {
-      fromRange: d.format(startDay, 'MMM yy'),
-      toRange: d.format(endDay, 'MMM yy'),
+      fromRange: d.format(startDay, 'MMM yy', { locale }),
+      toRange: d.format(endDay, 'MMM yy', { locale }),
     };
 
     switch (summaryContent.type) {
@@ -196,13 +200,18 @@ function calculatePerMonth(
     amount: monthlyData[d.format(m, 'yyyy-MM')] || 0,
   }));
 
+  const lastMonth = months.at(-1)!;
+  const dayOfMonth = lastMonth.getDate();
+  const daysInMonth = monthUtils.getDay(monthUtils.lastDayOfMonth(lastMonth));
+  const numMonths = months.length - 1 + dayOfMonth / daysInMonth;
+
   const totalAmount = monthsSum.reduce((sum, month) => sum + month.amount, 0);
-  const averageAmountPerMonth = totalAmount / months.length;
+  const averageAmountPerMonth = totalAmount / numMonths;
 
   return {
     total: averageAmountPerMonth / 100,
     dividend: totalAmount / 100,
-    divisor: months.length,
+    divisor: numMonths,
   };
 }
 

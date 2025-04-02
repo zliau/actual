@@ -3,7 +3,6 @@ import * as nativeFs from 'fs';
 
 import * as fetchClient from '../platform/client/fetch';
 import * as sqlite from '../platform/server/sqlite';
-import * as rules from '../server/accounts/transaction-rules';
 import * as db from '../server/db';
 import {
   enableGlobalMutations,
@@ -12,9 +11,14 @@ import {
 import { setServer } from '../server/server-config';
 import * as sheet from '../server/sheet';
 import { setSyncingMode } from '../server/sync';
+import * as rules from '../server/transactions/transaction-rules';
 import { updateVersion } from '../server/update';
 import { resetTracer, tracer } from '../shared/test-helpers';
 
+jest.mock('../platform/client/fetch');
+jest.mock('../platform/exceptions');
+jest.mock('../platform/server/asyncStorage');
+jest.mock('../platform/server/connection');
 jest.mock('../server/post');
 
 // By default, syncing is disabled

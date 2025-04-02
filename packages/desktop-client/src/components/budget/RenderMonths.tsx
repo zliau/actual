@@ -5,10 +5,11 @@ import React, {
   type ComponentType,
 } from 'react';
 
-import * as monthUtils from 'loot-core/src/shared/months';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { theme } from '../../style';
-import { View } from '../common/View';
+import * as monthUtils from 'loot-core/shared/months';
+
 import { NamespaceContext } from '../spreadsheet/NamespaceContext';
 
 import { MonthsContext } from './MonthsContext';

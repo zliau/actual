@@ -1,27 +1,38 @@
 // @ts-strict-ignore
 import React, {
   createContext,
+  type PropsWithChildren,
   useContext,
   useEffect,
-  useState,
   useRef,
-  type PropsWithChildren,
+  useState,
 } from 'react';
 
+// eslint-disable-next-line no-restricted-imports -- fix me -- do not import @actual-app/web in loot-core
 import { useSyncedPref } from '@actual-app/web/src/hooks/useSyncedPref';
 
 import { q, type Query } from '../../shared/query';
-import { getHasTransactionsQuery, getStatus } from '../../shared/schedules';
 import {
-  type TransactionEntity,
-  type ScheduleEntity,
+  getHasTransactionsQuery,
+  getStatus,
+  getStatusLabel,
+} from '../../shared/schedules';
+import {
   type AccountEntity,
+  type ScheduleEntity,
+  type TransactionEntity,
 } from '../../types/models';
 import { accountFilter } from '../queries';
 import { type LiveQuery, liveQuery } from '../query-helpers';
 
 export type ScheduleStatusType = ReturnType<typeof getStatus>;
 export type ScheduleStatuses = Map<ScheduleEntity['id'], ScheduleStatusType>;
+
+export type ScheduleStatusLabelType = ReturnType<typeof getStatusLabel>;
+export type ScheduleStatusLabels = Map<
+  ScheduleEntity['id'],
+  ScheduleStatusLabelType
+>;
 
 function loadStatuses(
   schedules: readonly ScheduleEntity[],
@@ -57,6 +68,7 @@ type UseSchedulesProps = {
 type ScheduleData = {
   schedules: readonly ScheduleEntity[];
   statuses: ScheduleStatuses;
+  statusLabels: ScheduleStatusLabels;
 };
 type UseSchedulesResult = ScheduleData & {
   readonly isLoading: boolean;
@@ -71,6 +83,7 @@ export function useSchedules({
   const [data, setData] = useState<ScheduleData>({
     schedules: [],
     statuses: new Map(),
+    statusLabels: new Map(),
   });
   const [upcomingLength] = useSyncedPref('upcomingScheduledTransactionLength');
 
@@ -83,6 +96,7 @@ export function useSchedules({
     setError(undefined);
 
     if (!query) {
+      console.error('No query provided to useSchedules');
       return;
     }
 
@@ -106,7 +120,16 @@ export function useSchedules({
           schedules,
           (statuses: ScheduleStatuses) => {
             if (!isUnmounted) {
-              setData({ schedules, statuses });
+              setData({
+                schedules,
+                statuses,
+                statusLabels: new Map(
+                  [...statuses.keys()].map(key => [
+                    key,
+                    getStatusLabel(statuses.get(key)),
+                  ]),
+                ),
+              });
               setIsLoading(false);
             }
           },

@@ -1,28 +1,25 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
-import { pushModal } from 'loot-core/client/actions';
-import { type CategoryEntity } from 'loot-core/src/types/models';
+import { Button } from '@actual-app/components/button';
+import { styles } from '@actual-app/components/styles';
+import { View } from '@actual-app/components/view';
+
+import {
+  type Modal as ModalType,
+  pushModal,
+} from 'loot-core/client/modals/modalsSlice';
 
 import { useCategories } from '../../hooks/useCategories';
 import { useDispatch } from '../../redux';
-import { styles } from '../../style';
 import {
   addToBeBudgetedGroup,
   removeCategoriesFromGroups,
 } from '../budget/util';
-import { Button } from '../common/Button2';
 import { Modal, ModalCloseButton, ModalHeader } from '../common/Modal';
-import { View } from '../common/View';
 import { FieldLabel, TapField } from '../mobile/MobileForms';
 
-type CoverModalProps = {
-  title: string;
-  categoryId?: CategoryEntity['id'];
-  month: string;
-  showToBeBudgeted?: boolean;
-  onSubmit: (categoryId: CategoryEntity['id']) => void;
-};
+type CoverModalProps = Extract<ModalType, { name: 'cover' }>['options'];
 
 export function CoverModal({
   title,
@@ -53,11 +50,16 @@ export function CoverModal({
 
   const onCategoryClick = useCallback(() => {
     dispatch(
-      pushModal('category-autocomplete', {
-        categoryGroups,
-        month,
-        onSelect: categoryId => {
-          setFromCategoryId(categoryId);
+      pushModal({
+        modal: {
+          name: 'category-autocomplete',
+          options: {
+            categoryGroups,
+            month,
+            onSelect: categoryId => {
+              setFromCategoryId(categoryId);
+            },
+          },
         },
       }),
     );
@@ -80,8 +82,8 @@ export function CoverModal({
             rightContent={<ModalCloseButton onPress={close} />}
           />
           <View>
-            <FieldLabel title={t('Cover from category:')} />
-            <TapField value={fromCategory?.name} onClick={onCategoryClick} />
+            <FieldLabel title={t('Cover from a category:')} />
+            <TapField value={fromCategory?.name} onPress={onCategoryClick} />
           </View>
 
           <View

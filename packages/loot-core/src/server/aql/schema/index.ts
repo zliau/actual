@@ -54,6 +54,7 @@ export const schema = {
     tombstone: f('boolean'),
     schedule: f('id', { ref: 'schedules' }),
     converted_amount: f('integer'),
+    raw_synced_data: f('string'),
     // subtransactions is a special field added if the table has the
     // `splits: grouped` option
   },
@@ -63,6 +64,7 @@ export const schema = {
     transfer_acct: f('id', { ref: 'accounts' }),
     tombstone: f('boolean'),
     favorite: f('boolean'),
+    learn_categories: f('boolean'),
   },
   accounts: {
     id: f('id'),
@@ -74,6 +76,8 @@ export const schema = {
     account_id: f('string'),
     official_name: f('string'),
     account_sync_source: f('string'),
+    last_reconciled: f('string'),
+    last_sync: f('string'),
   },
   categories: {
     id: f('id'),
@@ -81,6 +85,7 @@ export const schema = {
     is_income: f('boolean'),
     hidden: f('boolean'),
     group: f('id', { ref: 'category_groups' }),
+    goal_def: f('string'),
     sort_order: f('float'),
     tombstone: f('boolean'),
   },
@@ -143,6 +148,7 @@ export const schema = {
     date_range: f('string'),
     mode: f('string', { default: 'total' }),
     group_by: f('string', { default: 'Category' }),
+    sort_by: f('string', { default: 'desc' }),
     balance_type: f('string', { default: 'Expense' }),
     show_empty: f('integer', { default: 0 }),
     show_offbudget: f('integer', { default: 0 }),
@@ -169,7 +175,7 @@ export const schema = {
   zero_budgets: {
     id: f('id'),
     month: f('integer'),
-    category: f('string'),
+    category: f('string', { ref: 'categories' }),
     amount: f('integer'),
     carryover: f('integer'),
     goal: f('integer'),

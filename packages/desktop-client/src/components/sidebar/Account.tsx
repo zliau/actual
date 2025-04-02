@@ -1,29 +1,30 @@
 // @ts-strict-ignore
 import React, { type CSSProperties, useRef, useState } from 'react';
 
+import { AlignedText } from '@actual-app/components/aligned-text';
+import { InitialFocus } from '@actual-app/components/initial-focus';
+import { Input } from '@actual-app/components/input';
+import { Menu } from '@actual-app/components/menu';
+import { Popover } from '@actual-app/components/popover';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { Tooltip } from '@actual-app/components/tooltip';
+import { View } from '@actual-app/components/view';
 import { css, cx } from '@emotion/css';
 
+import { openAccountCloseModal } from 'loot-core/client/modals/modalsSlice';
+import * as Platform from 'loot-core/client/platform';
 import {
-  openAccountCloseModal,
   reopenAccount,
   updateAccount,
-} from 'loot-core/client/actions';
-import * as Platform from 'loot-core/client/platform';
-import { type AccountEntity } from 'loot-core/src/types/models';
+} from 'loot-core/client/queries/queriesSlice';
+import { type AccountEntity } from 'loot-core/types/models';
 
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { useNotes } from '../../hooks/useNotes';
 import { useDispatch } from '../../redux';
-import { styles, theme } from '../../style';
-import { AlignedText } from '../common/AlignedText';
-import { InitialFocus } from '../common/InitialFocus';
-import { Input } from '../common/Input';
 import { Link } from '../common/Link';
-import { Menu } from '../common/Menu';
-import { Popover } from '../common/Popover';
-import { Text } from '../common/Text';
-import { Tooltip } from '../common/Tooltip';
-import { View } from '../common/View';
 import { Notes } from '../Notes';
 import {
   useDraggable,
@@ -62,6 +63,7 @@ type AccountProps<FieldName extends SheetFields<'account'>> = {
   outerStyle?: CSSProperties;
   onDragChange?: OnDragChangeCallback<{ id: string }>;
   onDrop?: OnDropCallback;
+  titleAccount?: boolean;
 };
 
 export function Account<FieldName extends SheetFields<'account'>>({
@@ -77,6 +79,7 @@ export function Account<FieldName extends SheetFields<'account'>>({
   outerStyle,
   onDragChange,
   onDrop,
+  titleAccount,
 }: AccountProps<FieldName>) {
   const type = account
     ? account.closed
@@ -179,7 +182,7 @@ export function Account<FieldName extends SheetFields<'account'>>({
 
             <AlignedText
               style={
-                (name === 'Off budget' || name === 'On budget') && {
+                titleAccount && {
                   borderBottom: `1.5px solid rgba(255,255,255,0.4)`,
                   paddingBottom: '3px',
                 }
@@ -199,8 +202,10 @@ export function Account<FieldName extends SheetFields<'account'>>({
                         if (newAccountName.trim() !== '') {
                           dispatch(
                             updateAccount({
-                              ...account,
-                              name: newAccountName,
+                              account: {
+                                ...account,
+                                name: newAccountName,
+                              },
                             }),
                           );
                         }
@@ -235,11 +240,13 @@ export function Account<FieldName extends SheetFields<'account'>>({
                 onMenuSelect={type => {
                   switch (type) {
                     case 'close': {
-                      dispatch(openAccountCloseModal(account.id));
+                      dispatch(
+                        openAccountCloseModal({ accountId: account.id }),
+                      );
                       break;
                     }
                     case 'reopen': {
-                      dispatch(reopenAccount(account.id));
+                      dispatch(reopenAccount({ id: account.id }));
                       break;
                     }
                     case 'rename': {

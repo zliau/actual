@@ -4,18 +4,18 @@ import React, {
   useLayoutEffect,
   useRef,
   type UIEventHandler,
-  type CSSProperties,
 } from 'react';
+
+import { Block } from '@actual-app/components/block';
+import { type CSSProperties } from '@actual-app/components/styles';
+import { View } from '@actual-app/components/view';
 
 import {
   type GroupedEntity,
   type DataEntity,
   type balanceTypeOpType,
-} from 'loot-core/src/types/models/reports';
-import { type RuleConditionEntity } from 'loot-core/types/models/rule';
-
-import { Block } from '../../../common/Block';
-import { View } from '../../../common/View';
+  type RuleConditionEntity,
+} from 'loot-core/types/models';
 
 import { ReportTableHeader } from './ReportTableHeader';
 import { ReportTableList } from './ReportTableList';

@@ -1,19 +1,20 @@
 // @ts-strict-ignore
 import { type CSSProperties } from 'react';
 
+import { styles } from '@actual-app/components/styles';
+import { theme } from '@actual-app/components/theme';
 import { t } from 'i18next';
 
-import { type useSpreadsheet } from 'loot-core/src/client/SpreadsheetProvider';
-import { send } from 'loot-core/src/platform/client/fetch';
-import * as monthUtils from 'loot-core/src/shared/months';
-import { type Handlers } from 'loot-core/src/types/handlers';
+import { type useSpreadsheet } from 'loot-core/client/SpreadsheetProvider';
+import { send } from 'loot-core/platform/client/fetch';
+import * as monthUtils from 'loot-core/shared/months';
+import { type Handlers } from 'loot-core/types/handlers';
 import {
   type CategoryEntity,
   type CategoryGroupEntity,
-} from 'loot-core/src/types/models';
-import { type SyncedPrefs } from 'loot-core/src/types/prefs';
+} from 'loot-core/types/models';
+import { type SyncedPrefs } from 'loot-core/types/prefs';
 
-import { styles, theme } from '../../style';
 import { type DropPosition } from '../sort';
 
 import { getValidMonthBounds } from './MonthsContext';
@@ -21,16 +22,16 @@ import { getValidMonthBounds } from './MonthsContext';
 export function addToBeBudgetedGroup(groups: CategoryGroupEntity[]) {
   return [
     {
-      id: 'to-be-budgeted',
-      name: t('To Be Budgeted'),
+      id: 'to-budget',
+      name: t('To Budget'),
       categories: [
         {
-          id: 'to-be-budgeted',
-          name: t('To Be Budgeted'),
-          cat_group: 'to-be-budgeted',
+          id: 'to-budget',
+          name: t('To Budget'),
+          cat_group: 'to-budget',
           group: {
-            id: 'to-be-budgeted',
-            name: t('To Be Budgeted'),
+            id: 'to-budget',
+            name: t('To Budget'),
           },
         },
       ],

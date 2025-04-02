@@ -5,12 +5,18 @@ import {
   useCallback,
   type ComponentProps,
 } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 
+import { Button } from '@actual-app/components/button';
+import { SvgExpandArrow } from '@actual-app/components/icons/v0';
+import { Popover } from '@actual-app/components/popover';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 import memoizeOne from 'memoize-one';
 
-import { getNormalisedString } from 'loot-core/src/shared/normalisation';
-import { type Diff, groupById } from 'loot-core/src/shared/util';
+import { pushModal } from 'loot-core/client/modals/modalsSlice';
+import { getNormalisedString } from 'loot-core/shared/normalisation';
+import { type Diff, groupById } from 'loot-core/shared/util';
 import { type PayeeEntity } from 'loot-core/types/models';
 
 import {
@@ -19,12 +25,8 @@ import {
   useSelectedDispatch,
   useSelectedItems,
 } from '../../hooks/useSelected';
-import { SvgExpandArrow } from '../../icons/v0';
-import { theme } from '../../style';
-import { Button } from '../common/Button2';
-import { Popover } from '../common/Popover';
+import { useDispatch } from '../../redux';
 import { Search } from '../common/Search';
-import { View } from '../common/View';
 import { TableHeader, Cell, SelectCell } from '../table';
 
 import { PayeeMenu } from './PayeeMenu';
@@ -68,7 +70,7 @@ function PayeeTableHeader() {
 type ManagePayeesProps = {
   payees: PayeeEntity[];
   ruleCounts: ComponentProps<typeof PayeeTable>['ruleCounts'];
-  orphanedPayees: PayeeEntity[];
+  orphanedPayees: Array<Pick<PayeeEntity, 'id'>>;
   initialSelectedIds: string[];
   onBatchChange: (diff: Diff<PayeeEntity>) => void;
   onViewRules: ComponentProps<typeof PayeeTable>['onViewRules'];
@@ -91,6 +93,7 @@ export const ManagePayees = ({
   const triggerRef = useRef(null);
   const [orphanedOnly, setOrphanedOnly] = useState(false);
   const { t } = useTranslation();
+  const dispatch = useDispatch();
 
   const filteredPayees = useMemo(() => {
     let filtered = payees;
@@ -116,7 +119,7 @@ export const ManagePayees = ({
   }
 
   const onUpdate = useCallback(
-    <T extends 'name' | 'favorite'>(
+    <T extends 'name' | 'favorite' | 'learn_categories'>(
       id: PayeeEntity['id'],
       name: T,
       value: PayeeEntity[T],
@@ -151,16 +154,42 @@ export const ManagePayees = ({
   function onFavorite() {
     const allFavorited = [...selected.items]
       .map(id => payeesById[id].favorite)
-      .every(f => f === 1);
+      .every(f => f);
     if (allFavorited) {
       onBatchChange({
-        updated: [...selected.items].map(id => ({ id, favorite: 0 })),
+        updated: [...selected.items].map(id => ({ id, favorite: false })),
         added: [],
         deleted: [],
       });
     } else {
       onBatchChange({
-        updated: [...selected.items].map(id => ({ id, favorite: 1 })),
+        updated: [...selected.items].map(id => ({ id, favorite: true })),
+        added: [],
+        deleted: [],
+      });
+    }
+    selected.dispatch({ type: 'select-none' });
+  }
+
+  function onLearn() {
+    const allLearnCategories = [...selected.items]
+      .map(id => payeesById[id].learn_categories)
+      .every(f => f);
+    if (allLearnCategories) {
+      onBatchChange({
+        updated: [...selected.items].map(id => ({
+          id,
+          learn_categories: false,
+        })),
+        added: [],
+        deleted: [],
+      });
+    } else {
+      onBatchChange({
+        updated: [...selected.items].map(id => ({
+          id,
+          learn_categories: true,
+        })),
         added: [],
         deleted: [],
       });
@@ -174,6 +203,10 @@ export const ManagePayees = ({
 
     selected.dispatch({ type: 'select-none' });
   }
+
+  const onChangeCategoryLearning = useCallback(() => {
+    dispatch(pushModal({ modal: { name: 'payee-category-learning' } }));
+  }, [dispatch]);
 
   const buttonsDisabled = selected.items.size === 0;
 
@@ -220,6 +253,7 @@ export const ManagePayees = ({
               onDelete={onDelete}
               onMerge={onMerge}
               onFavorite={onFavorite}
+              onLearn={onLearn}
             />
           </Popover>
         </View>
@@ -290,6 +324,31 @@ export const ManagePayees = ({
           )}
         </View>
       </SelectedProvider>
+
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          margin: '20px 0',
+          flexShrink: 0,
+        }}
+      >
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: '1em',
+          }}
+        >
+          <Button
+            aria-label={t('Category learning settings')}
+            variant="normal"
+            onPress={onChangeCategoryLearning}
+          >
+            <Trans>Category learning settings</Trans>
+          </Button>
+        </View>
+      </View>
     </View>
   );
 };

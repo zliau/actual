@@ -1,19 +1,21 @@
 import React, { useRef, useCallback, useLayoutEffect } from 'react';
 
-import { pushModal } from 'loot-core/client/actions';
-import { send } from 'loot-core/src/platform/client/fetch';
+import { theme } from '@actual-app/components/theme';
+
+import { pushModal } from 'loot-core/client/modals/modalsSlice';
+import { send } from 'loot-core/platform/client/fetch';
 import {
   splitTransaction,
   updateTransaction,
   addSplitTransaction,
   realizeTempTransactions,
   applyTransactionDiff,
-} from 'loot-core/src/shared/transactions';
-import { getChangedValues, applyChanges } from 'loot-core/src/shared/util';
+} from 'loot-core/shared/transactions';
+import { getChangedValues, applyChanges } from 'loot-core/shared/util';
 
 import { useNavigate } from '../../hooks/useNavigate';
+import { useSyncedPref } from '../../hooks/useSyncedPref';
 import { useDispatch } from '../../redux';
-import { theme } from '../../style';
 
 import { TransactionTable } from './TransactionsTable';
 import { getRatesByCurrencyAndDate } from 'loot-core/client/reducers/queries';
@@ -38,19 +40,20 @@ import { getRatesByCurrencyAndDate } from 'loot-core/client/reducers/queries';
 // differently than a full refresh. It's up to you to decide which
 // one to use when doing updates.
 
-async function saveDiff(diff) {
+async function saveDiff(diff, learnCategories) {
   const remoteUpdates = await send('transactions-batch-update', {
     ...diff,
-    learnCategories: true,
+    learnCategories,
   });
+
   if (remoteUpdates.length > 0) {
     return { updates: remoteUpdates };
   }
   return {};
 }
 
-async function saveDiffAndApply(diff, changes, onChange) {
-  const remoteDiff = await saveDiff(diff);
+async function saveDiffAndApply(diff, changes, onChange, learnCategories) {
+  const remoteDiff = await saveDiff(diff, learnCategories);
   onChange(
     applyTransactionDiff(changes.newTransaction, remoteDiff),
     applyChanges(remoteDiff, changes.data),
@@ -80,7 +83,6 @@ export function TransactionList({
   isFiltered,
   dateFormat,
   hideFraction,
-  addNotification,
   renderEmpty,
   onSort,
   sortField,
@@ -101,58 +103,85 @@ export function TransactionList({
   onMakeAsNonSplitTransactions,
 }) {
   const dispatch = useDispatch();
-  const transactionsLatest = useRef();
   const navigate = useNavigate();
+  const [learnCategories = 'true'] = useSyncedPref('learn-categories');
+  const isLearnCategoriesEnabled = String(learnCategories) === 'true';
 
+  const transactionsLatest = useRef();
   useLayoutEffect(() => {
     transactionsLatest.current = transactions;
   }, [transactions]);
 
-  const onAdd = useCallback(async newTransactions => {
-    console.log('on add adding', newTransactions);
-    newTransactions = realizeTempTransactions(newTransactions);
-    // use the latest tranactions and diff with this one to find teh dates
-    // if this date does not exist in the rates
-    // FIXME handle multiple?
+  const onAdd = useCallback(
+    async newTransactions => {
+      newTransactions = realizeTempTransactions(newTransactions);
+
+      await saveDiff({ added: newTransactions }, isLearnCategoriesEnabled);
+      onRefetch();
     await send('update-exchange-rates', { transaction: newTransactions[0] });
+    },
+    [isLearnCategoriesEnabled, onRefetch],
+  );
 
-    await saveDiff({ added: newTransactions });
-    onRefetch();
-  }, []);
+  const onSave = useCallback(
+    async transaction => {
+      const changes = updateTransaction(
+        transactionsLatest.current,
+        transaction,
+      );
+      transactionsLatest.current = changes.data;
 
-  const onSave = useCallback(async transaction => {
-    console.log('saving', transaction);
-    const changes = updateTransaction(transactionsLatest.current, transaction);
-    transactionsLatest.current = changes.data;
-
-    if (changes.diff.updated.length > 0) {
-      const dateChanged = !!changes.diff.updated[0].date;
-      if (dateChanged) {
-        // Make sure it stays at the top of the list of transactions
-        // for that date
-        changes.diff.updated[0].sort_order = Date.now();
-        await saveDiff(changes.diff);
-        onRefetch();
-      } else {
-        onChange(changes.newTransaction, changes.data);
-        saveDiffAndApply(changes.diff, changes, onChange);
+      if (changes.diff.updated.length > 0) {
+        const dateChanged = !!changes.diff.updated[0].date;
+        if (dateChanged) {
+          // Make sure it stays at the top of the list of transactions
+          // for that date
+          changes.diff.updated[0].sort_order = Date.now();
+          await saveDiff(changes.diff, isLearnCategoriesEnabled);
+          onRefetch();
+        } else {
+          onChange(changes.newTransaction, changes.data);
+          saveDiffAndApply(
+            changes.diff,
+            changes,
+            onChange,
+            isLearnCategoriesEnabled,
+          );
+        }
       }
-    }
-  }, []);
+    },
+    [isLearnCategoriesEnabled, onChange, onRefetch],
+  );
 
-  const onAddSplit = useCallback(id => {
-    const changes = addSplitTransaction(transactionsLatest.current, id);
-    onChange(changes.newTransaction, changes.data);
-    saveDiffAndApply(changes.diff, changes, onChange);
-    return changes.diff.added[0].id;
-  }, []);
+  const onAddSplit = useCallback(
+    id => {
+      const changes = addSplitTransaction(transactionsLatest.current, id);
+      onChange(changes.newTransaction, changes.data);
+      saveDiffAndApply(
+        changes.diff,
+        changes,
+        onChange,
+        isLearnCategoriesEnabled,
+      );
+      return changes.diff.added[0].id;
+    },
+    [isLearnCategoriesEnabled, onChange],
+  );
 
-  const onSplit = useCallback(id => {
-    const changes = splitTransaction(transactionsLatest.current, id);
-    onChange(changes.newTransaction, changes.data);
-    saveDiffAndApply(changes.diff, changes, onChange);
-    return changes.diff.added[0].id;
-  }, []);
+  const onSplit = useCallback(
+    id => {
+      const changes = splitTransaction(transactionsLatest.current, id);
+      onChange(changes.newTransaction, changes.data);
+      saveDiffAndApply(
+        changes.diff,
+        changes,
+        onChange,
+        isLearnCategoriesEnabled,
+      );
+      return changes.diff.added[0].id;
+    },
+    [isLearnCategoriesEnabled, onChange],
+  );
 
   const onApplyRules = useCallback(
     async (transaction, updatedFieldName = null) => {
@@ -193,26 +222,42 @@ export function TransactionList({
     [],
   );
 
-  const onManagePayees = useCallback(id => {
-    navigate('/payees', { state: { selectedPayee: id } });
-  });
+  const onManagePayees = useCallback(
+    id => {
+      navigate('/payees', id && { state: { selectedPayee: id } });
+    },
+    [navigate],
+  );
 
-  const onNavigateToTransferAccount = useCallback(accountId => {
-    navigate(`/accounts/${accountId}`);
-  });
+  const onNavigateToTransferAccount = useCallback(
+    accountId => {
+      navigate(`/accounts/${accountId}`);
+    },
+    [navigate],
+  );
 
-  const onNavigateToSchedule = useCallback(scheduleId => {
-    dispatch(pushModal('schedule-edit', { id: scheduleId }));
-  });
+  const onNavigateToSchedule = useCallback(
+    scheduleId => {
+      dispatch(
+        pushModal({
+          modal: { name: 'schedule-edit', options: { id: scheduleId } },
+        }),
+      );
+    },
+    [dispatch],
+  );
 
-  const onNotesTagClick = useCallback(tag => {
-    onApplyFilter({
-      field: 'notes',
-      op: 'hasTags',
-      value: tag,
-      type: 'string',
-    });
-  });
+  const onNotesTagClick = useCallback(
+    tag => {
+      onApplyFilter({
+        field: 'notes',
+        op: 'hasTags',
+        value: tag,
+        type: 'string',
+      });
+    },
+    [onApplyFilter],
+  );
 
   return (
     <TransactionTable
@@ -237,7 +282,6 @@ export function TransactionList({
       isFiltered={isFiltered}
       dateFormat={dateFormat}
       hideFraction={hideFraction}
-      addNotification={addNotification}
       headerContent={headerContent}
       renderEmpty={renderEmpty}
       onSave={onSave}

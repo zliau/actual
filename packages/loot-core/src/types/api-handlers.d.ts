@@ -1,4 +1,5 @@
-import { type batchUpdateTransactions } from '../server/accounts/transactions';
+import { ImportTransactionsOpts } from '@actual-app/api';
+
 import type {
   APIAccountEntity,
   APICategoryEntity,
@@ -6,6 +7,7 @@ import type {
   APIFileEntity,
   APIPayeeEntity,
 } from '../server/api-models';
+import { type batchUpdateTransactions } from '../server/transactions';
 
 import type { NewRuleEntity, RuleEntity, TransactionEntity } from './models';
 import { type ServerHandlers } from './server-handlers';
@@ -74,12 +76,14 @@ export interface ApiHandlers {
     transactions;
     categoryGroups;
     payees;
+    accounts;
   }) => Promise<unknown>;
 
   'api/transactions-import': (arg: {
     accountId;
     transactions;
     isPreview?;
+    opts?: ImportTransactionsOpts;
   }) => Promise<{
     errors?: { message: string }[];
     added;

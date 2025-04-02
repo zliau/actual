@@ -1,62 +1,58 @@
 // @ts-strict-ignore
-import { type Store } from 'redux';
+import { setAppState } from 'loot-core/client/app/appSlice';
+import { closeBudgetUI } from 'loot-core/client/budgets/budgetsSlice';
+import {
+  closeModal,
+  pushModal,
+  replaceModal,
+} from 'loot-core/client/modals/modalsSlice';
+import {
+  addGenericErrorNotification,
+  addNotification,
+} from 'loot-core/client/notifications/notificationsSlice';
+import { loadPrefs } from 'loot-core/client/prefs/prefsSlice';
+import {
+  getAccounts,
+  getCategories,
+  getPayees,
+} from 'loot-core/client/queries/queriesSlice';
+import * as sharedListeners from 'loot-core/client/shared-listeners';
+import { type AppStore } from 'loot-core/client/store';
+import { listen } from 'loot-core/platform/client/fetch';
+import * as undo from 'loot-core/platform/client/undo';
 
-import * as sharedListeners from 'loot-core/src/client/shared-listeners';
-import type { State } from 'loot-core/src/client/state-types';
-import { listen } from 'loot-core/src/platform/client/fetch';
-import * as undo from 'loot-core/src/platform/client/undo';
-
-import { type BoundActions } from './hooks/useActions';
-
-export function handleGlobalEvents(actions: BoundActions, store: Store<State>) {
-  listen('server-error', () => {
-    actions.addGenericErrorNotification();
+export function handleGlobalEvents(store: AppStore) {
+  const unlistenServerError = listen('server-error', () => {
+    store.dispatch(addGenericErrorNotification());
   });
 
-  listen('orphaned-payees', ({ orphanedIds, updatedPayeeIds }) => {
-    // Right now, it prompts to merge into the first payee
-    actions.pushModal('merge-unused-payees', {
-      payeeIds: orphanedIds,
-      targetPayeeId: updatedPayeeIds[0],
-    });
+  const unlistenOrphanedPayees = listen(
+    'orphaned-payees',
+    ({ orphanedIds, updatedPayeeIds }) => {
+      // Right now, it prompts to merge into the first payee
+      store.dispatch(
+        pushModal({
+          modal: {
+            name: 'merge-unused-payees',
+            options: {
+              payeeIds: orphanedIds,
+              targetPayeeId: updatedPayeeIds[0],
+            },
+          },
+        }),
+      );
+    },
+  );
+
+  const unlistenSchedulesOffline = listen('schedules-offline', () => {
+    store.dispatch(
+      pushModal({ modal: { name: 'schedule-posts-offline-notification' } }),
+    );
   });
 
-  listen('schedules-offline', () => {
-    actions.pushModal('schedule-posts-offline-notification');
-  });
+  const unlistenSync = sharedListeners.listenForSyncEvent(store);
 
-  // This is experimental: we sync data locally automatically when
-  // data changes from the backend
-  listen('sync-event', async event => {
-    // We don't need to query anything until the file is loaded, and
-    // sync events might come in if the file is being synced before
-    // being loaded (happens when downloading)
-    const prefs = store.getState().prefs.local;
-    if (prefs && prefs.id) {
-      if (event.type === 'applied') {
-        const tables = event.tables;
-        if (tables.includes('payees') || tables.includes('payee_mapping')) {
-          actions.getPayees();
-        }
-      }
-    }
-  });
-
-  // TODO: Should this run on mobile too?
-  listen('sync-event', async ({ type }) => {
-    if (type === 'unauthorized') {
-      actions.addNotification({
-        type: 'warning',
-        message: 'Unable to authenticate with server',
-        sticky: true,
-        id: 'auth-issue',
-      });
-    }
-  });
-
-  sharedListeners.listenForSyncEvent(actions, store);
-
-  listen('undo-event', undoState => {
+  const unlistenUndo = listen('undo-event', undoState => {
     const { tables, undoTag } = undoState;
     const promises: Promise<unknown>[] = [];
 
@@ -65,11 +61,19 @@ export function handleGlobalEvents(actions: BoundActions, store: Store<State>) {
       tables.includes('category_groups') ||
       tables.includes('category_mapping')
     ) {
-      promises.push(actions.getCategories());
+      promises.push(store.dispatch(getCategories()));
+    }
+
+    if (
+      tables.includes('accounts') ||
+      tables.includes('payees') ||
+      tables.includes('payee_mapping')
+    ) {
+      promises.push(store.dispatch(getPayees()));
     }
 
     if (tables.includes('accounts')) {
-      promises.push(actions.getAccounts());
+      promises.push(store.dispatch(getAccounts()));
     }
 
     const tagged = undo.getTaggedState(undoTag);
@@ -84,12 +88,12 @@ export function handleGlobalEvents(actions: BoundActions, store: Store<State>) {
 
           if (
             modalStack.length === 0 ||
-            modalStack[modalStack.length - 1].name !== tagged.openModal
+            modalStack[modalStack.length - 1].name !== tagged.openModal.name
           ) {
-            actions.replaceModal(tagged.openModal);
+            store.dispatch(replaceModal({ modal: tagged.openModal }));
           }
         } else {
-          actions.closeModal();
+          store.dispatch(closeModal());
 
           if (
             window.location.href.replace(window.location.origin, '') !==
@@ -106,45 +110,64 @@ export function handleGlobalEvents(actions: BoundActions, store: Store<State>) {
     }
   });
 
-  listen('fallback-write-error', () => {
-    actions.addNotification({
-      type: 'error',
-      title: 'Unable to save changes',
-      sticky: true,
-      message:
-        'This browser only supports using the app in one tab at a time, ' +
-        'and another tab has opened the app. No changes will be saved ' +
-        'from this tab; please close it and continue working in the other one.',
-    });
+  const unlistenFallbackWriteError = listen('fallback-write-error', () => {
+    store.dispatch(
+      addNotification({
+        notification: {
+          type: 'error',
+          title: 'Unable to save changes',
+          sticky: true,
+          message:
+            'This browser only supports using the app in one tab at a time, ' +
+            'and another tab has opened the app. No changes will be saved ' +
+            'from this tab; please close it and continue working in the other one.',
+        },
+      }),
+    );
   });
 
-  listen('start-load', () => {
-    actions.closeBudgetUI();
-    actions.setAppState({ loadingText: '' });
+  const unlistenStartLoad = listen('start-load', () => {
+    store.dispatch(closeBudgetUI());
+    store.dispatch(setAppState({ loadingText: '' }));
   });
 
-  listen('finish-load', () => {
-    actions.closeModal();
-    actions.setAppState({ loadingText: null });
-    actions.loadPrefs();
+  const unlistenFinishLoad = listen('finish-load', () => {
+    store.dispatch(closeModal());
+    store.dispatch(setAppState({ loadingText: null }));
+    store.dispatch(loadPrefs());
   });
 
-  listen('start-import', () => {
-    actions.closeBudgetUI();
+  const unlistenStartImport = listen('start-import', () => {
+    store.dispatch(closeBudgetUI());
   });
 
-  listen('finish-import', () => {
-    actions.closeModal();
-    actions.setAppState({ loadingText: null });
-    actions.loadPrefs();
+  const unlistenFinishImport = listen('finish-import', () => {
+    store.dispatch(closeModal());
+    store.dispatch(setAppState({ loadingText: null }));
+    store.dispatch(loadPrefs());
   });
 
-  listen('show-budgets', () => {
-    actions.closeBudgetUI();
-    actions.setAppState({ loadingText: null });
+  const unlistenShowBudgets = listen('show-budgets', () => {
+    store.dispatch(closeBudgetUI());
+    store.dispatch(setAppState({ loadingText: null }));
   });
 
-  listen('api-fetch-redirected', () => {
-    actions.reloadApp();
+  const unlistenApiFetchRedirected = listen('api-fetch-redirected', () => {
+    window.Actual.reload();
   });
+
+  return () => {
+    unlistenServerError();
+    unlistenOrphanedPayees();
+    unlistenSchedulesOffline();
+    unlistenSync();
+    unlistenUndo();
+    unlistenFallbackWriteError();
+    unlistenStartLoad();
+    unlistenFinishLoad();
+    unlistenStartImport();
+    unlistenFinishImport();
+    unlistenShowBudgets();
+    unlistenApiFetchRedirected();
+  };
 }

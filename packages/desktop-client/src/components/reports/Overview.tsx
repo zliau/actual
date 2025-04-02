@@ -1,36 +1,39 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { Dialog, DialogTrigger } from 'react-aria-components';
 import { Responsive, WidthProvider, type Layout } from 'react-grid-layout';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { Trans, useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 
+import { Button } from '@actual-app/components/button';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { SvgDotsHorizontalTriple } from '@actual-app/components/icons/v1';
+import { Menu } from '@actual-app/components/menu';
+import { Popover } from '@actual-app/components/popover';
+import { breakpoints } from '@actual-app/components/tokens';
+import { View } from '@actual-app/components/view';
+
+import { useDashboard } from 'loot-core/client/data-hooks/dashboard';
+import { useReports } from 'loot-core/client/data-hooks/reports';
 import {
   addNotification,
   removeNotification,
-} from 'loot-core/src/client/actions';
-import { useDashboard } from 'loot-core/src/client/data-hooks/dashboard';
-import { useReports } from 'loot-core/src/client/data-hooks/reports';
-import { send } from 'loot-core/src/platform/client/fetch';
+} from 'loot-core/client/notifications/notificationsSlice';
+import { send } from 'loot-core/platform/client/fetch';
 import {
   type CustomReportWidget,
   type ExportImportDashboard,
   type MarkdownWidget,
   type Widget,
-} from 'loot-core/src/types/models';
+} from 'loot-core/types/models';
 
 import { useAccounts } from '../../hooks/useAccounts';
 import { useNavigate } from '../../hooks/useNavigate';
 import { useSyncedPref } from '../../hooks/useSyncedPref';
+import { useUndo } from '../../hooks/useUndo';
 import { useDispatch } from '../../redux';
-import { breakpoints } from '../../tokens';
-import { Button } from '../common/Button2';
-import { Menu } from '../common/Menu';
-import { MenuButton } from '../common/MenuButton';
-import { Popover } from '../common/Popover';
-import { View } from '../common/View';
 import { MOBILE_NAV_HEIGHT } from '../mobile/MobileNavTabs';
 import { MobilePageHeader, Page, PageHeader } from '../Page';
-import { useResponsive } from '../responsive/ResponsiveProvider';
 
 import { NON_DRAGGABLE_AREA_CLASS_NAME } from './constants';
 import { LoadingIndicator } from './LoadingIndicator';
@@ -55,10 +58,6 @@ export function Overview() {
   const [_firstDayOfWeekIdx] = useSyncedPref('firstDayOfWeekIdx');
   const firstDayOfWeekIdx = _firstDayOfWeekIdx || '0';
 
-  const triggerRef = useRef(null);
-  const extraMenuTriggerRef = useRef(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [extraMenuOpen, setExtraMenuOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentBreakpoint, setCurrentBreakpoint] = useState<
@@ -96,7 +95,7 @@ export function Overview() {
   const layout = baseLayout;
 
   const closeNotifications = () => {
-    dispatch(removeNotification('import'));
+    dispatch(removeNotification({ id: 'import' }));
   };
 
   // Close import notifications when doing "undo" operation
@@ -109,18 +108,22 @@ export function Overview() {
     [closeNotifications],
   );
 
+  const { undo } = useUndo();
+
   const onDispatchSucessNotification = (message: string) => {
     dispatch(
       addNotification({
-        id: 'import',
-        type: 'message',
-        sticky: true,
-        timeout: 30_000, // 30s
-        message,
-        messageActions: {
-          undo: () => {
-            closeNotifications();
-            window.__actionsForMenu.undo();
+        notification: {
+          id: 'import',
+          type: 'message',
+          sticky: true,
+          timeout: 30_000, // 30s
+          message,
+          messageActions: {
+            undo: () => {
+              closeNotifications();
+              undo();
+            },
           },
         },
       }),
@@ -170,7 +173,6 @@ export function Overview() {
       height: 2,
       meta,
     });
-    setMenuOpen(false);
   };
 
   const onRemoveWidget = (widgetId: string) => {
@@ -208,22 +210,24 @@ export function Overview() {
       }),
     } satisfies ExportImportDashboard;
 
-    window.Actual?.saveFile(
+    window.Actual.saveFile(
       JSON.stringify(data, null, 2),
       'dashboard.json',
       'Export Dashboard',
     );
   };
   const onImport = async () => {
-    const openFileDialog = window.Actual?.openFileDialog;
+    const openFileDialog = window.Actual.openFileDialog;
 
     if (!openFileDialog) {
       dispatch(
         addNotification({
-          type: 'error',
-          message: t(
-            'Fatal error occurred: unable to open import file dialog.',
-          ),
+          notification: {
+            type: 'error',
+            message: t(
+              'Fatal error occurred: unable to open import file dialog.',
+            ),
+          },
         }),
       );
       return;
@@ -244,14 +248,16 @@ export function Overview() {
     const res = await send('dashboard-import', { filepath });
     setIsImporting(false);
 
-    if (res.error) {
+    if ('error' in res) {
       switch (res.error) {
         case 'json-parse-error':
           dispatch(
             addNotification({
-              id: 'import',
-              type: 'error',
-              message: t('Failed parsing the imported JSON.'),
+              notification: {
+                id: 'import',
+                type: 'error',
+                message: t('Failed parsing the imported JSON.'),
+              },
             }),
           );
           break;
@@ -259,9 +265,11 @@ export function Overview() {
         case 'validation-error':
           dispatch(
             addNotification({
-              id: 'import',
-              type: 'error',
-              message: res.message,
+              notification: {
+                id: 'import',
+                type: 'error',
+                message: res.message,
+              },
             }),
           );
           break;
@@ -269,9 +277,11 @@ export function Overview() {
         default:
           dispatch(
             addNotification({
-              id: 'import',
-              type: 'error',
-              message: t('Failed importing the dashboard file.'),
+              notification: {
+                id: 'import',
+                type: 'error',
+                message: t('Failed importing the dashboard file.'),
+              },
             }),
           );
           break;
@@ -323,88 +333,84 @@ export function Overview() {
             >
               {currentBreakpoint === 'desktop' && (
                 <>
-                  <Button
-                    ref={triggerRef}
-                    variant="primary"
-                    isDisabled={isImporting}
-                    onPress={() => setMenuOpen(true)}
-                  >
-                    <Trans>Add new widget</Trans>
-                  </Button>
+                  <DialogTrigger>
+                    <Button variant="primary" isDisabled={isImporting}>
+                      <Trans>Add new widget</Trans>
+                    </Button>
 
-                  <Popover
-                    triggerRef={triggerRef}
-                    isOpen={menuOpen}
-                    onOpenChange={() => setMenuOpen(false)}
-                  >
-                    <Menu
-                      onMenuSelect={item => {
-                        if (item === 'custom-report') {
-                          navigate('/reports/custom');
-                          return;
-                        }
+                    <Popover>
+                      <Dialog>
+                        <Menu
+                          slot="close"
+                          onMenuSelect={item => {
+                            if (item === 'custom-report') {
+                              navigate('/reports/custom');
+                              return;
+                            }
 
-                        function isExistingCustomReport(
-                          name: string,
-                        ): name is `custom-report-${string}` {
-                          return name.startsWith('custom-report-');
-                        }
-                        if (isExistingCustomReport(item)) {
-                          const [, reportId] = item.split('custom-report-');
-                          onAddWidget<CustomReportWidget>('custom-report', {
-                            id: reportId,
-                          });
-                          return;
-                        }
+                            function isExistingCustomReport(
+                              name: string,
+                            ): name is `custom-report-${string}` {
+                              return name.startsWith('custom-report-');
+                            }
+                            if (isExistingCustomReport(item)) {
+                              const [, reportId] = item.split('custom-report-');
+                              onAddWidget<CustomReportWidget>('custom-report', {
+                                id: reportId,
+                              });
+                              return;
+                            }
 
-                        if (item === 'markdown-card') {
-                          onAddWidget<MarkdownWidget>(item, {
-                            content: `### ${t('Text Widget')}\n\n${t('Edit this widget to change the **markdown** content.')}`,
-                          });
-                          return;
-                        }
+                            if (item === 'markdown-card') {
+                              onAddWidget<MarkdownWidget>(item, {
+                                content: `### ${t('Text Widget')}\n\n${t('Edit this widget to change the **markdown** content.')}`,
+                              });
+                              return;
+                            }
 
-                        onAddWidget(item);
-                      }}
-                      items={[
-                        {
-                          name: 'cash-flow-card' as const,
-                          text: t('Cash flow graph'),
-                        },
-                        {
-                          name: 'net-worth-card' as const,
-                          text: t('Net worth graph'),
-                        },
-                        {
-                          name: 'spending-card' as const,
-                          text: t('Spending analysis'),
-                        },
-                        {
-                          name: 'markdown-card' as const,
-                          text: t('Text widget'),
-                        },
-                        {
-                          name: 'summary-card' as const,
-                          text: t('Summary card'),
-                        },
-                        {
-                          name: 'calendar-card' as const,
-                          text: t('Calendar card'),
-                        },
-                        {
-                          name: 'custom-report' as const,
-                          text: t('New custom report'),
-                        },
-                        ...(customReports.length
-                          ? ([Menu.line] satisfies Array<typeof Menu.line>)
-                          : []),
-                        ...customReports.map(report => ({
-                          name: `custom-report-${report.id}` as const,
-                          text: report.name,
-                        })),
-                      ]}
-                    />
-                  </Popover>
+                            onAddWidget(item);
+                          }}
+                          items={[
+                            {
+                              name: 'cash-flow-card' as const,
+                              text: t('Cash flow graph'),
+                            },
+                            {
+                              name: 'net-worth-card' as const,
+                              text: t('Net worth graph'),
+                            },
+                            {
+                              name: 'spending-card' as const,
+                              text: t('Spending analysis'),
+                            },
+                            {
+                              name: 'markdown-card' as const,
+                              text: t('Text widget'),
+                            },
+                            {
+                              name: 'summary-card' as const,
+                              text: t('Summary card'),
+                            },
+                            {
+                              name: 'calendar-card' as const,
+                              text: t('Calendar card'),
+                            },
+                            {
+                              name: 'custom-report' as const,
+                              text: t('New custom report'),
+                            },
+                            ...(customReports.length
+                              ? ([Menu.line] satisfies Array<typeof Menu.line>)
+                              : []),
+                            ...customReports.map(report => ({
+                              name: `custom-report-${report.id}` as const,
+                              text: report.name,
+                            })),
+                          ]}
+                        />
+                      </Dialog>
+                    </Popover>
+                  </DialogTrigger>
 
                   {isEditing ? (
                     <Button
@@ -422,50 +428,53 @@ export function Overview() {
                     </Button>
                   )}
 
-                  <MenuButton
-                    ref={extraMenuTriggerRef}
-                    onPress={() => setExtraMenuOpen(true)}
-                  />
-                  <Popover
-                    triggerRef={extraMenuTriggerRef}
-                    isOpen={extraMenuOpen}
-                    onOpenChange={() => setExtraMenuOpen(false)}
-                  >
-                    <Menu
-                      onMenuSelect={item => {
-                        switch (item) {
-                          case 'reset':
-                            onResetDashboard();
-                            break;
-                          case 'export':
-                            onExport();
-                            break;
-                          case 'import':
-                            onImport();
-                            break;
-                        }
-                        setExtraMenuOpen(false);
-                      }}
-                      items={[
-                        {
-                          name: 'reset',
-                          text: t('Reset to default'),
-                          disabled: isImporting,
-                        },
-                        Menu.line,
-                        {
-                          name: 'import',
-                          text: t('Import'),
-                          disabled: isImporting,
-                        },
-                        {
-                          name: 'export',
-                          text: t('Export'),
-                          disabled: isImporting,
-                        },
-                      ]}
-                    />
-                  </Popover>
+                  <DialogTrigger>
+                    <Button variant="bare" aria-label={t('Menu')}>
+                      <SvgDotsHorizontalTriple
+                        width={15}
+                        height={15}
+                        style={{ transform: 'rotateZ(90deg)' }}
+                      />
+                    </Button>
+                    <Popover>
+                      <Dialog>
+                        <Menu
+                          slot="close"
+                          onMenuSelect={item => {
+                            switch (item) {
+                              case 'reset':
+                                onResetDashboard();
+                                break;
+                              case 'export':
+                                onExport();
+                                break;
+                              case 'import':
+                                onImport();
+                                break;
+                            }
+                          }}
+                          items={[
+                            {
+                              name: 'reset',
+                              text: t('Reset to default'),
+                              disabled: isImporting,
+                            },
+                            Menu.line,
+                            {
+                              name: 'import',
+                              text: t('Import'),
+                              disabled: isImporting,
+                            },
+                            {
+                              name: 'export',
+                              text: t('Export'),
+                              disabled: isImporting,
+                            },
+                          ]}
+                        />
+                      </Dialog>
+                    </Popover>
+                  </DialogTrigger>
                 </>
               )}
             </View>
@@ -478,7 +487,7 @@ export function Overview() {
       {isImporting ? (
         <LoadingIndicator message={t('Import is running...')} />
       ) : (
-        <View style={{ userSelect: 'none' }}>
+        <View data-testid="reports-overview" style={{ userSelect: 'none' }}>
           <ResponsiveGridLayout
             breakpoints={{ desktop: breakpoints.medium, mobile: 1 }}
             layouts={{ desktop: layout, mobile: layout }}

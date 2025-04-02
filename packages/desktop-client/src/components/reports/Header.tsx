@@ -1,20 +1,24 @@
 import { type ComponentProps, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import * as monthUtils from 'loot-core/src/shared/months';
+import { Button } from '@actual-app/components/button';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { Select } from '@actual-app/components/select';
+import { SpaceBetween } from '@actual-app/components/space-between';
+import { View } from '@actual-app/components/view';
+
+import * as monthUtils from 'loot-core/shared/months';
 import {
   type RuleConditionEntity,
   type TimeFrame,
 } from 'loot-core/types/models';
+import { type SyncedPrefs } from 'loot-core/types/prefs';
 
-import { Button } from '../common/Button2';
-import { Select } from '../common/Select';
-import { SpaceBetween } from '../common/SpaceBetween';
-import { View } from '../common/View';
+import { useLocale } from '../../hooks/useLocale';
 import { AppliedFilters } from '../filters/AppliedFilters';
 import { FilterButton } from '../filters/FiltersMenu';
-import { useResponsive } from '../responsive/ResponsiveProvider';
 
+import { getLiveRange } from './getLiveRange';
 import {
   calculateTimeRange,
   getFullRange,
@@ -29,6 +33,8 @@ type HeaderProps = {
   mode?: TimeFrame['mode'];
   show1Month?: boolean;
   allMonths: Array<{ name: string; pretty: string }>;
+  earliestTransaction: string;
+  firstDayOfWeekIdx?: SyncedPrefs['firstDayOfWeekIdx'];
   onChangeDates: (
     start: TimeFrame['start'],
     end: TimeFrame['end'],
@@ -51,6 +57,8 @@ export function Header({
   mode,
   show1Month,
   allMonths,
+  earliestTransaction,
+  firstDayOfWeekIdx,
   onChangeDates,
   filters,
   conditionsOp,
@@ -60,8 +68,17 @@ export function Header({
   onConditionsOpChange,
   children,
 }: HeaderProps) {
+  const locale = useLocale();
   const { t } = useTranslation();
   const { isNarrowWidth } = useResponsive();
+  function convertToMonth(
+    start: string,
+    end: string,
+    _: TimeFrame['mode'],
+    mode: TimeFrame['mode'],
+  ): [string, string, TimeFrame['mode']] {
+    return [monthUtils.getMonth(start), monthUtils.getMonth(end), mode];
+  }
 
   return (
     <View
@@ -108,7 +125,7 @@ export function Header({
                 )
               }
               value={start}
-              defaultLabel={monthUtils.format(start, 'MMMM, yyyy')}
+              defaultLabel={monthUtils.format(start, 'MMMM, yyyy', locale)}
               options={allMonths.map(({ name, pretty }) => [name, pretty])}
             />
             <View>{t('to')}</View>
@@ -129,7 +146,7 @@ export function Header({
           </SpaceBetween>
         </SpaceBetween>
 
-        <SpaceBetween>
+        <SpaceBetween gap={3}>
           {show1Month && (
             <Button
               variant="bare"
@@ -155,6 +172,42 @@ export function Header({
             onPress={() => onChangeDates(...getLatestRange(11))}
           >
             {t('1 year')}
+          </Button>
+          <Button
+            variant="bare"
+            onPress={() =>
+              onChangeDates(
+                ...convertToMonth(
+                  ...getLiveRange(
+                    'Year to date',
+                    earliestTransaction,
+                    true,
+                    firstDayOfWeekIdx,
+                  ),
+                  'yearToDate',
+                ),
+              )
+            }
+          >
+            {t('Year to date')}
+          </Button>
+          <Button
+            variant="bare"
+            onPress={() =>
+              onChangeDates(
+                ...convertToMonth(
+                  ...getLiveRange(
+                    'Last year',
+                    earliestTransaction,
+                    false,
+                    firstDayOfWeekIdx,
+                  ),
+                  'lastYear',
+                ),
+              )
+            }
+          >
+            {t('Last year')}
           </Button>
           <Button
             variant="bare"

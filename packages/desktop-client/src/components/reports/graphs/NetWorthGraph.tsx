@@ -1,7 +1,10 @@
 // @ts-strict-ignore
-import React, { type CSSProperties } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { AlignedText } from '@actual-app/components/aligned-text';
+import { type CSSProperties } from '@actual-app/components/styles';
+import { theme } from '@actual-app/components/theme';
 import { css } from '@emotion/css';
 import {
   AreaChart,
@@ -16,8 +19,6 @@ import {
 import { amountToCurrencyNoDecimal } from 'loot-core/shared/util';
 
 import { usePrivacyMode } from '../../../hooks/usePrivacyMode';
-import { theme } from '../../../style';
-import { AlignedText } from '../../common/AlignedText';
 import { Container } from '../Container';
 import { numberFormatterTooltip } from '../numberFormatter';
 

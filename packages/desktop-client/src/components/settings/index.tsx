@@ -1,27 +1,28 @@
 import React, { type ReactNode, useEffect } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 
+import { Button } from '@actual-app/components/button';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { Input } from '@actual-app/components/input';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { tokens } from '@actual-app/components/tokens';
+import { View } from '@actual-app/components/view';
 import { css } from '@emotion/css';
 
-import { closeBudget, loadPrefs } from 'loot-core/client/actions';
+import { closeBudget } from 'loot-core/client/budgets/budgetsSlice';
+import { loadPrefs } from 'loot-core/client/prefs/prefsSlice';
+import { listen } from 'loot-core/platform/client/fetch';
 import { isElectron } from 'loot-core/shared/environment';
-import { listen } from 'loot-core/src/platform/client/fetch';
 
 import { useGlobalPref } from '../../hooks/useGlobalPref';
 import { useIsOutdated, useLatestVersion } from '../../hooks/useLatestVersion';
 import { useMetadataPref } from '../../hooks/useMetadataPref';
 import { useDispatch } from '../../redux';
-import { theme } from '../../style';
-import { tokens } from '../../tokens';
-import { Button } from '../common/Button2';
-import { Input } from '../common/Input';
 import { Link } from '../common/Link';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
 import { FormField, FormLabel } from '../forms';
 import { MOBILE_NAV_HEIGHT } from '../mobile/MobileNavTabs';
 import { Page } from '../Page';
-import { useResponsive } from '../responsive/ResponsiveProvider';
 import { useServerVersion } from '../ServerContext';
 
 import { AuthSettings } from './AuthSettings';
@@ -30,8 +31,9 @@ import { BudgetTypeSettings } from './BudgetTypeSettings';
 import { EncryptionSettings } from './Encryption';
 import { ExperimentalFeatures } from './Experimental';
 import { ExportBudget } from './Export';
-import { FixSplits } from './FixSplits';
 import { FormatSettings } from './Format';
+import { LanguageSettings } from './LanguageSettings';
+import { RepairTransactions } from './RepairTransactions';
 import { ResetCache, ResetSync } from './Reset';
 import { ThemeSettings } from './Themes';
 import { AdvancedToggle, Setting } from './UI';
@@ -170,6 +172,7 @@ export function Settings() {
       }}
     >
       <View
+        data-testid="settings"
         style={{
           marginTop: 10,
           flexShrink: 0,
@@ -183,20 +186,23 @@ export function Settings() {
           >
             {/* The only spot to close a budget on mobile */}
             <FormField>
-              <FormLabel title={t('Budget Name')} />
+              <FormLabel title={t('Budget name')} />
               <Input
                 value={budgetName}
                 disabled
                 style={{ color: theme.buttonNormalDisabledText }}
               />
             </FormField>
-            <Button onPress={onCloseBudget}>{t('Close Budget')}</Button>
+            <Button onPress={onCloseBudget}>
+              <Trans>Close budget</Trans>
+            </Button>
           </View>
         )}
         <About />
         <ThemeSettings />
         <FormatSettings />
         <CurrencySettings />
+        <LanguageSettings />
         <AuthSettings />
         <EncryptionSettings />
         <BudgetTypeSettings />
@@ -206,7 +212,7 @@ export function Settings() {
           <AdvancedAbout />
           <ResetCache />
           <ResetSync />
-          <FixSplits />
+          <RepairTransactions />
           <ExperimentalFeatures />
         </AdvancedToggle>
       </View>

@@ -2,13 +2,20 @@
 import React, { useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
-import { runQuery } from 'loot-core/src/client/query-helpers';
-import { send } from 'loot-core/src/platform/client/fetch';
-import { q } from 'loot-core/src/shared/query';
-import { getRecurringDescription } from 'loot-core/src/shared/schedules';
-import type { DiscoverScheduleEntity } from 'loot-core/src/types/models';
+import { ButtonWithLoading } from '@actual-app/components/button';
+import { Paragraph } from '@actual-app/components/paragraph';
+import { Stack } from '@actual-app/components/stack';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { runQuery } from 'loot-core/client/query-helpers';
+import { send } from 'loot-core/platform/client/fetch';
+import { q } from 'loot-core/shared/query';
+import { getRecurringDescription } from 'loot-core/shared/schedules';
+import type { DiscoverScheduleEntity } from 'loot-core/types/models';
 
 import { useDateFormat } from '../../hooks/useDateFormat';
+import { useLocale } from '../../hooks/useLocale';
 import {
   useSelected,
   useSelectedDispatch,
@@ -16,12 +23,7 @@ import {
   SelectedProvider,
 } from '../../hooks/useSelected';
 import { useSendPlatformRequest } from '../../hooks/useSendPlatformRequest';
-import { theme } from '../../style';
-import { ButtonWithLoading } from '../common/Button2';
 import { Modal, ModalCloseButton, ModalHeader } from '../common/Modal';
-import { Paragraph } from '../common/Paragraph';
-import { Stack } from '../common/Stack';
-import { View } from '../common/View';
 import { Table, TableHeader, Row, Field, SelectCell } from '../table';
 import { DisplayId } from '../util/DisplayId';
 
@@ -41,11 +43,16 @@ function DiscoverSchedulesTable({
   const selectedItems = useSelectedItems();
   const dispatchSelected = useSelectedDispatch();
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
+  const locale = useLocale();
 
   function renderItem({ item }: { item: DiscoverScheduleEntity }) {
     const selected = selectedItems.has(item.id);
     const amountOp = item._conditions.find(c => c.field === 'amount').op;
-    const recurDescription = getRecurringDescription(item.date, dateFormat);
+    const recurDescription = getRecurringDescription(
+      item.date,
+      dateFormat,
+      locale,
+    );
 
     return (
       <Row

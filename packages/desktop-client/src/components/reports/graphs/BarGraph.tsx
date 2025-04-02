@@ -1,7 +1,9 @@
 // @ts-strict-ignore
-import React, { useMemo, useState, type CSSProperties } from 'react';
+import React, { useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { AlignedText } from '@actual-app/components/aligned-text';
+import { theme } from '@actual-app/components/theme';
 import { css } from '@emotion/css';
 import {
   BarChart,
@@ -19,19 +21,17 @@ import {
 import {
   amountToCurrency,
   amountToCurrencyNoDecimal,
-} from 'loot-core/src/shared/util';
+} from 'loot-core/shared/util';
 import {
   type balanceTypeOpType,
   type DataEntity,
-} from 'loot-core/src/types/models/reports';
-import { type RuleConditionEntity } from 'loot-core/types/models/rule';
+  type RuleConditionEntity,
+} from 'loot-core/types/models';
 
 import { useAccounts } from '../../../hooks/useAccounts';
 import { useCategories } from '../../../hooks/useCategories';
 import { useNavigate } from '../../../hooks/useNavigate';
 import { usePrivacyMode } from '../../../hooks/usePrivacyMode';
-import { theme } from '../../../style';
-import { AlignedText } from '../../common/AlignedText';
 import { Container } from '../Container';
 import { getCustomTick } from '../getCustomTick';
 import { numberFormatterTooltip } from '../numberFormatter';
@@ -50,13 +50,13 @@ type PayloadChild = {
 type PayloadItem = {
   payload: {
     name: string;
-    totalAssets: number | string;
-    totalDebts: number | string;
-    netAssets: number | string;
-    netDebts: number | string;
-    totalTotals: number | string;
-    networth: number | string;
-    totalChange: number | string;
+    totalAssets: number;
+    totalDebts: number;
+    netAssets: number;
+    netDebts: number;
+    totalTotals: number;
+    networth: number;
+    totalChange: number;
     children: [PayloadChild];
   };
 };
@@ -203,12 +203,6 @@ export function BarGraph({
 
   const leftMargin = Math.abs(largestValue) > 1000000 ? 20 : 0;
 
-  // Sort the data in the bar chart
-  const unsortedData = data[splitData];
-  const sortedData = useMemo(() => {
-    return unsortedData.sort((a, b) => a[balanceTypeOp] - b[balanceTypeOp]);
-  }, [unsortedData, balanceTypeOp]);
-
   return (
     <Container
       style={{
@@ -225,7 +219,7 @@ export function BarGraph({
                 width={width}
                 height={height}
                 stackOffset="sign"
-                data={sortedData}
+                data={data[splitData]}
                 style={{ cursor: pointer }}
                 margin={{
                   top: labelsMargin,

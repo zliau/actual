@@ -4,8 +4,8 @@ import React, {
   type CSSProperties,
 } from 'react';
 
-import { theme } from '../../../style';
-import { View } from '../../common/View';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
 const ROW_HEIGHT = 50;
 

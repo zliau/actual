@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { moveAccount } from 'loot-core/src/client/actions';
-import * as queries from 'loot-core/src/client/queries';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { moveAccount } from 'loot-core/client/accounts/accountsSlice';
+import * as queries from 'loot-core/client/queries';
 import { type AccountEntity } from 'loot-core/types/models';
 
 import { useAccounts } from '../../hooks/useAccounts';
@@ -13,8 +16,6 @@ import { useOffBudgetAccounts } from '../../hooks/useOffBudgetAccounts';
 import { useOnBudgetAccounts } from '../../hooks/useOnBudgetAccounts';
 import { useUpdatedAccounts } from '../../hooks/useUpdatedAccounts';
 import { useSelector, useDispatch } from '../../redux';
-import { theme } from '../../style';
-import { View } from '../common/View';
 
 import { Account } from './Account';
 import { SecondaryItem } from './SecondaryItem';
@@ -64,7 +65,7 @@ export function Accounts() {
       targetIdToMove = idx < accounts.length ? accounts[idx].id : null;
     }
 
-    dispatch(moveAccount(id, targetIdToMove));
+    dispatch(moveAccount({ id, targetId: targetIdToMove as string }));
   }
 
   const onToggleClosedAccounts = () => {
@@ -107,6 +108,7 @@ export function Accounts() {
               marginTop: 13,
               marginBottom: 5,
             }}
+            titleAccount={true}
           />
         )}
 
@@ -137,6 +139,7 @@ export function Accounts() {
               marginTop: 13,
               marginBottom: 5,
             }}
+            titleAccount={true}
           />
         )}
 

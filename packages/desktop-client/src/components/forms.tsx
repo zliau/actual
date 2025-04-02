@@ -1,15 +1,10 @@
-import React, {
-  type ReactNode,
-  type ComponentProps,
-  type CSSProperties,
-} from 'react';
+import React, { type ReactNode, type ComponentProps } from 'react';
 
+import { type CSSProperties } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 import { css } from '@emotion/css';
-
-import { theme } from '../style';
-
-import { Text } from './common/Text';
-import { View } from './common/View';
 
 type SectionLabelProps = {
   title?: string;

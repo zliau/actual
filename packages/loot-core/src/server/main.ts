@@ -12,22 +12,12 @@ import * as connection from '../platform/server/connection';
 import * as fs from '../platform/server/fs';
 import { logger } from '../platform/server/log';
 import * as sqlite from '../platform/server/sqlite';
-import { isNonProductionEnvironment } from '../shared/environment';
-import * as monthUtils from '../shared/months';
-import { dayFromDate } from '../shared/months';
-import { q, Query } from '../shared/query';
-import { amountToInteger, stringToInteger } from '../shared/util';
+import { q } from '../shared/query';
 import { type Budget } from '../types/budget';
 import { Handlers } from '../types/handlers';
 import { OpenIdConfig } from '../types/models/openid';
 
-import { exportToCSV, exportQueryToCSV } from './accounts/export-to-csv';
-import * as link from './accounts/link';
-import { parseFile } from './accounts/parse-file';
-import { getStartingBalancePayee } from './accounts/payees';
-import * as bankSync from './accounts/sync';
-import * as rules from './accounts/transaction-rules';
-import { batchUpdateTransactions } from './accounts/transactions';
+import { app as accountsApp } from './accounts/app';
 import { app as adminApp } from './admin/app';
 import { installAPI } from './api';
 import {
@@ -50,12 +40,12 @@ import { app as dashboardApp } from './dashboard/app';
 import * as db from './db';
 import * as mappings from './db/mappings';
 import * as encryption from './encryption';
-import { APIError, TransactionError, PostError } from './errors';
 import { app as filtersApp } from './filters/app';
 import { handleBudgetImport } from './importers';
 import { app } from './main-app';
 import { mutator, runHandler } from './mutators';
 import { app as notesApp } from './notes/app';
+import { app as payeesApp } from './payees/app';
 import * as Platform from './platform';
 import { get, post } from './post';
 import { app as preferencesApp } from './preferences/app';
@@ -65,20 +55,21 @@ import { app as rulesApp } from './rules/app';
 import { app as schedulesApp } from './schedules/app';
 import { getServer, isValidBaseURL, setServer } from './server-config';
 import * as sheet from './sheet';
-import { resolveName, unresolveName } from './spreadsheet/util';
+import { app as spreadsheetApp } from './spreadsheet/app';
 import {
   initialFullSync,
   fullSync,
-  batchMessages,
   setSyncingMode,
   makeTestMessage,
   clearFullSyncTimeout,
   resetSync,
-  repairSync,
 } from './sync';
+import { app as syncApp } from './sync/app';
 import * as syncMigrations from './sync/migrate';
 import { app as toolsApp } from './tools/app';
-import { withUndo, clearUndo, undo, redo } from './undo';
+import { app as transactionsApp } from './transactions/app';
+import * as rules from './transactions/transaction-rules';
+import { clearUndo, undo, redo } from './undo';
 import { updateVersion } from './update';
 import {
   uniqueBudgetName,
@@ -114,448 +105,11 @@ handlers['redo'] = mutator(function () {
   return redo();
 });
 
-handlers['transactions-batch-update'] = mutator(async function ({
-  added,
-  deleted,
-  updated,
-  learnCategories,
+handlers['make-filters-from-conditions'] = async function ({
+  conditions,
+  applySpecialCases,
 }) {
-  return withUndo(async () => {
-    const result = await batchUpdateTransactions({
-      added,
-      updated,
-      deleted,
-      learnCategories,
-    });
-
-    return result;
-  });
-});
-
-handlers['transaction-add'] = mutator(async function (transaction) {
-  await handlers['transactions-batch-update']({ added: [transaction] });
-  return {};
-});
-
-handlers['transaction-update'] = mutator(async function (transaction) {
-  await handlers['transactions-batch-update']({ updated: [transaction] });
-  return {};
-});
-
-handlers['transaction-delete'] = mutator(async function (transaction) {
-  await handlers['transactions-batch-update']({ deleted: [transaction] });
-  return {};
-});
-
-handlers['transactions-parse-file'] = async function ({ filepath, options }) {
-  return parseFile(filepath, options);
-};
-
-handlers['transactions-export'] = async function ({
-  transactions,
-  accounts,
-  categoryGroups,
-  payees,
-}) {
-  return exportToCSV(transactions, accounts, categoryGroups, payees);
-};
-
-handlers['transactions-export-query'] = async function ({ query: queryState }) {
-  return exportQueryToCSV(new Query(queryState));
-};
-
-handlers['get-categories'] = async function () {
-  return {
-    grouped: await db.getCategoriesGrouped(),
-    list: await db.getCategories(),
-  };
-};
-
-handlers['get-earliest-transaction'] = async function () {
-  const { data } = await aqlQuery(
-    q('transactions')
-      .options({ splits: 'none' })
-      .orderBy({ date: 'asc' })
-      .select('*')
-      .limit(1),
-  );
-  return data[0] || null;
-};
-
-handlers['get-budget-bounds'] = async function () {
-  return budget.createAllBudgets();
-};
-
-handlers['envelope-budget-month'] = async function ({ month }) {
-  const groups = await db.getCategoriesGrouped();
-  const sheetName = monthUtils.sheetForMonth(month);
-
-  function value(name) {
-    const v = sheet.getCellValue(sheetName, name);
-    return { value: v === '' ? 0 : v, name: resolveName(sheetName, name) };
-  }
-
-  let values = [
-    value('available-funds'),
-    value('last-month-overspent'),
-    value('buffered'),
-    value('total-budgeted'),
-    value('to-budget'),
-
-    value('from-last-month'),
-    value('total-income'),
-    value('total-spent'),
-    value('total-leftover'),
-  ];
-
-  for (const group of groups) {
-    if (group.is_income) {
-      values.push(value('total-income'));
-
-      for (const cat of group.categories) {
-        values.push(value(`sum-amount-${cat.id}`));
-      }
-    } else {
-      values = values.concat([
-        value(`group-budget-${group.id}`),
-        value(`group-sum-amount-${group.id}`),
-        value(`group-leftover-${group.id}`),
-      ]);
-
-      for (const cat of group.categories) {
-        values = values.concat([
-          value(`budget-${cat.id}`),
-          value(`sum-amount-${cat.id}`),
-          value(`leftover-${cat.id}`),
-          value(`carryover-${cat.id}`),
-          value(`goal-${cat.id}`),
-          value(`long-goal-${cat.id}`),
-        ]);
-      }
-    }
-  }
-
-  return values;
-};
-
-handlers['tracking-budget-month'] = async function ({ month }) {
-  const groups = await db.getCategoriesGrouped();
-  const sheetName = monthUtils.sheetForMonth(month);
-
-  function value(name) {
-    const v = sheet.getCellValue(sheetName, name);
-    return { value: v === '' ? 0 : v, name: resolveName(sheetName, name) };
-  }
-
-  let values = [
-    value('total-budgeted'),
-    value('total-budget-income'),
-    value('total-saved'),
-    value('total-income'),
-    value('total-spent'),
-    value('real-saved'),
-    value('total-leftover'),
-  ];
-
-  for (const group of groups) {
-    values = values.concat([
-      value(`group-budget-${group.id}`),
-      value(`group-sum-amount-${group.id}`),
-      value(`group-leftover-${group.id}`),
-    ]);
-
-    for (const cat of group.categories) {
-      values = values.concat([
-        value(`budget-${cat.id}`),
-        value(`sum-amount-${cat.id}`),
-        value(`leftover-${cat.id}`),
-        value(`goal-${cat.id}`),
-        value(`long-goal-${cat.id}`),
-      ]);
-
-      if (!group.is_income) {
-        values.push(value(`carryover-${cat.id}`));
-      }
-    }
-  }
-
-  return values;
-};
-
-handlers['category-create'] = mutator(async function ({
-  name,
-  groupId,
-  isIncome,
-  hidden,
-}) {
-  return withUndo(async () => {
-    if (!groupId) {
-      throw APIError('Creating a category: groupId is required');
-    }
-
-    return db.insertCategory({
-      name: name.trim(),
-      cat_group: groupId,
-      is_income: isIncome ? 1 : 0,
-      hidden: hidden ? 1 : 0,
-    });
-  });
-});
-
-handlers['category-update'] = mutator(async function (category) {
-  return withUndo(async () => {
-    try {
-      await db.updateCategory({
-        ...category,
-        name: category.name.trim(),
-      });
-    } catch (e) {
-      if (e.message.toLowerCase().includes('unique constraint')) {
-        return { error: { type: 'category-exists' } };
-      }
-      throw e;
-    }
-    return {};
-  });
-});
-
-handlers['category-move'] = mutator(async function ({ id, groupId, targetId }) {
-  return withUndo(async () => {
-    await batchMessages(async () => {
-      await db.moveCategory(id, groupId, targetId);
-    });
-    return 'ok';
-  });
-});
-
-handlers['category-delete'] = mutator(async function ({ id, transferId }) {
-  return withUndo(async () => {
-    let result = {};
-    await batchMessages(async () => {
-      const row = await db.first(
-        'SELECT is_income FROM categories WHERE id = ?',
-        [id],
-      );
-      if (!row) {
-        result = { error: 'no-categories' };
-        return;
-      }
-
-      const transfer =
-        transferId &&
-        (await db.first('SELECT is_income FROM categories WHERE id = ?', [
-          transferId,
-        ]));
-
-      if (!row || (transferId && !transfer)) {
-        result = { error: 'no-categories' };
-        return;
-      } else if (transferId && row.is_income !== transfer.is_income) {
-        result = { error: 'category-type' };
-        return;
-      }
-
-      // Update spreadsheet values if it's an expense category
-      // TODO: We should do this for income too if it's a reflect budget
-      if (row.is_income === 0) {
-        if (transferId) {
-          await budget.doTransfer([id], transferId);
-        }
-      }
-
-      await db.deleteCategory({ id }, transferId);
-    });
-
-    return result;
-  });
-});
-
-handlers['get-category-groups'] = async function () {
-  return await db.getCategoriesGrouped();
-};
-
-handlers['category-group-create'] = mutator(async function ({
-  name,
-  isIncome,
-}) {
-  return withUndo(async () => {
-    return db.insertCategoryGroup({
-      name,
-      is_income: isIncome ? 1 : 0,
-    });
-  });
-});
-
-handlers['category-group-update'] = mutator(async function (group) {
-  return withUndo(async () => {
-    return db.updateCategoryGroup(group);
-  });
-});
-
-handlers['category-group-move'] = mutator(async function ({ id, targetId }) {
-  return withUndo(async () => {
-    await batchMessages(async () => {
-      await db.moveCategoryGroup(id, targetId);
-    });
-    return 'ok';
-  });
-});
-
-handlers['category-group-delete'] = mutator(async function ({
-  id,
-  transferId,
-}) {
-  return withUndo(async () => {
-    const groupCategories = await db.all(
-      'SELECT id FROM categories WHERE cat_group = ? AND tombstone = 0',
-      [id],
-    );
-
-    return batchMessages(async () => {
-      if (transferId) {
-        await budget.doTransfer(
-          groupCategories.map(c => c.id),
-          transferId,
-        );
-      }
-      await db.deleteCategoryGroup({ id }, transferId);
-    });
-  });
-});
-
-handlers['must-category-transfer'] = async function ({ id }) {
-  const res = await db.runQuery(
-    `SELECT count(t.id) as count FROM transactions t
-       LEFT JOIN category_mapping cm ON cm.id = t.category
-       WHERE cm.transferId = ? AND t.tombstone = 0`,
-    [id],
-    true,
-  );
-
-  // If there are transactions with this category, return early since
-  // we already know it needs to be tranferred
-  if (res[0].count !== 0) {
-    return true;
-  }
-
-  // If there are any non-zero budget values, also force the user to
-  // transfer the category.
-  return [...sheet.get().meta().createdMonths].some(month => {
-    const sheetName = monthUtils.sheetForMonth(month);
-    const value = sheet.get().getCellValue(sheetName, 'budget-' + id);
-
-    return value != null && value !== 0;
-  });
-};
-
-handlers['payee-create'] = mutator(async function ({ name }) {
-  return withUndo(async () => {
-    return db.insertPayee({ name });
-  });
-});
-
-handlers['common-payees-get'] = async function () {
-  return db.getCommonPayees();
-};
-
-handlers['payees-get'] = async function () {
-  return db.getPayees();
-};
-
-handlers['payees-get-orphaned'] = async function () {
-  return db.syncGetOrphanedPayees();
-};
-
-handlers['payees-get-rule-counts'] = async function () {
-  const payeeCounts = {};
-
-  rules.iterateIds(rules.getRules(), 'payee', (rule, id) => {
-    if (payeeCounts[id] == null) {
-      payeeCounts[id] = 0;
-    }
-    payeeCounts[id]++;
-  });
-
-  return payeeCounts;
-};
-
-handlers['payees-merge'] = mutator(async function ({ targetId, mergeIds }) {
-  return withUndo(
-    async () => {
-      return db.mergePayees(targetId, mergeIds);
-    },
-    { targetId, mergeIds },
-  );
-});
-
-handlers['payees-batch-change'] = mutator(async function ({
-  added,
-  deleted,
-  updated,
-}) {
-  return withUndo(async () => {
-    return batchMessages(async () => {
-      if (deleted) {
-        await Promise.all(deleted.map(p => db.deletePayee(p)));
-      }
-
-      if (added) {
-        await Promise.all(added.map(p => db.insertPayee(p)));
-      }
-
-      if (updated) {
-        await Promise.all(updated.map(p => db.updatePayee(p)));
-      }
-    });
-  });
-});
-
-handlers['payees-check-orphaned'] = async function ({ ids }) {
-  const orphaned = new Set(await db.getOrphanedPayees());
-  return ids.filter(id => orphaned.has(id));
-};
-
-handlers['payees-get-rules'] = async function ({ id }) {
-  return rules.getRulesForPayee(id).map(rule => rule.serialize());
-};
-
-handlers['make-filters-from-conditions'] = async function ({ conditions }) {
-  return rules.conditionsToAQL(conditions);
-};
-
-handlers['getCell'] = async function ({ sheetName, name }) {
-  const node = sheet.get()._getNode(resolveName(sheetName, name));
-  return { name: node.name, value: node.value };
-};
-
-handlers['getCells'] = async function ({ names }) {
-  return names.map(name => ({ value: sheet.get()._getNode(name).value }));
-};
-
-handlers['getCellNamesInSheet'] = async function ({ sheetName }) {
-  const names = [];
-  for (const name of sheet.get().getNodes().keys()) {
-    const { sheet: nodeSheet, name: nodeName } = unresolveName(name);
-    if (nodeSheet === sheetName) {
-      names.push(nodeName);
-    }
-  }
-  return names;
-};
-
-handlers['debugCell'] = async function ({ sheetName, name }) {
-  const node = sheet.get().getNode(resolveName(sheetName, name));
-  return {
-    ...node,
-    _run: node._run && node._run.toString(),
-  };
-};
-
-handlers['create-query'] = async function ({ sheetName, name, query }) {
-  // Always run it regardless of cache. We don't know anything has changed
-  // between the cache value being saved and now
-  sheet.get().createQuery(sheetName, name, query);
-  return 'ok';
+  return rules.conditionsToAQL(conditions, { applySpecialCases });
 };
 
 handlers['query'] = async function (query) {
@@ -1850,10 +1404,6 @@ handlers['set-server-url'] = async function ({ url, validate = true }) {
   return {};
 };
 
-handlers['sync'] = async function () {
-  return fullSync();
-};
-
 handlers['validate-budget-name'] = async function ({ name }) {
   return validateBudgetName(name);
 };
@@ -2118,7 +1668,7 @@ handlers['duplicate-budget'] = async function ({
         await fs.removeDirRecursively(newBudgetDir);
       }
     } catch {} // Ignore cleanup errors
-    throw new Error(`Failed to duplicate budget: ${error.message}`);
+    throw new Error(`Failed to duplicate budget file: ${error.message}`);
   }
 
   // load in and validate
@@ -2285,23 +1835,6 @@ handlers['get-openid-config'] = async function () {
   }
 };
 
-handlers['enable-openid'] = async function (loginConfig) {
-  try {
-    const userToken = await asyncStorage.getItem('user-token');
-
-    if (!userToken) {
-      return { error: 'unauthorized' };
-    }
-
-    await post(getServer().BASE_SERVER + '/openid/enable', loginConfig, {
-      'X-ACTUAL-TOKEN': userToken,
-    });
-  } catch (err) {
-    return { error: err.reason || 'network-failure' };
-  }
-  return {};
-};
-
 handlers['enable-password'] = async function (loginConfig) {
   try {
     const userToken = await asyncStorage.getItem('user-token');
@@ -2425,9 +1958,10 @@ async function loadBudget(id: string) {
 
   // This is a bit leaky, but we need to set the initial budget type
   const { value: budgetType = 'rollover' } =
-    (await db.first('SELECT value from preferences WHERE id = ?', [
-      'budgetType',
-    ])) ?? {};
+    (await db.first<Pick<db.DbPreference, 'value'>>(
+      'SELECT value from preferences WHERE id = ?',
+      ['budgetType'],
+    )) ?? {};
   sheet.get().meta().budgetType = budgetType;
   await budget.createAllBudgets();
 
@@ -2523,9 +2057,14 @@ app.combine(
   reportsApp,
   rulesApp,
   adminApp,
+  transactionsApp,
+  accountsApp,
+  payeesApp,
+  spreadsheetApp,
+  syncApp,
 );
 
-function getDefaultDocumentDir() {
+export function getDefaultDocumentDir() {
   if (Platform.isMobile) {
     // On mobile, unfortunately we need to be backwards compatible
     // with the old folder structure which does not store files inside

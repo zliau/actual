@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 
+// eslint-disable-next-line no-restricted-imports -- fix me -- do not import @actual-app/web in loot-core
+import { useSyncedPref } from '@actual-app/web/src/hooks/useSyncedPref';
+import * as d from 'date-fns';
 import debounce from 'lodash/debounce';
 
 import { send } from '../../platform/client/fetch';
+import { currentDay, addDays, parseDate } from '../../shared/months';
 import { type Query } from '../../shared/query';
-import { getScheduledAmount } from '../../shared/schedules';
+import {
+  getScheduledAmount,
+  extractScheduleConds,
+  getNextDate,
+  getUpcomingDays,
+  scheduleIsRecurring,
+} from '../../shared/schedules';
 import { ungroupTransactions } from '../../shared/transactions';
 import {
   type ScheduleEntity,
@@ -16,6 +26,10 @@ import { type PagedQuery, pagedQuery } from '../query-helpers';
 import { type ScheduleStatuses, useCachedSchedules } from './schedules';
 
 type UseTransactionsProps = {
+  /**
+   * The Query class is immutable so it is important to memoize the query object
+   * to prevent unnecessary re-renders i.e. `useMemo`, `useState`, etc.
+   */
   query?: Query;
   options?: {
     pageCount?: number;
@@ -81,7 +95,9 @@ export function useTransactions({
         }
       },
       onError,
-      options: { pageCount: optionsRef.current.pageCount },
+      options: optionsRef.current.pageCount
+        ? { pageCount: optionsRef.current.pageCount }
+        : {},
     });
 
     return () => {
@@ -112,7 +128,7 @@ export function useTransactions({
   return {
     transactions,
     isLoading,
-    error,
+    ...(error && { error }),
     reload,
     loadMore,
     isLoadingMore,
@@ -138,6 +154,8 @@ export function usePreviewTransactions(): UsePreviewTransactionsResult {
   const [isLoading, setIsLoading] = useState(isSchedulesLoading);
   const [error, setError] = useState<Error | undefined>(undefined);
 
+  const [upcomingLength] = useSyncedPref('upcomingScheduledTransactionLength');
+
   const scheduleTransactions = useMemo(() => {
     if (isSchedulesLoading) {
       return [];
@@ -148,15 +166,73 @@ export function usePreviewTransactions(): UsePreviewTransactionsResult {
       isForPreview(s, statuses),
     );
 
-    return schedulesForPreview.map(schedule => ({
-      id: 'preview/' + schedule.id,
-      payee: schedule._payee,
-      account: schedule._account,
-      amount: getScheduledAmount(schedule._amount),
-      date: schedule.next_date,
-      schedule: schedule.id,
-    }));
-  }, [isSchedulesLoading, schedules, statuses]);
+    const today = d.startOfDay(parseDate(currentDay()));
+
+    const upcomingPeriodEnd = d.startOfDay(
+      parseDate(addDays(today, getUpcomingDays(upcomingLength))),
+    );
+
+    return schedulesForPreview
+      .map(schedule => {
+        const { date: dateConditions } = extractScheduleConds(
+          schedule._conditions,
+        );
+
+        const status = statuses.get(schedule.id);
+        const isRecurring = scheduleIsRecurring(dateConditions);
+
+        const dates: string[] = [schedule.next_date];
+        let day = d.startOfDay(parseDate(schedule.next_date));
+        if (isRecurring) {
+          while (day <= upcomingPeriodEnd) {
+            const nextDate = getNextDate(dateConditions, day);
+
+            if (d.startOfDay(parseDate(nextDate)) > upcomingPeriodEnd) break;
+
+            if (dates.includes(nextDate)) {
+              day = d.startOfDay(parseDate(addDays(day, 1)));
+              continue;
+            }
+
+            dates.push(nextDate);
+            day = d.startOfDay(parseDate(addDays(nextDate, 1)));
+          }
+        }
+
+        if (status === 'paid') {
+          dates.shift();
+        }
+
+        const schedules: {
+          id: string;
+          payee: string;
+          account: string;
+          amount: number;
+          date: string;
+          schedule: string;
+          forceUpcoming: boolean;
+        }[] = [];
+        dates.forEach(date => {
+          schedules.push({
+            id: 'preview/' + schedule.id + `/${date}`,
+            payee: schedule._payee,
+            account: schedule._account,
+            amount: getScheduledAmount(schedule._amount),
+            date,
+            schedule: schedule.id,
+            forceUpcoming: date !== schedule.next_date || status === 'paid',
+          });
+        });
+
+        return schedules;
+      })
+      .flat()
+      .sort(
+        (a, b) =>
+          parseDate(b.date).getTime() - parseDate(a.date).getTime() ||
+          a.amount - b.amount,
+      );
+  }, [isSchedulesLoading, schedules, statuses, upcomingLength]);
 
   useEffect(() => {
     let isUnmounted = false;
@@ -179,7 +255,7 @@ export function usePreviewTransactions(): UsePreviewTransactionsResult {
         if (!isUnmounted) {
           const withDefaults = newTrans.map(t => ({
             ...t,
-            category: statuses.get(t.schedule),
+            category: t.schedule != null ? statuses.get(t.schedule) : undefined,
             schedule: t.schedule,
             subtransactions: t.subtransactions?.map(
               (st: TransactionEntity) => ({
@@ -204,12 +280,13 @@ export function usePreviewTransactions(): UsePreviewTransactionsResult {
     return () => {
       isUnmounted = true;
     };
-  }, [scheduleTransactions, schedules, statuses]);
+  }, [scheduleTransactions, schedules, statuses, upcomingLength]);
 
+  const returnError = error || scheduleQueryError;
   return {
     data: previewTransactions,
     isLoading: isLoading || isSchedulesLoading,
-    error: error || scheduleQueryError,
+    ...(returnError && { error: returnError }),
   };
 }
 
@@ -240,6 +317,7 @@ export function useTransactionsSearch({
           resetQuery();
           setIsSearching(false);
         } else if (searchText) {
+          resetQuery();
           updateQuery(previousQuery =>
             queries.transactionsSearch(previousQuery, searchText, dateFormat),
           );
@@ -263,6 +341,6 @@ function isForPreview(schedule: ScheduleEntity, statuses: ScheduleStatuses) {
   const status = statuses.get(schedule.id);
   return (
     !schedule.completed &&
-    (status === 'due' || status === 'upcoming' || status === 'missed')
+    ['due', 'upcoming', 'missed', 'paid'].includes(status!)
   );
 }

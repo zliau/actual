@@ -1,10 +1,11 @@
 import { Trans, useTranslation } from 'react-i18next';
 
-import { theme } from '../../style';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
 import { Link } from '../common/Link';
 import { Modal, ModalCloseButton, ModalHeader } from '../common/Modal';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
 import { TableHeader, Row, Field } from '../table';
 
 export function GoalTemplateModal() {

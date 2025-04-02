@@ -1,8 +1,8 @@
-import { runQuery } from 'loot-core/src/client/query-helpers';
-import { type useSpreadsheet } from 'loot-core/src/client/SpreadsheetProvider';
-import { send } from 'loot-core/src/platform/client/fetch';
-import * as monthUtils from 'loot-core/src/shared/months';
-import { type GroupedEntity } from 'loot-core/src/types/models/reports';
+import { runQuery } from 'loot-core/client/query-helpers';
+import { type useSpreadsheet } from 'loot-core/client/SpreadsheetProvider';
+import { send } from 'loot-core/platform/client/fetch';
+import * as monthUtils from 'loot-core/shared/months';
+import { type GroupedEntity } from 'loot-core/types/models';
 
 import {
   categoryLists,
@@ -14,6 +14,7 @@ import { type createCustomSpreadsheetProps } from './custom-spreadsheet';
 import { filterEmptyRows } from './filterEmptyRows';
 import { makeQuery } from './makeQuery';
 import { recalculate } from './recalculate';
+import { sortData } from './sortData';
 
 export function createGroupedSpreadsheet({
   startDate,
@@ -27,6 +28,7 @@ export function createGroupedSpreadsheet({
   showHiddenCategories,
   showUncategorized,
   balanceTypeOp,
+  sortByOp,
   firstDayOfWeekIdx,
 }: createCustomSpreadsheetProps) {
   const [categoryList, categoryGroup] = categoryLists(categories);
@@ -135,10 +137,20 @@ export function createGroupedSpreadsheet({
       },
       [startDate, endDate],
     );
-    setData(
-      groupedData.filter(i =>
-        filterEmptyRows({ showEmpty, data: i, balanceTypeOp }),
-      ),
+
+    const groupedDataFiltered = groupedData.filter(i =>
+      filterEmptyRows({ showEmpty, data: i, balanceTypeOp }),
     );
+
+    const sortedGroupedDataFiltered = [...groupedDataFiltered]
+      .sort(sortData({ balanceTypeOp, sortByOp }))
+      .map(g => {
+        g.categories = [...(g.categories ?? [])].sort(
+          sortData({ balanceTypeOp, sortByOp }),
+        );
+        return g;
+      });
+
+    setData(sortedGroupedDataFiltered);
   };
 }

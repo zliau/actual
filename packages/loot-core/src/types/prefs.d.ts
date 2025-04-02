@@ -1,10 +1,11 @@
 export type FeatureFlag =
   | 'goalTemplatesEnabled'
+  | 'goalTemplatesUIEnabled'
   | 'actionTemplating'
-  | 'upcomingLengthAdjustment'
   | 'contextMenus'
   | 'openidAuth'
-  | 'multiCurrency';
+  | 'multiCurrency'
+  | 'pluggyAiBankSync';
 
 /**
  * Cross-device preferences. These sync across devices when they are changed.
@@ -31,9 +32,14 @@ export type SyncedPrefs = Partial<
     | `csv-in-out-mode-${string}`
     | `csv-out-value-${string}`
     | `csv-has-header-${string}`
+    | `custom-sync-mappings-${string}`
+    | `sync-import-pending-${string}`
+    | `sync-reimport-deleted-${string}`
+    | `sync-import-notes-${string}`
     | `ofx-fallback-missing-payee-${string}`
     | `flip-amount-${string}-${'csv' | 'qif'}`
-    | `flags.${FeatureFlag}`,
+    | `flags.${FeatureFlag}`
+    | `learn-categories`,
     string
   >
 >;
@@ -75,14 +81,47 @@ export type LocalPrefs = Partial<{
 
 export type Theme = 'light' | 'dark' | 'auto' | 'midnight' | 'development';
 export type DarkTheme = 'dark' | 'midnight';
+
+// GlobalPrefs are the parsed global-store.json values
 export type GlobalPrefs = Partial<{
   floatingSidebar: boolean;
   maxMonths: number;
   keyId?: string;
+  language: string;
   theme: Theme;
   preferredDarkTheme: DarkTheme;
   documentDir: string; // Electron only
   serverSelfSignedCert: string; // Electron only
+  syncServerConfig?: {
+    // Electron only
+    autoStart?: boolean;
+    port?: number;
+    ngrokConfig?: {
+      domain?: string;
+      authToken?: string;
+    };
+  };
+}>;
+
+// GlobalPrefsJson represents what's saved in the global-store.json file
+export type GlobalPrefsJson = Partial<{
+  'user-id'?: string;
+  'user-key'?: string;
+  'encrypt-keys'?: string;
+  lastBudget?: string;
+  readOnly?: string;
+  'server-url'?: string;
+  'did-bootstrap'?: boolean;
+  'user-token'?: string;
+  'floating-sidebar'?: string; // "true" or "false"
+  'max-months'?: string; // e.g. "2" or "3"
+  'document-dir'?: GlobalPrefs['documentDir'];
+  'encrypt-key'?: string;
+  language?: GlobalPrefs['language'];
+  theme?: GlobalPrefs['theme'];
+  'preferred-dark-theme'?: GlobalPrefs['preferredDarkTheme'];
+  'server-self-signed-cert'?: GlobalPrefs['serverSelfSignedCert'];
+  syncServerConfig?: GlobalPrefs['syncServerConfig'];
 }>;
 
 export type AuthMethods = 'password' | 'openid';

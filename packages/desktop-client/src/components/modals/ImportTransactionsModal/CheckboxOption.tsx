@@ -4,8 +4,9 @@ import React, {
   type ReactNode,
 } from 'react';
 
-import { theme } from '../../../style';
-import { View } from '../../common/View';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
 import { Checkbox } from '../../forms';
 
 type CheckboxOptionProps = {

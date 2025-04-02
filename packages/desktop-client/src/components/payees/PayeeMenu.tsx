@@ -1,12 +1,14 @@
 import { useTranslation, Trans } from 'react-i18next';
 
-import { type PayeeEntity } from 'loot-core/src/types/models';
+import { SvgDelete, SvgMerge } from '@actual-app/components/icons/v0';
+import { SvgBookmark, SvgLightBulb } from '@actual-app/components/icons/v1';
+import { Menu, type MenuItem } from '@actual-app/components/menu';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { SvgDelete, SvgMerge } from '../../icons/v0';
-import { SvgBookmark } from '../../icons/v1';
-import { theme } from '../../style';
-import { Menu } from '../common/Menu';
-import { View } from '../common/View';
+import { type PayeeEntity } from 'loot-core/types/models';
+
+import { useSyncedPref } from '../../hooks/useSyncedPref';
 
 type PayeeMenuProps = {
   payeesById: Record<PayeeEntity['id'], PayeeEntity>;
@@ -14,6 +16,7 @@ type PayeeMenuProps = {
   onDelete: () => void;
   onMerge: () => Promise<void>;
   onFavorite: () => void;
+  onLearn: () => void;
   onClose: () => void;
 };
 
@@ -23,9 +26,12 @@ export function PayeeMenu({
   onDelete,
   onMerge,
   onFavorite,
+  onLearn,
   onClose,
 }: PayeeMenuProps) {
   const { t } = useTranslation();
+  const [learnCategories = 'true'] = useSyncedPref('learn-categories');
+  const isLearnCategoriesEnabled = String(learnCategories) === 'true';
 
   // Transfer accounts are never editable
   const isDisabled = [...selectedPayees].some(
@@ -36,6 +42,41 @@ export function PayeeMenu({
     .slice(0, 4)
     .map(id => payeesById[id].name)
     .join(', ');
+
+  const items: MenuItem[] = [
+    {
+      icon: SvgDelete,
+      name: 'delete',
+      text: t('Delete'),
+      disabled: isDisabled,
+    },
+    {
+      icon: SvgBookmark,
+      iconSize: 9,
+      name: 'favorite',
+      text: t('Favorite'),
+      disabled: isDisabled,
+    },
+    {
+      icon: SvgMerge,
+      iconSize: 9,
+      name: 'merge',
+      text: t('Merge'),
+      disabled: isDisabled || selectedPayees.size < 2,
+    },
+  ];
+
+  if (isLearnCategoriesEnabled) {
+    items.push({
+      icon: SvgLightBulb,
+      iconSize: 9,
+      name: 'learn',
+      text: t('Category Learning'),
+      disabled: isDisabled,
+    });
+  }
+
+  items.push(Menu.line);
 
   return (
     <Menu
@@ -50,6 +91,9 @@ export function PayeeMenu({
             break;
           case 'favorite':
             onFavorite();
+            break;
+          case 'learn':
+            onLearn();
             break;
           default:
         }
@@ -70,29 +114,7 @@ export function PayeeMenu({
           )}
         </View>
       }
-      items={[
-        {
-          icon: SvgDelete,
-          name: 'delete',
-          text: t('Delete'),
-          disabled: isDisabled,
-        },
-        {
-          icon: SvgBookmark,
-          iconSize: 9,
-          name: 'favorite',
-          text: t('Favorite'),
-          disabled: isDisabled,
-        },
-        {
-          icon: SvgMerge,
-          iconSize: 9,
-          name: 'merge',
-          text: t('Merge'),
-          disabled: isDisabled || selectedPayees.size < 2,
-        },
-        Menu.line,
-      ]}
+      items={items}
     />
   );
 }

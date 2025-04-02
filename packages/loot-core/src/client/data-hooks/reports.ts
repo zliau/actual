@@ -18,6 +18,7 @@ function toJS(rows: CustomReportData[]) {
       dateRange: row.date_range,
       mode: row.mode,
       groupBy: row.group_by,
+      sortBy: row.sort_by,
       interval: row.interval,
       balanceType: row.balance_type,
       showEmpty: row.show_empty === 1,
@@ -26,9 +27,9 @@ function toJS(rows: CustomReportData[]) {
       includeCurrentInterval: row.include_current === 1,
       showUncategorized: row.show_uncategorized === 1,
       graphType: row.graph_type,
-      conditions: row.conditions,
+      ...(row.conditions && { conditions: row.conditions }),
       conditionsOp: row.conditions_op ?? 'and',
-      data: row.metadata,
+      ...(row.metadata && { metadata: row.metadata }),
     };
     return report;
   });

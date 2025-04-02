@@ -1,23 +1,22 @@
 import * as d from 'date-fns';
 
-import { runQuery } from 'loot-core/src/client/query-helpers';
-import { type useSpreadsheet } from 'loot-core/src/client/SpreadsheetProvider';
-import { send } from 'loot-core/src/platform/client/fetch';
-import * as monthUtils from 'loot-core/src/shared/months';
-import { integerToAmount } from 'loot-core/src/shared/util';
+import { runQuery } from 'loot-core/client/query-helpers';
+import { type useSpreadsheet } from 'loot-core/client/SpreadsheetProvider';
+import { send } from 'loot-core/platform/client/fetch';
+import * as monthUtils from 'loot-core/shared/months';
+import { integerToAmount } from 'loot-core/shared/util';
 import {
   type AccountEntity,
   type PayeeEntity,
   type CategoryEntity,
   type RuleConditionEntity,
   type CategoryGroupEntity,
-} from 'loot-core/src/types/models';
-import {
   type balanceTypeOpType,
+  type sortByOpType,
   type DataEntity,
   type GroupedEntity,
   type IntervalEntity,
-} from 'loot-core/src/types/models/reports';
+} from 'loot-core/types/models';
 import { type SyncedPrefs } from 'loot-core/types/prefs';
 
 import {
@@ -33,6 +32,7 @@ import { filterEmptyRows } from './filterEmptyRows';
 import { filterHiddenItems } from './filterHiddenItems';
 import { makeQuery } from './makeQuery';
 import { recalculate } from './recalculate';
+import { sortData } from './sortData';
 
 export type createCustomSpreadsheetProps = {
   startDate: string;
@@ -47,6 +47,7 @@ export type createCustomSpreadsheetProps = {
   showUncategorized: boolean;
   groupBy?: string;
   balanceTypeOp?: balanceTypeOpType;
+  sortByOp?: sortByOpType;
   payees?: PayeeEntity[];
   accounts?: AccountEntity[];
   graphType?: string;
@@ -67,6 +68,7 @@ export function createCustomSpreadsheet({
   showUncategorized,
   groupBy = '',
   balanceTypeOp = 'totalDebts',
+  sortByOp = 'desc',
   payees = [],
   accounts = [],
   graphType,
@@ -273,16 +275,20 @@ export function createCustomSpreadsheet({
       filterEmptyRows({ showEmpty, data: i, balanceTypeOp }),
     );
 
+    const sortedCalcDataFiltered = [...calcDataFiltered].sort(
+      sortData({ balanceTypeOp, sortByOp }),
+    );
+
     const legend = calculateLegend(
       intervalData,
-      calcDataFiltered,
+      sortedCalcDataFiltered,
       groupBy,
       graphType,
       balanceTypeOp,
     );
 
     setData({
-      data: calcDataFiltered,
+      data: sortedCalcDataFiltered,
       intervalData,
       legend,
       startDate,

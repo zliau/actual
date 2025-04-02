@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
-import { SvgPencil1 } from '../icons/v2';
-import { theme } from '../style';
-
-import { Button } from './common/Button2';
-import { InitialFocus } from './common/InitialFocus';
-import { Input } from './common/Input';
-import { View } from './common/View';
+import { Button } from '@actual-app/components/button';
+import { SvgPencil1 } from '@actual-app/components/icons/v2';
+import { InitialFocus } from '@actual-app/components/initial-focus';
+import { Input } from '@actual-app/components/input';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
 type EditablePageHeaderTitleProps = {
   title: string;

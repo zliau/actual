@@ -19,18 +19,18 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "jsx": "preserve",
-    "types": ["vite/client", "jest"],
+    "types": ["vite/client", "jest", "vitest/globals"],
     // Check JS files too
     "allowJs": true,
     "checkJs": false,
     // Used for temp builds
     "outDir": "build",
-    "moduleResolution": "Node10",
-    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "module": "es2022",
     // Until/if we build using tsc
     "noEmit": true,
     "paths": {
-      // until we turn on composite/references
+      // TEMPORARY: Until we can fix the "exports" in the loot-core package.json
       "loot-core/*": ["./packages/loot-core/src/*"]
     },
     "plugins": [
@@ -40,7 +40,7 @@
       }
     ]
   },
-  "include": ["packages/**/*"],
+  "include": ["packages/**/*", "bin/*.ts"],
   "exclude": [
     "node_modules",
     "**/node_modules/*",

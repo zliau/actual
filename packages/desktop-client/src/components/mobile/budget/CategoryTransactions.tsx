@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
-import { getPayees } from 'loot-core/client/actions';
+import { TextOneLine } from '@actual-app/components/text-one-line';
+import { View } from '@actual-app/components/view';
+
+import { SchedulesProvider } from 'loot-core/client/data-hooks/schedules';
 import {
   useTransactions,
   useTransactionsSearch,
@@ -16,10 +19,9 @@ import {
 } from 'loot-core/types/models';
 
 import { useDateFormat } from '../../../hooks/useDateFormat';
+import { useLocale } from '../../../hooks/useLocale';
 import { useNavigate } from '../../../hooks/useNavigate';
 import { useDispatch } from '../../../redux';
-import { TextOneLine } from '../../common/TextOneLine';
-import { View } from '../../common/View';
 import { MobilePageHeader, Page } from '../../Page';
 import { MobileBackButton } from '../MobileBackButton';
 import { AddTransactionButton } from '../transactions/AddTransactionButton';
@@ -34,6 +36,7 @@ export function CategoryTransactions({
   category,
   month,
 }: CategoryTransactionsProps) {
+  const locale = useLocale();
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
@@ -72,10 +75,6 @@ export function CategoryTransactions({
         ) {
           reloadTransactions();
         }
-
-        if (tables.includes('payees') || tables.includes('payee_mapping')) {
-          dispatch(getPayees());
-        }
       }
     });
   }, [dispatch, reloadTransactions]);
@@ -108,7 +107,7 @@ export function CategoryTransactions({
             <View>
               <TextOneLine>{category.name}</TextOneLine>
               <TextOneLine>
-                ({monthUtils.format(month, 'MMMM ‘yy')})
+                ({monthUtils.format(month, 'MMMM ‘yy', locale)})
               </TextOneLine>
             </View>
           }
@@ -118,19 +117,22 @@ export function CategoryTransactions({
       }
       padding={0}
     >
-      <TransactionListWithBalances
-        isLoading={isLoading}
-        transactions={transactions}
-        balance={balance}
-        balanceCleared={balanceCleared}
-        balanceUncleared={balanceUncleared}
-        searchPlaceholder={`Search ${category.name}`}
-        onSearch={onSearch}
-        isLoadingMore={isLoadingMore}
-        onLoadMore={loadMoreTransactions}
-        onOpenTransaction={onOpenTransaction}
-        onRefresh={undefined}
-      />
+      <SchedulesProvider>
+        <TransactionListWithBalances
+          isLoading={isLoading}
+          transactions={transactions}
+          balance={balance}
+          balanceCleared={balanceCleared}
+          balanceUncleared={balanceUncleared}
+          searchPlaceholder={`Search ${category.name}`}
+          onSearch={onSearch}
+          isLoadingMore={isLoadingMore}
+          onLoadMore={loadMoreTransactions}
+          onOpenTransaction={onOpenTransaction}
+          onRefresh={undefined}
+          account={undefined}
+        />
+      </SchedulesProvider>
     </Page>
   );
 }

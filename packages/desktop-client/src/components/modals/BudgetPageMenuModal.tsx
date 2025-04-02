@@ -4,12 +4,19 @@ import React, {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Menu } from '@actual-app/components/menu';
+import { styles } from '@actual-app/components/styles';
+import { theme } from '@actual-app/components/theme';
+
+import { type Modal as ModalType } from 'loot-core/client/modals/modalsSlice';
+
 import { useLocalPref } from '../../hooks/useLocalPref';
-import { theme, styles } from '../../style';
-import { Menu } from '../common/Menu';
 import { Modal, ModalCloseButton, ModalHeader } from '../common/Modal';
 
-type BudgetPageMenuModalProps = ComponentPropsWithoutRef<typeof BudgetPageMenu>;
+type BudgetPageMenuModalProps = Extract<
+  ModalType,
+  { name: 'budget-page-menu' }
+>['options'];
 
 export function BudgetPageMenuModal({
   onAddCategoryGroup,
@@ -91,7 +98,7 @@ function BudgetPageMenu({
         },
         {
           name: 'toggle-hidden-categories',
-          text: `${!showHiddenCategories ? t('Show') : t('Hide')} ${t('hidden categories')}`,
+          text: `${!showHiddenCategories ? t('Show hidden categories') : t('Hide hidden categories')}`,
         },
         {
           name: 'switch-budget-file',

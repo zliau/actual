@@ -1,7 +1,6 @@
-import { useState, useRef, useLayoutEffect, useMemo } from 'react';
+import { useState, useRef, useLayoutEffect } from 'react';
 
-import { type Query } from 'loot-core/shared/query';
-import { useSpreadsheet } from 'loot-core/src/client/SpreadsheetProvider';
+import { useSpreadsheet } from 'loot-core/client/SpreadsheetProvider';
 
 import { useSheetName } from './useSheetName';
 
@@ -10,6 +9,7 @@ import {
   type SheetFields,
   type SheetNames,
   type Binding,
+  type BindingObject,
 } from '.';
 
 type SheetValueResult<
@@ -18,7 +18,6 @@ type SheetValueResult<
 > = {
   name: string;
   value: Spreadsheets[SheetName][FieldName] | null;
-  query?: Query;
 };
 
 export function useSheetValue<
@@ -30,19 +29,18 @@ export function useSheetValue<
 ): SheetValueResult<SheetName, FieldName>['value'] {
   const { sheetName, fullSheetName } = useSheetName(binding);
 
-  const bindingObj = useMemo(
+  const memoizedBinding = useMemoizedBinding(
     () =>
       typeof binding === 'string'
-        ? { name: binding, value: null, query: undefined }
+        ? { name: binding, value: undefined, query: undefined }
         : binding,
-    [binding],
+    binding,
   );
 
   const spreadsheet = useSpreadsheet();
   const [result, setResult] = useState<SheetValueResult<SheetName, FieldName>>({
     name: fullSheetName,
-    value: bindingObj.value ? bindingObj.value : null,
-    query: bindingObj.query,
+    value: memoizedBinding.value ? memoizedBinding.value : null,
   });
   const latestOnChange = useRef(onChange);
   latestOnChange.current = onChange;
@@ -53,34 +51,80 @@ export function useSheetValue<
   useLayoutEffect(() => {
     let isMounted = true;
 
-    const unbind = spreadsheet.bind(
-      sheetName,
-      bindingObj,
-      (newResult: SheetValueResult<SheetName, FieldName>) => {
-        if (!isMounted) {
-          return;
-        }
+    const unbind = spreadsheet.bind(sheetName, memoizedBinding, newResult => {
+      if (!isMounted) {
+        return;
+      }
 
-        if (latestOnChange.current) {
-          latestOnChange.current(newResult);
-        }
+      const newCastedResult = {
+        name: newResult.name,
+        // TODO: Spreadsheets, SheetNames, SheetFields, etc must be moved to the loot-core package
+        value: newResult.value as Spreadsheets[SheetName][FieldName],
+      };
 
-        if (newResult.value !== latestValue.current) {
-          setResult(newResult);
-        }
-      },
-    );
+      if (latestOnChange.current) {
+        latestOnChange.current(newCastedResult);
+      }
+
+      if (newResult.value !== latestValue.current) {
+        setResult(newCastedResult);
+      }
+    });
 
     return () => {
       isMounted = false;
       unbind();
     };
-  }, [
-    spreadsheet,
-    sheetName,
-    bindingObj.name,
-    bindingObj.query?.serializeAsString(),
-  ]);
+  }, [spreadsheet, sheetName, memoizedBinding]);
 
   return result.value;
+}
+
+type MemoKey<
+  SheetName extends SheetNames,
+  FieldName extends SheetFields<SheetName>,
+> = {
+  name: string;
+  value?: Spreadsheets[SheetName][FieldName] | undefined;
+  // We check the serialized query to see if it has changed
+  serializedQuery?: string;
+};
+
+function useMemoizedBinding<
+  SheetName extends SheetNames,
+  FieldName extends SheetFields<SheetName>,
+>(
+  memoBinding: () => BindingObject<SheetName, FieldName>,
+  key: Binding<SheetName, FieldName>,
+): BindingObject<SheetName, FieldName> {
+  const ref = useRef<{
+    key: MemoKey<SheetName, FieldName>;
+    value: BindingObject<SheetName, FieldName>;
+  } | null>(null);
+
+  const bindingName = typeof key === 'string' ? key : key.name;
+  const bindingValue = typeof key === 'string' ? undefined : key.value;
+  const serializedBindingQuery =
+    typeof key === 'string' ? undefined : key.query?.serializeAsString();
+
+  if (
+    !ref.current ||
+    bindingName !== ref.current.key.name ||
+    bindingValue !== ref.current.key.value ||
+    serializedBindingQuery !== ref.current.key.serializedQuery
+  ) {
+    // This should not update the binding reference if the binding name, value, and query values are the same.
+    // Since query objects are immutable, we compare the serialized query string to make sure that we don't cause
+    // a re-render whenever a new query object with the same parameter values (QueryState) is passed in.
+    ref.current = {
+      key: {
+        name: bindingName,
+        value: bindingValue,
+        serializedQuery: serializedBindingQuery,
+      },
+      value: memoBinding(),
+    };
+  }
+
+  return ref.current.value;
 }

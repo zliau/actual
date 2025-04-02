@@ -2,20 +2,23 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useLocation, type Location } from 'react-router-dom';
 
-import { addNotification } from 'loot-core/client/actions';
+import { ButtonWithLoading } from '@actual-app/components/button';
+import { Input } from '@actual-app/components/input';
+import { Menu } from '@actual-app/components/menu';
+import { Select } from '@actual-app/components/select';
+import { Stack } from '@actual-app/components/stack';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { addNotification } from 'loot-core/client/notifications/notificationsSlice';
 import { send } from 'loot-core/platform/client/fetch';
 import { type Handlers } from 'loot-core/types/handlers';
-import { type OpenIdConfig } from 'loot-core/types/models/openid';
+import { type OpenIdConfig } from 'loot-core/types/models';
 
-import { theme, styles } from '../../../style';
-import { ButtonWithLoading } from '../../common/Button2';
-import { Input } from '../../common/Input';
+import { useDispatch } from '../../../redux';
 import { Link } from '../../common/Link';
-import { Menu } from '../../common/Menu';
-import { Select } from '../../common/Select';
-import { Stack } from '../../common/Stack';
-import { Text } from '../../common/Text';
-import { View } from '../../common/View';
 import { FormField, FormLabel } from '../../forms';
 import { useServerURL } from '../../ServerContext';
 
@@ -49,7 +52,7 @@ export function OpenIdForm({
   loadData,
 }: OpenIdFormProps) {
   const { t } = useTranslation();
-
+  const dispatch = useDispatch();
   const [issuer, setIssuer] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
@@ -71,13 +74,17 @@ export function OpenIdForm({
           if (!config) return;
 
           if ('error' in config) {
-            addNotification({
-              type: 'error',
-              id: 'error',
-              title: t('Error getting OpenID config'),
-              sticky: true,
-              message: config.error,
-            });
+            dispatch(
+              addNotification({
+                notification: {
+                  type: 'error',
+                  id: 'error',
+                  title: t('Error getting OpenID config'),
+                  sticky: true,
+                  message: config.error,
+                },
+              }),
+            );
           } else if ('openId' in config) {
             setProviderName(config?.openId?.selectedProvider ?? 'other');
             setIssuer(config?.openId?.issuer ?? '');
@@ -87,7 +94,7 @@ export function OpenIdForm({
         },
       );
     }
-  }, [loadData, t]);
+  }, [dispatch, loadData, t]);
 
   const handleProviderChange = (provider: OpenIdProviderOption) => {
     if (provider) {
@@ -132,7 +139,7 @@ export function OpenIdForm({
     setLoading(true);
     await onSetOpenId({
       selectedProvider: providerName,
-      issuer: issuer ?? '',
+      discoveryURL: issuer ?? '',
       client_id: clientId ?? '',
       client_secret: clientSecret ?? '',
       server_hostname: serverUrl ?? '',
@@ -337,7 +344,7 @@ const openIdProviders: (OpenIdProviderOption | typeof Menu.line)[] = [
       ),
     },
     {
-      label: 'Github',
+      label: 'GitHub',
       value: 'github',
       clientIdRequired: true,
       clientSecretRequired: true,
@@ -348,7 +355,7 @@ const openIdProviders: (OpenIdProviderOption | typeof Menu.line)[] = [
         <>
           <Text style={{ color: theme.errorText }}>
             <Trans>
-              Github does not support discovery. You need to configure it in the
+              GitHub does not support discovery. You need to configure it in the
               server.
             </Trans>
           </Text>{' '}
@@ -377,9 +384,9 @@ const openIdProviders: (OpenIdProviderOption | typeof Menu.line)[] = [
           </Trans>{' '}
           <Link
             variant="external"
-            to="https://docs.goauthentik.io/docs/providers/oauth2/"
+            to="https://docs.goauthentik.io/integrations/services/actual-budget/"
           >
-            <Trans>Configure OAuth2 Provider</Trans>
+            <Trans>Configure OAuth2 provider</Trans>
           </Link>
         </Text>
       ),
@@ -434,7 +441,7 @@ function OpenIdProviderSelector({
 
   return (
     <FormField style={{ flex: 1, marginTop: 20 }}>
-      <FormLabel title={t('OpenID Provider')} htmlFor="provider-selector" />
+      <FormLabel title={t('OpenID provider')} htmlFor="provider-selector" />
       <Select
         options={openIdProviders.map(provider =>
           provider === Menu.line ? Menu.line : [provider.value, provider.label],

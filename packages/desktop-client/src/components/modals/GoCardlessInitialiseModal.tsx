@@ -2,13 +2,17 @@
 import React, { useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 
+import { ButtonWithLoading } from '@actual-app/components/button';
+import { InitialFocus } from '@actual-app/components/initial-focus';
+import { Input } from '@actual-app/components/input';
+import { Text } from '@actual-app/components/text';
+import { View } from '@actual-app/components/view';
+
+import { type Modal as ModalType } from 'loot-core/client/modals/modalsSlice';
+import { send } from 'loot-core/platform/client/fetch';
 import { getSecretsError } from 'loot-core/shared/errors';
-import { send } from 'loot-core/src/platform/client/fetch';
 
 import { Error } from '../alerts';
-import { ButtonWithLoading } from '../common/Button2';
-import { InitialFocus } from '../common/InitialFocus';
-import { Input } from '../common/Input';
 import { Link } from '../common/Link';
 import {
   Modal,
@@ -16,17 +20,16 @@ import {
   ModalCloseButton,
   ModalHeader,
 } from '../common/Modal';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
 import { FormField, FormLabel } from '../forms';
 
-type GoCardlessInitialiseProps = {
-  onSuccess: () => void;
-};
+type GoCardlessInitialiseModalProps = Extract<
+  ModalType,
+  { name: 'gocardless-init' }
+>['options'];
 
 export const GoCardlessInitialiseModal = ({
   onSuccess,
-}: GoCardlessInitialiseProps) => {
+}: GoCardlessInitialiseModalProps) => {
   const { t } = useTranslation();
   const [secretId, setSecretId] = useState('');
   const [secretKey, setSecretKey] = useState('');

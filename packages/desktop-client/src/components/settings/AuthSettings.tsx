@@ -1,14 +1,15 @@
 import React from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
-import { pushModal } from 'loot-core/client/actions';
+import { Button } from '@actual-app/components/button';
+import { Label } from '@actual-app/components/label';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+
+import { pushModal } from 'loot-core/client/modals/modalsSlice';
 
 import { useFeatureFlag } from '../../hooks/useFeatureFlag';
 import { useDispatch } from '../../redux';
-import { theme } from '../../style';
-import { Button } from '../common/Button2';
-import { Label } from '../common/Label';
-import { Text } from '../common/Text';
 import { useMultiuserEnabled, useLoginMethod } from '../ServerContext';
 
 import { Setting } from './UI';
@@ -41,8 +42,13 @@ export function AuthSettings() {
                 variant="normal"
                 onPress={() =>
                   dispatch(
-                    pushModal('enable-openid', {
-                      onSave: async () => {},
+                    pushModal({
+                      modal: {
+                        name: 'enable-openid',
+                        options: {
+                          onSave: async () => {},
+                        },
+                      },
                     }),
                   )
                 }
@@ -64,8 +70,13 @@ export function AuthSettings() {
                 variant="normal"
                 onPress={() =>
                   dispatch(
-                    pushModal('enable-password-auth', {
-                      onSave: async () => {},
+                    pushModal({
+                      modal: {
+                        name: 'enable-password-auth',
+                        options: {
+                          onSave: async () => {},
+                        },
+                      },
                     }),
                   )
                 }

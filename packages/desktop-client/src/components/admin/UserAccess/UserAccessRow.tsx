@@ -2,14 +2,17 @@
 import React, { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { addNotification } from 'loot-core/client/notifications/notificationsSlice';
+import { signOut } from 'loot-core/client/users/usersSlice';
 import { send } from 'loot-core/platform/client/fetch';
 import { getUserAccessErrors } from 'loot-core/shared/errors';
 import { type UserAvailable } from 'loot-core/types/models';
 
-import { useActions } from '../../../hooks/useActions';
 import { useMetadataPref } from '../../../hooks/useMetadataPref';
-import { theme } from '../../../style';
-import { View } from '../../common/View';
+import { useDispatch } from '../../../redux';
 import { Checkbox } from '../../forms';
 import { Row, Cell } from '../../table';
 
@@ -22,13 +25,13 @@ type UserAccessProps = {
 export const UserAccessRow = memo(
   ({ access, hovered, onHover }: UserAccessProps) => {
     const { t } = useTranslation();
+    const dispatch = useDispatch();
 
     const backgroundFocus = hovered;
     const [marked, setMarked] = useState(
       access.owner === 1 || access.haveAccess === 1,
     );
     const [cloudFileId] = useMetadataPref('cloudFileId');
-    const actions = useActions();
 
     const handleAccessToggle = async () => {
       const newValue = !marked;
@@ -42,20 +45,24 @@ export const UserAccessRow = memo(
           handleError(error);
         }
       } else {
-        const { someDeletionsFailed } = await send('access-delete-all', {
+        const result = await send('access-delete-all', {
           fileId: cloudFileId as string,
           ids: [access.userId],
         });
 
-        if (someDeletionsFailed) {
-          actions.addNotification({
-            type: 'error',
-            title: t('Access Revocation Incomplete'),
-            message: t(
-              'Some access permissions were not revoked successfully.',
-            ),
-            sticky: true,
-          });
+        if ('someDeletionsFailed' in result && result.someDeletionsFailed) {
+          dispatch(
+            addNotification({
+              notification: {
+                type: 'error',
+                title: t('Access Revocation Incomplete'),
+                message: t(
+                  'Some access permissions were not revoked successfully.',
+                ),
+                sticky: true,
+              },
+            }),
+          );
         }
       }
       setMarked(newValue);
@@ -63,26 +70,34 @@ export const UserAccessRow = memo(
 
     const handleError = (error: string) => {
       if (error === 'token-expired') {
-        actions.addNotification({
-          type: 'error',
-          id: 'login-expired',
-          title: t('Login expired'),
-          sticky: true,
-          message: getUserAccessErrors(error),
-          button: {
-            title: t('Go to login'),
-            action: () => {
-              actions.signOut();
+        dispatch(
+          addNotification({
+            notification: {
+              type: 'error',
+              id: 'login-expired',
+              title: t('Login expired'),
+              sticky: true,
+              message: getUserAccessErrors(error),
+              button: {
+                title: t('Go to login'),
+                action: () => {
+                  dispatch(signOut());
+                },
+              },
             },
-          },
-        });
+          }),
+        );
       } else {
-        actions.addNotification({
-          type: 'error',
-          title: t('Something happened while editing access'),
-          sticky: true,
-          message: getUserAccessErrors(error),
-        });
+        dispatch(
+          addNotification({
+            notification: {
+              type: 'error',
+              title: t('Something happened while editing access'),
+              sticky: true,
+              message: getUserAccessErrors(error),
+            },
+          }),
+        );
       }
     };
 

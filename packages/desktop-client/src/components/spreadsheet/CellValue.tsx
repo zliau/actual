@@ -5,8 +5,9 @@ import React, {
   type CSSProperties,
 } from 'react';
 
-import { styles } from '../../style';
-import { Text } from '../common/Text';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+
 import { PrivacyFilter } from '../PrivacyFilter';
 
 import { type FormatType, useFormat } from './useFormat';
@@ -44,7 +45,7 @@ export function CellValue<
   const { fullSheetName } = useSheetName(binding);
   const sheetValue = useSheetValue(binding);
 
-  return children ? (
+  return typeof children === 'function' ? (
     <>{children({ type, name: fullSheetName, value: sheetValue })}</>
   ) : (
     <CellValueText

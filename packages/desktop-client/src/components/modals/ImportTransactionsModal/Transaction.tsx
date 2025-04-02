@@ -1,13 +1,15 @@
 import React, { type ComponentProps, useMemo } from 'react';
 
-import { amountToCurrency } from 'loot-core/src/shared/util';
+import { SvgDownAndRightArrow } from '@actual-app/components/icons/v2';
+import { Stack } from '@actual-app/components/stack';
+import { styles } from '@actual-app/components/styles';
+import { theme } from '@actual-app/components/theme';
+import { Tooltip } from '@actual-app/components/tooltip';
+import { View } from '@actual-app/components/view';
+
+import { amountToCurrency } from 'loot-core/shared/util';
 import { type CategoryEntity } from 'loot-core/types/models';
 
-import { SvgDownAndRightArrow } from '../../../icons/v2';
-import { theme, styles } from '../../../style';
-import { Stack } from '../../common/Stack';
-import { Tooltip } from '../../common/Tooltip';
-import { View } from '../../common/View';
 import { Checkbox } from '../../forms';
 import { Row, Field } from '../../table';
 
@@ -218,12 +220,12 @@ export function Transaction({
                 : {}),
             }}
             title={
-              inflow === null && outflow === null
+              outflow === null
                 ? 'Invalid: unable to parse the value'
                 : amountToCurrency(outflow)
             }
           >
-            {amountToCurrency(outflow)}
+            {amountToCurrency(outflow || 0)}
           </Field>
           <Field
             width={90}
@@ -235,12 +237,12 @@ export function Transaction({
                 : {}),
             }}
             title={
-              inflow === null && outflow === null
+              inflow === null
                 ? 'Invalid: unable to parse the value'
                 : amountToCurrency(inflow)
             }
           >
-            {amountToCurrency(inflow)}
+            {amountToCurrency(inflow || 0)}
           </Field>
         </>
       ) : (
@@ -271,7 +273,7 @@ export function Transaction({
                 : amountToCurrency(amount)
             }
           >
-            {amountToCurrency(amount)}
+            {amountToCurrency(amount || 0)}
           </Field>
         </>
       )}

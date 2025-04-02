@@ -1,22 +1,8 @@
-import { ParseFileResult } from '../server/accounts/parse-file';
-import { batchUpdateTransactions } from '../server/accounts/transactions';
 import { Backup } from '../server/backups';
 import { RemoteFile } from '../server/cloud-storage';
-import { Node as SpreadsheetNode } from '../server/spreadsheet/spreadsheet';
 import { Message } from '../server/sync';
-import { QueryState } from '../shared/query';
 
 import { Budget } from './budget';
-import {
-  AccountEntity,
-  CategoryEntity,
-  CategoryGroupEntity,
-  GoCardlessToken,
-  GoCardlessInstitution,
-  SimpleFinAccount,
-  RuleEntity,
-  PayeeEntity,
-} from './models';
 import { OpenIdConfig } from './models/openid';
 import { RateEntity, SynthExchangeRate } from './models/rate';
 import { GlobalPrefs, MetadataPrefs } from './prefs';
@@ -25,106 +11,14 @@ import { Query } from './query';
 import { EmptyObject } from './util';
 
 export interface ServerHandlers {
-  'transaction-update': (transaction: { id: string }) => Promise<EmptyObject>;
-
   undo: () => Promise<void>;
-
   redo: () => Promise<void>;
-
-  'transactions-batch-update': (
-    ...arg: Parameters<typeof batchUpdateTransactions>
-  ) => ReturnType<typeof batchUpdateTransactions>;
-
-  'transaction-add': (transaction) => Promise<EmptyObject>;
-
-  'transaction-delete': (transaction) => Promise<EmptyObject>;
-
-  'transactions-parse-file': (arg: {
-    filepath: string;
-    options;
-  }) => Promise<ParseFileResult>;
-
-  'transactions-export': (arg: {
-    transactions;
-    accounts?;
-    categoryGroups;
-    payees;
-  }) => Promise<unknown>;
-
-  'transactions-export-query': (arg: { query: QueryState }) => Promise<unknown>;
-
-  'get-categories': () => Promise<{
-    grouped: Array<CategoryGroupEntity>;
-    list: Array<CategoryEntity>;
-  }>;
 
   'get-earliest-transaction': () => Promise<{ date: string }>;
 
-  'get-budget-bounds': () => Promise<{ start: string; end: string }>;
-
-  'envelope-budget-month': (arg: { month }) => Promise<
-    {
-      value: string | number | boolean;
-      name: string;
-    }[]
-  >;
-
-  'tracking-budget-month': (arg: { month }) => Promise<
-    {
-      value: string | number | boolean;
-      name: string;
-    }[]
-  >;
-
-  'category-create': (arg: {
-    name;
-    groupId;
-    isIncome?;
-    hidden?: boolean;
-  }) => Promise<string>;
-
-  'category-update': (category) => Promise<unknown>;
-
-  'category-move': (arg: { id; groupId; targetId }) => Promise<unknown>;
-
-  'category-delete': (arg: { id; transferId? }) => Promise<{ error?: string }>;
-
-  'category-group-create': (arg: {
-    name;
-    isIncome?: boolean;
-  }) => Promise<string>;
-
-  'category-group-update': (group) => Promise<unknown>;
-
-  'category-group-move': (arg: { id; targetId }) => Promise<unknown>;
-
-  'category-group-delete': (arg: { id; transferId }) => Promise<unknown>;
-
-  'must-category-transfer': (arg: { id }) => Promise<unknown>;
-
-  'payee-create': (arg: { name }) => Promise<string>;
-
-  'common-payees-get': () => Promise<PayeeEntity[]>;
-
-  'payees-get': () => Promise<PayeeEntity[]>;
-
-  'payees-get-rule-counts': () => Promise<unknown>;
-
-  'payees-merge': (arg: { targetId; mergeIds }) => Promise<void>;
-
-  'payees-batch-change': (arg: {
-    added?;
-    deleted?;
-    updated?;
-  }) => Promise<unknown>;
-
-  'payees-check-orphaned': (arg: { ids }) => Promise<unknown>;
-  'payees-get-orphaned': () => Promise<PayeeEntity[]>;
-
-  'payees-get-rules': (arg: { id: string }) => Promise<RuleEntity[]>;
-
   'make-filters-from-conditions': (arg: {
     conditions: unknown;
+    applySpecialCases?: boolean;
   }) => Promise<{ filters: unknown[] }>;
 
   getCell: (arg: {
@@ -139,8 +33,6 @@ export interface ServerHandlers {
   debugCell: (arg: { sheetName; name }) => Promise<unknown>;
 
   'create-query': (arg: { sheetName; name; query }) => Promise<unknown>;
-
-  query: (query: Query) => Promise<{ data: unknown; dependencies }>;
 
   'account-update': (arg: { id; name }) => Promise<unknown>;
 
@@ -273,6 +165,9 @@ export interface ServerHandlers {
 
   'sync-repair': () => Promise<unknown>;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: (query: Query) => Promise<{ data: any; dependencies: string[] }>;
+
   'key-make': (arg: {
     password;
   }) => Promise<{ error?: { reason: string; meta?: unknown } }>;
@@ -336,7 +231,7 @@ export interface ServerHandlers {
           return_url;
           loginMethod?: 'openid';
         },
-  ) => Promise<{ error?: string }>;
+  ) => Promise<{ error?: string; redirect_url?: string }>;
 
   'subscribe-sign-out': () => Promise<'ok'>;
 
@@ -385,8 +280,8 @@ export interface ServerHandlers {
   'close-budget': () => Promise<'ok'>;
 
   'delete-budget': (arg: {
-    id?: string;
-    cloudFileId?: string;
+    id?: string | undefined;
+    cloudFileId?: string | undefined;
   }) => Promise<'ok' | 'fail'>;
 
   /**
@@ -399,8 +294,8 @@ export interface ServerHandlers {
    * @returns {Promise<string>} The ID of the newly created budget.
    */
   'duplicate-budget': (arg: {
-    id?: string;
-    cloudId?: string;
+    id?: string | undefined;
+    cloudId?: string | undefined;
     newName: string;
     cloudSync?: boolean;
     open: 'none' | 'original' | 'copy';

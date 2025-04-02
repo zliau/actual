@@ -1,7 +1,7 @@
 import React, { type ComponentProps } from 'react';
 
-import { Input } from '../../common/Input';
-import { View } from '../../common/View';
+import { Input } from '@actual-app/components/input';
+import { View } from '@actual-app/components/view';
 
 import { CheckboxOption } from './CheckboxOption';
 

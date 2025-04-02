@@ -3,14 +3,20 @@ import React, { useState } from 'react';
 import { Form } from 'react-aria-components';
 import { useTranslation } from 'react-i18next';
 
-import { type FinanceModals } from 'loot-core/src/client/state-types/modals';
-import { send } from 'loot-core/src/platform/client/fetch';
-import { getTestKeyError } from 'loot-core/src/shared/errors';
+import { Button, ButtonWithLoading } from '@actual-app/components/button';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { InitialFocus } from '@actual-app/components/initial-focus';
+import { Input } from '@actual-app/components/input';
+import { Paragraph } from '@actual-app/components/paragraph';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { styles, theme } from '../../style';
-import { Button, ButtonWithLoading } from '../common/Button2';
-import { InitialFocus } from '../common/InitialFocus';
-import { Input } from '../common/Input';
+import { type Modal as ModalType } from 'loot-core/client/modals/modalsSlice';
+import { send } from 'loot-core/platform/client/fetch';
+import { getTestKeyError } from 'loot-core/shared/errors';
+
 import { Link } from '../common/Link';
 import {
   Modal,
@@ -18,20 +24,17 @@ import {
   ModalCloseButton,
   ModalHeader,
 } from '../common/Modal';
-import { Paragraph } from '../common/Paragraph';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
-import { useResponsive } from '../responsive/ResponsiveProvider';
 
-type FixEncryptionKeyModalProps = {
-  options: FinanceModals['fix-encryption-key'];
-};
+type FixEncryptionKeyModalProps = Extract<
+  ModalType,
+  { name: 'fix-encryption-key' }
+>['options'];
 
 export function FixEncryptionKeyModal({
-  options = {},
+  cloudFileId,
+  hasExistingKey,
+  onSuccess,
 }: FixEncryptionKeyModalProps) {
-  const { hasExistingKey, cloudFileId, onSuccess } = options;
-
   const { t } = useTranslation();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

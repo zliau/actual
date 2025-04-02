@@ -1,16 +1,17 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { setAppState, updateApp } from 'loot-core/client/actions';
+import { Button } from '@actual-app/components/button';
+import { SvgClose } from '@actual-app/components/icons/v1';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { SvgClose } from '../icons/v1';
+import { setAppState, updateApp } from 'loot-core/client/app/appSlice';
+
 import { useSelector, useDispatch } from '../redux';
-import { theme } from '../style';
 
-import { Button } from './common/Button2';
 import { Link } from './common/Link';
-import { Text } from './common/Text';
-import { View } from './common/View';
 
 export function UpdateNotification() {
   const { t } = useTranslation();
@@ -69,7 +70,7 @@ export function UpdateNotification() {
                   textDecoration: 'underline',
                 }}
                 onClick={() =>
-                  window.Actual?.openURLInBrowser(
+                  window.Actual.openURLInBrowser(
                     'https://actualbudget.org/docs/releases',
                   )
                 }
