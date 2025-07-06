@@ -111,6 +111,12 @@ export function ExperimentalFeatures() {
             >
               <Trans>Currency support</Trans>
             </FeatureToggle>
+            <FeatureToggle
+              flag="multiCurrency"
+              feedbackLink="https://github.com/actualbudget/actual/issues/5287"
+            >
+              <Trans>Multi-currency support</Trans>
+            </FeatureToggle>
           </View>
         ) : (
           <Link
