@@ -60,6 +60,7 @@ function emptySyncFields(): _SyncFields<false> {
     balance_limit: null,
     account_sync_source: null,
     last_sync: null,
+    currency: null,
   };
 }
 

@@ -20,6 +20,7 @@ export type _SyncFields<T> = {
   balance_limit: T extends true ? number : null;
   account_sync_source: T extends true ? AccountSyncSource : null;
   last_sync: T extends true ? string : null;
+  currency: T extends true ? string : null;
 };
 
 export type AccountSyncSource = 'simpleFin' | 'goCardless' | 'pluggyai';
