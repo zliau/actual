@@ -1824,6 +1824,7 @@ class AccountInternal extends PureComponent<
                     accountId === 'onbudget' ||
                     accountId === 'uncategorized'
                   }
+                  showOriginalAmount={true}
                   isAdding={this.state.isAdding}
                   isNew={this.isNew}
                   isMatched={this.isMatched}

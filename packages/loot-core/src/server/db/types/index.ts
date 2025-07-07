@@ -325,3 +325,12 @@ export type DbViewSchedule = {
   _conditions: JsonString;
   _actions: JsonString;
 };
+
+export type DbExchangeRate = {
+  id: string;
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  date: string;
+  created_at: string;
+};

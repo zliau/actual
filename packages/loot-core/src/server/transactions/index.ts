@@ -6,6 +6,7 @@ import { PayeeEntity, TransactionEntity } from '../../types/models';
 import * as db from '../db';
 import { incrFetch, whereIn } from '../db/util';
 import { batchMessages } from '../sync';
+import { convertAmount } from '../exchange-rates/app';
 
 import * as rules from './transaction-rules';
 import * as transfer from './transfer';
@@ -86,6 +87,30 @@ export async function batchUpdateTransactions({
           if (t.is_parent || account.offbudget === 1) {
             t.category = null;
           }
+
+          // Convert amount if account has a different currency
+          if (account.currency && account.currency !== '') {
+            try {
+              const defaultCurrency = await db.first<{ value: string }>(
+                'SELECT value FROM preferences WHERE id = ?',
+                ['defaultCurrencyCode'],
+              );
+              
+              if (defaultCurrency && defaultCurrency.value !== account.currency) {
+                const convertedAmount = await convertAmount(
+                  t.amount,
+                  account.currency,
+                  defaultCurrency.value,
+                  t.date,
+                );
+                t.amount = Math.round(convertedAmount);
+              }
+            } catch (error) {
+              console.error('Error converting currency:', error);
+              // Continue with original amount if conversion fails
+            }
+          }
+
           return db.insertTransaction(t);
         }),
       );
@@ -112,6 +137,29 @@ export async function batchUpdateTransactions({
             const account = accounts.find(acct => acct.id === t.account);
             if (t.is_parent || account.offbudget === 1) {
               t.category = null;
+            }
+
+            // Convert amount if account has a different currency
+            if (account.currency && account.currency !== '') {
+              try {
+                const defaultCurrency = await db.first<{ value: string }>(
+                  'SELECT value FROM preferences WHERE id = ?',
+                  ['defaultCurrencyCode'],
+                );
+                
+                if (defaultCurrency && defaultCurrency.value !== account.currency) {
+                  const convertedAmount = await convertAmount(
+                    t.amount,
+                    account.currency,
+                    defaultCurrency.value,
+                    t.date,
+                  );
+                  t.amount = Math.round(convertedAmount);
+                }
+              } catch (error) {
+                console.error('Error converting currency:', error);
+                // Continue with original amount if conversion fails
+              }
             }
           }
 

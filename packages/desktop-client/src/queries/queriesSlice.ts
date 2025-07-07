@@ -169,15 +169,17 @@ type CreateAccountPayload = {
   name: AccountEntity['name'];
   balance: AccountEntity['balance_current'];
   offBudget: boolean;
+  currency?: string;
 };
 
 export const createAccount = createAppAsyncThunk(
   `${sliceName}/createAccount`,
-  async ({ name, balance, offBudget }: CreateAccountPayload) => {
+  async ({ name, balance, offBudget, currency }: CreateAccountPayload) => {
     const id: AccountEntity['id'] = await send('account-create', {
       name,
       balance,
       offBudget,
+      currency,
     });
     return id;
   },

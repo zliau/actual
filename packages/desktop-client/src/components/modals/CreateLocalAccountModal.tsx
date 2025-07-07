@@ -13,6 +13,7 @@ import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 
 import { toRelaxedNumber } from 'loot-core/shared/util';
+import { currencies } from 'loot-core/shared/currencies';
 
 import { Link } from '@desktop-client/components/common/Link';
 import {
@@ -23,8 +24,10 @@ import {
   ModalTitle,
 } from '@desktop-client/components/common/Modal';
 import { Checkbox } from '@desktop-client/components/forms';
+import { Select } from '@actual-app/components/select';
 import { validateAccountName } from '@desktop-client/components/util/accountValidation';
 import * as useAccounts from '@desktop-client/hooks/useAccounts';
+import { useFeatureFlag } from '@desktop-client/hooks/useFeatureFlag';
 import { useNavigate } from '@desktop-client/hooks/useNavigate';
 import { closeModal } from '@desktop-client/modals/modalsSlice';
 import { createAccount } from '@desktop-client/queries/queriesSlice';
@@ -35,14 +38,26 @@ export function CreateLocalAccountModal() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const accounts = useAccounts.useAccounts();
+  const isMultiCurrencyEnabled = useFeatureFlag('multiCurrency');
   const [name, setName] = useState('');
   const [offbudget, setOffbudget] = useState(false);
   const [balance, setBalance] = useState('0');
+  const [currency, setCurrency] = useState('');
 
   const [nameError, setNameError] = useState(null);
   const [balanceError, setBalanceError] = useState(false);
 
   const validateBalance = balance => !isNaN(parseFloat(balance));
+
+  const currencyOptions: [string, string][] = currencies.map(currency => {
+    if (currency.code === '') {
+      return [currency.code, t('None')];
+    }
+    return [
+      currency.code,
+      `${currency.code} - ${currency.name} (${currency.symbol})`,
+    ];
+  });
 
   const validateAndSetName = (name: string) => {
     const nameError = validateAccountName(name, '', accounts);
@@ -69,6 +84,7 @@ export function CreateLocalAccountModal() {
           name,
           balance: toRelaxedNumber(balance),
           offBudget: offbudget,
+          currency: isMultiCurrencyEnabled ? currency : undefined,
         }),
       ).unwrap();
       navigate('/accounts/' + id);
@@ -181,6 +197,17 @@ export function CreateLocalAccountModal() {
                 <FormError style={{ marginLeft: 75 }}>
                   <Trans>Balance must be a number</Trans>
                 </FormError>
+              )}
+
+              {isMultiCurrencyEnabled && (
+                <InlineField label={t('Currency')} width="100%">
+                  <Select
+                    value={currency}
+                    onChange={setCurrency}
+                    options={currencyOptions}
+                    style={{ flex: 1 }}
+                  />
+                </InlineField>
               )}
 
               <ModalButtons>

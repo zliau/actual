@@ -135,6 +135,7 @@ type TransactionHeaderProps = {
   showCategory: boolean;
   showBalance: boolean;
   showCleared: boolean;
+  showOriginalAmount: boolean;
   scrollWidth: number;
   showSelection: boolean;
   onSort: (field: string, ascDesc: 'asc' | 'desc') => void;
@@ -149,6 +150,7 @@ const TransactionHeader = memo(
     showCategory,
     showBalance,
     showCleared,
+    showOriginalAmount,
     scrollWidth,
     onSort,
     ascDesc,
@@ -291,6 +293,19 @@ const TransactionHeader = memo(
             onSort('deposit', selectAscDesc(field, ascDesc, 'deposit', 'desc'))
           }
         />
+        {showOriginalAmount && (
+          <HeaderCell
+            value={t('Original Amount')}
+            width={120}
+            alignItems="flex-end"
+            marginRight={-5}
+            id="original_amount"
+            icon={field === 'original_amount' ? ascDesc : 'clickable'}
+            onClick={() =>
+              onSort('original_amount', selectAscDesc(field, ascDesc, 'original_amount', 'desc'))
+            }
+          />
+        )}
         {showBalance && (
           <HeaderCell
             value={t('Balance')}
@@ -816,6 +831,7 @@ type TransactionProps = {
   showAccount?: boolean;
   showBalance?: boolean;
   showCleared?: boolean;
+  showOriginalAmount?: boolean;
   showZeroInDeposit?: boolean;
   style?: CSSProperties;
   selected?: boolean;
@@ -868,6 +884,7 @@ const Transaction = memo(function Transaction({
   showAccount,
   showBalance,
   showCleared,
+  showOriginalAmount,
   showZeroInDeposit,
   style,
   selected,
@@ -1610,6 +1627,28 @@ const Transaction = memo(function Transaction({
         }}
       />
 
+      {showOriginalAmount && (
+        <Cell
+          /* Original amount field for all transactions */
+          name="original_amount"
+          value={
+            transaction.original_amount != null
+              ? integerToCurrency(transaction.original_amount)
+              : ''
+          }
+          valueStyle={{
+            color: theme.tableText,
+            fontStyle: 'italic',
+          }}
+          style={{ ...styles.tnum, ...amountStyle }}
+          width={120}
+          textAlign="right"
+          privacyFilter={{
+            activationFilters: [!isTemporaryId(transaction.id)],
+          }}
+        />
+      )}
+
       {showBalance && (
         <Cell
           /* Balance field for all transactions */
@@ -1918,6 +1957,7 @@ type TransactionTableInnerProps = {
   showCleared: boolean;
   showAccount: boolean;
   showCategory: boolean;
+  showOriginalAmount: boolean;
   currentAccountId: AccountEntity['id'];
   currentCategoryId: CategoryEntity['id'];
   isAdding: boolean;
@@ -2080,63 +2120,64 @@ function TransactionTableInner({
       (trans.is_parent ? trans.id : trans.parent_id) || ''
     ]?.filter(t => t.amount === 0);
 
-    return (
-      <Transaction
-        allTransactions={props.transactions}
-        editing={editing}
-        transaction={trans}
-        transferAccountsByTransaction={props.transferAccountsByTransaction}
-        subtransactions={childTransactions}
-        showAccount={showAccount}
-        showBalance={showBalances}
-        showCleared={showCleared}
-        selected={selected}
-        highlighted={false}
-        added={isNew?.(trans.id)}
-        expanded={isExpanded?.(trans.id)}
-        matched={isMatched?.(trans.id)}
-        showZeroInDeposit={isChildDeposit}
-        balance={balances?.[trans.id]?.balance ?? 0}
-        focusedField={editing ? tableNavigator.focusedField : undefined}
-        accounts={accounts}
-        categoryGroups={categoryGroups}
-        payees={payees}
-        dateFormat={dateFormat}
-        hideFraction={hideFraction}
-        onEdit={tableNavigator.onEdit}
-        onSave={props.onSave}
-        onDelete={props.onDelete}
-        onDuplicate={props.onDuplicate}
-        onLinkSchedule={props.onLinkSchedule}
-        onUnlinkSchedule={props.onUnlinkSchedule}
-        onCreateRule={props.onCreateRule}
-        onScheduleAction={props.onScheduleAction}
-        onMakeAsNonSplitTransactions={props.onMakeAsNonSplitTransactions}
-        onSplit={props.onSplit}
-        onManagePayees={props.onManagePayees}
-        onCreatePayee={props.onCreatePayee}
-        onToggleSplit={props.onToggleSplit}
-        onNavigateToTransferAccount={onNavigateToTransferAccount}
-        onNavigateToSchedule={onNavigateToSchedule}
-        onNotesTagClick={onNotesTagClick}
-        splitError={
-          hasSplitError && (
-            <TransactionError
-              error={error}
-              isDeposit={!!isChildDeposit}
-              onAddSplit={() => props.onAddSplit(trans.id)}
-              onDistributeRemainder={() =>
-                props.onDistributeRemainder(trans.id)
-              }
-              canDistributeRemainder={emptyChildTransactions.length > 0}
-            />
-          )
-        }
-        listContainerRef={listContainerRef}
-        showSelection={showSelection}
-        allowSplitTransaction={allowSplitTransaction}
-      />
-    );
+          return (
+        <Transaction
+          allTransactions={props.transactions}
+          editing={editing}
+          transaction={trans}
+          transferAccountsByTransaction={props.transferAccountsByTransaction}
+          subtransactions={childTransactions}
+          showAccount={showAccount}
+          showBalance={showBalances}
+          showCleared={showCleared}
+          showOriginalAmount={props.showOriginalAmount}
+          selected={selected}
+          highlighted={false}
+          added={isNew?.(trans.id)}
+          expanded={isExpanded?.(trans.id)}
+          matched={isMatched?.(trans.id)}
+          showZeroInDeposit={isChildDeposit}
+          balance={balances?.[trans.id]?.balance ?? 0}
+          focusedField={editing ? tableNavigator.focusedField : undefined}
+          accounts={accounts}
+          categoryGroups={categoryGroups}
+          payees={payees}
+          dateFormat={dateFormat}
+          hideFraction={hideFraction}
+          onEdit={tableNavigator.onEdit}
+          onSave={props.onSave}
+          onDelete={props.onDelete}
+          onDuplicate={props.onDuplicate}
+          onLinkSchedule={props.onLinkSchedule}
+          onUnlinkSchedule={props.onUnlinkSchedule}
+          onCreateRule={props.onCreateRule}
+          onScheduleAction={props.onScheduleAction}
+          onMakeAsNonSplitTransactions={props.onMakeAsNonSplitTransactions}
+          onSplit={props.onSplit}
+          onManagePayees={props.onManagePayees}
+          onCreatePayee={props.onCreatePayee}
+          onToggleSplit={props.onToggleSplit}
+          onNavigateToTransferAccount={onNavigateToTransferAccount}
+          onNavigateToSchedule={onNavigateToSchedule}
+          onNotesTagClick={onNotesTagClick}
+          splitError={
+            hasSplitError && (
+              <TransactionError
+                error={error}
+                isDeposit={!!isChildDeposit}
+                onAddSplit={() => props.onAddSplit(trans.id)}
+                onDistributeRemainder={() =>
+                  props.onDistributeRemainder(trans.id)
+                }
+                canDistributeRemainder={emptyChildTransactions.length > 0}
+              />
+            )
+          }
+          listContainerRef={listContainerRef}
+          showSelection={showSelection}
+          allowSplitTransaction={allowSplitTransaction}
+        />
+      );
   };
 
   return (
@@ -2155,6 +2196,7 @@ function TransactionTableInner({
           showCategory={props.showCategory}
           showBalance={props.showBalances}
           showCleared={props.showCleared}
+          showOriginalAmount={props.showOriginalAmount}
           scrollWidth={scrollWidth}
           onSort={props.onSort}
           ascDesc={props.ascDesc}
@@ -2259,6 +2301,7 @@ export type TransactionTableProps = {
   showCleared: boolean;
   showAccount: boolean;
   showCategory: boolean;
+  showOriginalAmount: boolean;
   currentAccountId: AccountEntity['id'];
   currentCategoryId: CategoryEntity['id'];
   isAdding: boolean;

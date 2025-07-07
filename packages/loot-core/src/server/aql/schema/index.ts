@@ -54,6 +54,7 @@ export const schema = {
     tombstone: f('boolean'),
     schedule: f('id', { ref: 'schedules' }),
     raw_synced_data: f('string'),
+    original_amount: f('integer'),
     // subtransactions is a special field added if the table has the
     // `splits: grouped` option
   },
@@ -138,6 +139,14 @@ export const schema = {
     conditions_op: f('string'),
     conditions: f('json'),
     tombstone: f('boolean'),
+  },
+  exchange_rates: {
+    id: f('id'),
+    from_currency: f('string', { required: true }),
+    to_currency: f('string', { required: true }),
+    rate: f('float', { required: true }),
+    date: f('string', { required: true }),
+    created_at: f('string', { required: true }),
   },
   custom_reports: {
     id: f('id'),
@@ -351,12 +360,23 @@ export const schemaConfig: SchemaConfig = {
           category: `CASE WHEN _.isParent = 1 THEN NULL ELSE cm.transferId END`,
           amount: `IFNULL(_.amount, 0)`,
           parent_id: 'CASE WHEN _.isChild = 0 THEN NULL ELSE _.parent_id END',
+          original_amount: `
+            CASE 
+              WHEN a.currency IS NULL OR a.currency = '' THEN _.amount
+              ELSE _.amount / COALESCE(er.rate, 1.0)
+            END
+          `,
         });
 
         return `
           SELECT ${fields} FROM transactions _
           LEFT JOIN category_mapping cm ON cm.id = _.category
           LEFT JOIN payee_mapping pm ON pm.id = _.description
+          LEFT JOIN accounts a ON _.acct = a.id
+          LEFT JOIN exchange_rates er ON 
+            er.from_currency = a.currency 
+            AND er.to_currency = (SELECT value FROM preferences WHERE id = 'defaultCurrencyCode')
+            AND er.date = date(_.date, 'unixepoch')
           WHERE
            _.date IS NOT NULL AND
            _.acct IS NOT NULL AND
