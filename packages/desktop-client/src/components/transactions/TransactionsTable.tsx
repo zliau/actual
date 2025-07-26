@@ -56,6 +56,7 @@ import {
 } from 'loot-core/shared/transactions';
 import {
   amountToCurrency,
+  amountToInteger,
   integerToCurrency,
   titleFirst,
 } from 'loot-core/shared/util';
@@ -128,6 +129,8 @@ import {
   getCategoriesById,
 } from '@desktop-client/queries/queriesSlice';
 import { useDispatch } from '@desktop-client/redux';
+import { useSyncedPref } from '@desktop-client/hooks/useSyncedPref';
+import { useFeatureFlag } from '@desktop-client/hooks/useFeatureFlag';
 
 type TransactionHeaderProps = {
   hasSelected: boolean;
@@ -159,6 +162,7 @@ const TransactionHeader = memo(
   }: TransactionHeaderProps) => {
     const dispatchSelected = useSelectedDispatch();
     const { t } = useTranslation();
+    const [defaultCurrencyCode] = useSyncedPref('defaultCurrencyCode');
 
     useHotkeys(
       'ctrl+a, cmd+a, meta+a',
@@ -272,7 +276,7 @@ const TransactionHeader = memo(
           />
         )}
         <HeaderCell
-          value={t('Payment')}
+          value={`${t('Payment')} (${defaultCurrencyCode || 'USD'})`}
           width={100}
           alignItems="flex-end"
           marginRight={-5}
@@ -280,17 +284,6 @@ const TransactionHeader = memo(
           icon={field === 'payment' ? ascDesc : 'clickable'}
           onClick={() =>
             onSort('payment', selectAscDesc(field, ascDesc, 'payment', 'asc'))
-          }
-        />
-        <HeaderCell
-          value={t('Deposit')}
-          width={100}
-          alignItems="flex-end"
-          marginRight={-5}
-          id="deposit"
-          icon={field === 'deposit' ? ascDesc : 'clickable'}
-          onClick={() =>
-            onSort('deposit', selectAscDesc(field, ascDesc, 'deposit', 'desc'))
           }
         />
         {showOriginalAmount && (
@@ -306,9 +299,20 @@ const TransactionHeader = memo(
             }
           />
         )}
+        <HeaderCell
+          value={`${t('Deposit')} (${defaultCurrencyCode || 'USD'})`}
+          width={100}
+          alignItems="flex-end"
+          marginRight={-5}
+          id="deposit"
+          icon={field === 'deposit' ? ascDesc : 'clickable'}
+          onClick={() =>
+            onSort('deposit', selectAscDesc(field, ascDesc, 'deposit', 'desc'))
+          }
+        />
         {showBalance && (
           <HeaderCell
-            value={t('Balance')}
+            value={`${t('Balance')} (${defaultCurrencyCode || 'USD'})`}
             width={103}
             alignItems="flex-end"
             marginRight={-5}
@@ -1125,6 +1129,22 @@ const Transaction = memo(function Transaction({
   const { setMenuOpen, menuOpen, handleContextMenu, position } =
     useContextMenu();
 
+  // Currency logic
+  const [defaultCurrencyCode] = useSyncedPref('defaultCurrencyCode');
+  const isMultiCurrencyEnabled = useFeatureFlag('multiCurrency');
+  
+  // Determine currency for amounts
+  const accountCurrency = account?.currency || defaultCurrencyCode || 'USD';
+  const displayCurrency = isMultiCurrencyEnabled ? accountCurrency : (defaultCurrencyCode || 'USD');
+  
+  // Helper function to format amount with currency
+  const formatAmountWithCurrency = (amount: number | null | undefined, currency?: string) => {
+    if (amount == null) return '';
+    const formattedAmount = integerToCurrency(amount);
+    const currencyCode = currency || displayCurrency;
+    return `${formattedAmount} ${currencyCode}`;
+  };
+
   return (
     <Row
       ref={triggerRef}
@@ -1582,10 +1602,10 @@ const Transaction = memo(function Transaction({
         name="debit"
         exposed={focusedField === 'debit'}
         focused={focusedField === 'debit'}
-        value={debit === '' && credit === '' ? amountToCurrency(0) : debit}
+        value={debit === '' && credit === '' ? formatAmountWithCurrency(0) : (debit ? `${debit} ${displayCurrency}` : '')}
         valueStyle={valueStyle}
         textAlign="right"
-        title={debit}
+        title={debit ? `${debit} ${displayCurrency}` : ''}
         onExpose={name => !isPreview && onEdit(id, name)}
         style={{
           ...(isParent && { fontStyle: 'italic' }),
@@ -1601,39 +1621,13 @@ const Transaction = memo(function Transaction({
         }}
       />
 
-      <InputCell
-        /* Credit field for all transactions */
-        type="input"
-        width={100}
-        name="credit"
-        exposed={focusedField === 'credit'}
-        focused={focusedField === 'credit'}
-        value={credit}
-        valueStyle={valueStyle}
-        textAlign="right"
-        title={credit}
-        onExpose={name => !isPreview && onEdit(id, name)}
-        style={{
-          ...(isParent && { fontStyle: 'italic' }),
-          ...styles.tnum,
-          ...amountStyle,
-        }}
-        inputProps={{
-          value: credit,
-          onUpdate: onUpdate.bind(null, 'credit'),
-        }}
-        privacyFilter={{
-          activationFilters: [!isTemporaryId(transaction.id)],
-        }}
-      />
-
       {showOriginalAmount && (
         <Cell
           /* Original amount field for all transactions */
           name="original_amount"
           value={
             transaction.original_amount != null
-              ? integerToCurrency(transaction.original_amount)
+              ? formatAmountWithCurrency(transaction.original_amount, accountCurrency)
               : ''
           }
           valueStyle={{
@@ -1649,6 +1643,32 @@ const Transaction = memo(function Transaction({
         />
       )}
 
+      <InputCell
+        /* Credit field for all transactions */
+        type="input"
+        width={100}
+        name="credit"
+        exposed={focusedField === 'credit'}
+        focused={focusedField === 'credit'}
+        value={credit ? `${credit} ${displayCurrency}` : ''}
+        valueStyle={valueStyle}
+        textAlign="right"
+        title={credit ? `${credit} ${displayCurrency}` : ''}
+        onExpose={name => !isPreview && onEdit(id, name)}
+        style={{
+          ...(isParent && { fontStyle: 'italic' }),
+          ...styles.tnum,
+          ...amountStyle,
+        }}
+        inputProps={{
+          value: credit,
+          onUpdate: onUpdate.bind(null, 'credit'),
+        }}
+        privacyFilter={{
+          activationFilters: [!isTemporaryId(transaction.id)],
+        }}
+      />
+
       {showBalance && (
         <Cell
           /* Balance field for all transactions */
@@ -1656,7 +1676,7 @@ const Transaction = memo(function Transaction({
           value={
             runningBalance == null || isChild || isTemporaryId(id)
               ? ''
-              : integerToCurrency(runningBalance)
+              : formatAmountWithCurrency(runningBalance)
           }
           valueStyle={{
             color: runningBalance < 0 ? theme.errorText : theme.noticeTextLight,
