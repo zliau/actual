@@ -363,7 +363,7 @@ export const schemaConfig: SchemaConfig = {
           original_amount: `
             CASE 
               WHEN a.currency IS NULL OR a.currency = '' THEN _.amount
-              ELSE _.amount / COALESCE(er.rate, 1.0)
+              ELSE ROUND(_.amount / COALESCE(er.rate, 1.0))
             END
           `,
         });
@@ -376,7 +376,9 @@ export const schemaConfig: SchemaConfig = {
           LEFT JOIN exchange_rates er ON 
             er.from_currency = a.currency 
             AND er.to_currency = (SELECT value FROM preferences WHERE id = 'defaultCurrencyCode')
-            AND er.date = date(_.date, 'unixepoch')
+            AND er.date = (
+              substr(CAST(_.date AS TEXT), 1, 4) || '-' || substr(CAST(_.date AS TEXT), 5, 2) || '-' || substr(CAST(_.date AS TEXT), 7, 2)
+            )
           WHERE
            _.date IS NOT NULL AND
            _.acct IS NOT NULL AND
