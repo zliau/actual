@@ -9,6 +9,40 @@ import { batchMessages } from '../sync';
 
 import * as rules from './transaction-rules';
 import * as transfer from './transfer';
+import * as exchangeRates from '../exchange-rates/app';
+
+async function fetchExchangeRateForTransaction(transaction: TransactionEntity) {
+  // Get the account to check if it has a different currency
+  const account = await db.first('SELECT * FROM accounts WHERE id = ?', [transaction.account]) as db.DbAccount | null;
+  if (!account || !account.currency || account.currency === '') {
+    return; // No currency set or empty currency
+  }
+
+  // Get the base currency from preferences
+  const baseCurrencyPref = await db.first('SELECT value FROM preferences WHERE id = ?', ['defaultCurrencyCode']) as { value: string } | null;
+  const baseCurrency = baseCurrencyPref?.value || 'USD';
+
+  // If account currency is the same as base currency, no need to fetch exchange rate
+  if (account.currency === baseCurrency) {
+    return;
+  }
+
+  // Convert transaction date from YYYYMMDD format to YYYY-MM-DD format
+  const dateString = transaction.date.toString();
+  const date = dateString.slice(0, 4) + '-' + dateString.slice(4, 6) + '-' + dateString.slice(6);
+
+  // Fetch and store the exchange rate
+  try {
+    await exchangeRates.fetchAndStoreExchangeRate(
+      account.currency,
+      baseCurrency,
+      date,
+      'transaction-creation'
+    );
+  } catch (error) {
+    console.error('Failed to fetch exchange rate for transaction:', error);
+  }
+}
 
 async function idsWithChildren(ids: string[]) {
   const whereIds = whereIn(ids, 'parent_id');
@@ -86,7 +120,12 @@ export async function batchUpdateTransactions({
           if (t.is_parent || account.offbudget === 1) {
             t.category = null;
           }
-          return db.insertTransaction(t);
+          const id = await db.insertTransaction(t);
+          
+          // Fetch exchange rate for this transaction
+          await fetchExchangeRateForTransaction(t);
+          
+          return id;
         }),
       );
     }
@@ -116,6 +155,11 @@ export async function batchUpdateTransactions({
           }
 
           await db.updateTransaction(t);
+          
+          // Fetch exchange rate for this transaction (only if we have a full transaction)
+          if (t.id && t.account && t.date) {
+            await fetchExchangeRateForTransaction(t as TransactionEntity);
+          }
         }),
       );
     }

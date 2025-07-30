@@ -102,6 +102,12 @@ export type Modal =
       };
     }
   | {
+      name: 'exchange-rate-api-key';
+      options: {
+        onSuccess: () => void;
+      };
+    }
+  | {
       name: 'pluggyai-init';
       options: {
         onSuccess: () => void;

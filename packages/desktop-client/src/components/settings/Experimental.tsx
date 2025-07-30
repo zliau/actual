@@ -32,13 +32,15 @@ function FeatureToggle({
   const enabled = useFeatureFlag(flagName);
   const [_, setFlagPref] = useSyncedPref(`flags.${flagName}`);
 
+  const handleToggle = () => {
+    setFlagPref(String(!enabled));
+  };
+
   return (
     <label style={{ display: 'flex' }}>
       <Checkbox
         checked={enabled}
-        onChange={() => {
-          setFlagPref(String(!enabled));
-        }}
+        onChange={handleToggle}
         disabled={disableToggle}
       />
       <View

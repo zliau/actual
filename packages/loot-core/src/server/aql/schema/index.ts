@@ -351,7 +351,7 @@ export const schemaConfig: SchemaConfig = {
           category: `CASE WHEN _.isParent = 1 THEN NULL ELSE cm.transferId END`,
           amount: `CASE 
             WHEN a.currency IS NULL OR a.currency = '' THEN IFNULL(_.amount, 0)
-            WHEN a.currency = 'USD' THEN IFNULL(_.amount, 0)  -- Assuming USD is base currency
+            WHEN a.currency = COALESCE((SELECT value FROM preferences WHERE id = 'defaultCurrencyCode' LIMIT 1), 'USD') THEN IFNULL(_.amount, 0)
             ELSE COALESCE(
               ROUND(IFNULL(_.amount, 0) * er.rate),
               IFNULL(_.amount, 0)  -- Fallback to original amount if no exchange rate
@@ -368,8 +368,8 @@ export const schemaConfig: SchemaConfig = {
           LEFT JOIN accounts a ON a.id = _.acct
           LEFT JOIN exchange_rates er ON (
             er.from_currency = a.currency 
-            AND er.to_currency = 'USD'  -- Assuming USD is base currency
-            AND er.date = strftime('%Y-%m-%d', _.date, 'unixepoch')
+            AND er.to_currency = COALESCE((SELECT value FROM preferences WHERE id = 'defaultCurrencyCode' LIMIT 1), 'USD')
+            AND er.date = substr(_.date, 1, 4) || '-' || substr(_.date, 5, 2) || '-' || substr(_.date, 7, 2)
           )
           WHERE
            _.date IS NOT NULL AND

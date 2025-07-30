@@ -38,6 +38,7 @@ import { runMutator } from './mutators';
 import * as prefs from './prefs';
 import * as sheet from './sheet';
 import { setSyncingMode, batchMessages } from './sync';
+import * as exchangeRates from './exchange-rates/app';
 
 let IMPORT_MODE = false;
 
@@ -766,6 +767,16 @@ handlers['api/rule-update'] = withMutation(async function ({ rule }) {
 handlers['api/rule-delete'] = withMutation(async function (id) {
   checkFileOpen();
   return handlers['rule-delete'](id);
+});
+
+handlers['api/exchange-rate-fetch'] = withMutation(async function ({
+  fromCurrency,
+  toCurrency,
+  date,
+  source,
+}) {
+  checkFileOpen();
+  return exchangeRates.fetchAndStoreExchangeRate(fromCurrency, toCurrency, date, source);
 });
 
 export function installAPI(serverHandlers: ServerHandlers) {

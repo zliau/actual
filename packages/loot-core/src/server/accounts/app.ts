@@ -519,7 +519,7 @@ async function setSecret({
     };
   }
 }
-async function checkSecret(name: string) {
+export async function checkSecret(name: string) {
   const userToken = await asyncStorage.getItem('user-token');
 
   if (!userToken) {
