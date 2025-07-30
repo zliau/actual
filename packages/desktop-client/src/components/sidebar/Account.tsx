@@ -14,6 +14,7 @@ import { View } from '@actual-app/components/view';
 import { css, cx } from '@emotion/css';
 
 import * as Platform from 'loot-core/shared/platform';
+import { getCurrency } from 'loot-core/shared/currencies';
 import { type AccountEntity } from 'loot-core/types/models';
 
 import { BalanceHistoryGraph } from './BalanceHistoryGraph';
@@ -31,6 +32,7 @@ import { CellValue } from '@desktop-client/components/spreadsheet/CellValue';
 import { useContextMenu } from '@desktop-client/hooks/useContextMenu';
 import { useDragRef } from '@desktop-client/hooks/useDragRef';
 import { useNotes } from '@desktop-client/hooks/useNotes';
+import { useFeatureFlag } from '@desktop-client/hooks/useFeatureFlag';
 import { openAccountCloseModal } from '@desktop-client/modals/modalsSlice';
 import {
   reopenAccount,
@@ -118,6 +120,7 @@ export function Account<FieldName extends SheetFields<'account'>>({
     window.matchMedia('(hover: none)').matches ||
     window.matchMedia('(pointer: coarse)').matches;
   const needsTooltip = !!account?.id && !isTouchDevice;
+  const multiCurrencyEnabled = useFeatureFlag('multiCurrency');
 
   const accountRow = (
     <View
@@ -219,7 +222,20 @@ export function Account<FieldName extends SheetFields<'account'>>({
                     />
                   </InitialFocus>
                 ) : (
-                  name
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text>{name}</Text>
+                    {multiCurrencyEnabled && account?.currency && (
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          color: theme.pageTextSubdued,
+                          marginLeft: 4,
+                        }}
+                      >
+                        ({getCurrency(account.currency).code})
+                      </Text>
+                    )}
+                  </View>
                 )
               }
               right={<CellValue binding={query} type="financial" />}
@@ -287,6 +303,17 @@ export function Account<FieldName extends SheetFields<'account'>>({
             }}
           >
             {name}
+            {multiCurrencyEnabled && account?.currency && (
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: theme.pageTextSubdued,
+                  marginLeft: 4,
+                }}
+              >
+                {' '}({getCurrency(account.currency).code})
+              </Text>
+            )}
           </Text>
           {account && <BalanceHistoryGraph accountId={account.id} />}
           {accountNote && (

@@ -6,6 +6,7 @@ export type AccountEntity = {
   sort_order: number;
   last_reconciled: string | null;
   tombstone: 0 | 1;
+  currency?: string; // Currency code for multi-currency support
 } & (_SyncFields<true> | _SyncFields<false>);
 
 export type _SyncFields<T> = {

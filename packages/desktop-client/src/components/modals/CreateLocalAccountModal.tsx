@@ -23,7 +23,9 @@ import {
   ModalTitle,
 } from '@desktop-client/components/common/Modal';
 import { Checkbox } from '@desktop-client/components/forms';
+import { CurrencySelect } from '@desktop-client/components/forms/CurrencySelect';
 import { validateAccountName } from '@desktop-client/components/util/accountValidation';
+import { useFeatureFlag } from '@desktop-client/hooks/useFeatureFlag';
 import * as useAccounts from '@desktop-client/hooks/useAccounts';
 import { useNavigate } from '@desktop-client/hooks/useNavigate';
 import { closeModal } from '@desktop-client/modals/modalsSlice';
@@ -38,6 +40,8 @@ export function CreateLocalAccountModal() {
   const [name, setName] = useState('');
   const [offbudget, setOffbudget] = useState(false);
   const [balance, setBalance] = useState('0');
+  const [currency, setCurrency] = useState('');
+  const multiCurrencyEnabled = useFeatureFlag('multiCurrency');
 
   const [nameError, setNameError] = useState(null);
   const [balanceError, setBalanceError] = useState(false);
@@ -69,6 +73,7 @@ export function CreateLocalAccountModal() {
           name,
           balance: toRelaxedNumber(balance),
           offBudget: offbudget,
+          currency,
         }),
       ).unwrap();
       navigate('/accounts/' + id);
@@ -181,6 +186,16 @@ export function CreateLocalAccountModal() {
                 <FormError style={{ marginLeft: 75 }}>
                   <Trans>Balance must be a number</Trans>
                 </FormError>
+              )}
+
+              {multiCurrencyEnabled && (
+                <InlineField label={t('Currency')} width="100%">
+                  <CurrencySelect
+                    value={currency}
+                    onUpdate={setCurrency}
+                    style={{ flex: 1 }}
+                  />
+                </InlineField>
               )}
 
               <ModalButtons>
