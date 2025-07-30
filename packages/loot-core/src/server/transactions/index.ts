@@ -27,21 +27,15 @@ async function fetchExchangeRateForTransaction(transaction: TransactionEntity) {
     return;
   }
 
-  // Convert transaction date from YYYYMMDD format to YYYY-MM-DD format
-  const dateString = transaction.date.toString();
-  const date = dateString.slice(0, 4) + '-' + dateString.slice(4, 6) + '-' + dateString.slice(6);
+  const date = transaction.date.toString();
 
-  // Fetch and store the exchange rate
-  try {
-    await exchangeRates.fetchAndStoreExchangeRate(
-      account.currency,
-      baseCurrency,
-      date,
-      'transaction-creation'
-    );
-  } catch (error) {
-    console.error('Failed to fetch exchange rate for transaction:', error);
-  }
+  // Fetch and store the exchange rate - this will throw if it fails
+  await exchangeRates.fetchAndStoreExchangeRate(
+    account.currency,
+    baseCurrency,
+    date,
+    'transaction-creation'
+  );
 }
 
 async function idsWithChildren(ids: string[]) {
@@ -120,12 +114,23 @@ export async function batchUpdateTransactions({
           if (t.is_parent || account.offbudget === 1) {
             t.category = null;
           }
-          const id = await db.insertTransaction(t);
           
-          // Fetch exchange rate for this transaction
-          await fetchExchangeRateForTransaction(t);
-          
-          return id;
+          // Start a database transaction for rollback capability
+          await db.runQuery('BEGIN TRANSACTION');
+          try {
+            const id = await db.insertTransaction(t);
+            
+            // Fetch exchange rate for this transaction
+            await fetchExchangeRateForTransaction(t);
+            
+            // Commit the transaction
+            await db.runQuery('COMMIT');
+            return id;
+          } catch (error) {
+            // Rollback the transaction if exchange rate fetching fails
+            await db.runQuery('ROLLBACK');
+            throw error;
+          }
         }),
       );
     }
@@ -154,11 +159,22 @@ export async function batchUpdateTransactions({
             }
           }
 
-          await db.updateTransaction(t);
-          
-          // Fetch exchange rate for this transaction (only if we have a full transaction)
-          if (t.id && t.account && t.date) {
-            await fetchExchangeRateForTransaction(t as TransactionEntity);
+          // Start a database transaction for rollback capability
+          await db.runQuery('BEGIN TRANSACTION');
+          try {
+            await db.updateTransaction(t);
+            
+            // Fetch exchange rate for this transaction (only if we have a full transaction)
+            if (t.id && t.account && t.date) {
+              await fetchExchangeRateForTransaction(t as TransactionEntity);
+            }
+            
+            // Commit the transaction
+            await db.runQuery('COMMIT');
+          } catch (error) {
+            // Rollback the transaction if exchange rate fetching fails
+            await db.runQuery('ROLLBACK');
+            throw error;
           }
         }),
       );

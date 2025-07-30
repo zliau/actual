@@ -1,9 +1,12 @@
 import * as db from '../db';
 import { type ExchangeRateEntity } from '../../types/models/exchange-rate';
-import { checkSecret } from '../accounts/app';
+import * as asyncStorage from '../../platform/server/asyncStorage';
+import { getServer } from '../server-config';
+import { post } from '../post';
 
-// Exchange Rate API configuration
-const EXCHANGE_RATE_API_BASE_URL = 'https://v6.exchangerate-api.com/v6';
+
+
+
 
 export async function fetchAndStoreExchangeRate(
   fromCurrency: string,
@@ -17,8 +20,36 @@ export async function fetchAndStoreExchangeRate(
     return existing;
   }
 
-  // Fetch from external API
-  const rate = await fetchExchangeRateFromAPI(fromCurrency, toCurrency, date);
+  // Get user token for authentication (following SimpleFin pattern)
+  const userToken = await asyncStorage.getItem('user-token');
+  if (!userToken) {
+    throw new Error('No user token available for exchange rate fetching');
+  }
+
+  // Get server config
+  const serverConfig = getServer();
+  if (!serverConfig) {
+    throw new Error('Failed to get server config.');
+  }
+
+  // Call sync-server to fetch exchange rate
+  const response = await post(
+    serverConfig.BASE_SERVER + '/exchange-rates/fetch',
+    {
+      fromCurrency,
+      toCurrency,
+      date,
+    },
+    {
+      'X-ACTUAL-TOKEN': userToken,
+    },
+  );
+
+  if (response.status === 'error') {
+    throw new Error(response.error || 'Failed to fetch exchange rate');
+  }
+
+  const rate = response.rate;
   
   const id = `${fromCurrency}_${toCurrency}_${date}`;
   const now = new Date().toISOString();
@@ -29,7 +60,7 @@ export async function fetchAndStoreExchangeRate(
     to_currency: toCurrency,
     rate,
     date,
-    source: source || 'exchangerate-api',
+    source: source || 'openexchangerates',
     created_at: now,
     updated_at: now,
   };
@@ -39,45 +70,9 @@ export async function fetchAndStoreExchangeRate(
   return exchangeRate;
 }
 
-async function fetchExchangeRateFromAPI(
-  fromCurrency: string,
-  toCurrency: string,
-  date: string,
-): Promise<number> {
-  // Get API key from secret storage
-  const apiKeyResult = await checkSecret('exchange_rate_api_key');
-  const apiKey = typeof apiKeyResult === 'string' ? apiKeyResult : null;
-  
-  if (!apiKey) {
-    // Fallback to mock rate if no API key is configured
-    console.warn('No exchange rate API key configured, using mock rate');
-    return 1.25;
-  }
 
-  try {
-    // Convert date to YYYY-MM-DD format
-    const formattedDate = new Date(date).toISOString().split('T')[0];
-    
-    const url = `${EXCHANGE_RATE_API_BASE_URL}/${apiKey}/history/${fromCurrency}/${formattedDate}`;
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      throw new Error(`Exchange rate API error: ${response.status} ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    
-    if (data.result === 'success' && data.conversion_rates && data.conversion_rates[toCurrency]) {
-      return data.conversion_rates[toCurrency];
-    } else {
-      throw new Error('Invalid response from exchange rate API');
-    }
-  } catch (error) {
-    console.error('Failed to fetch exchange rate:', error);
-    // Fallback to mock rate on error
-    return 1.25;
-  }
-}
+
+
 
 export async function getExchangeRate(
   fromCurrency: string,

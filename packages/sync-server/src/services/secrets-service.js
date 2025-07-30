@@ -15,6 +15,7 @@ export const SecretName = {
   pluggyai_clientId: 'pluggyai_clientId',
   pluggyai_clientSecret: 'pluggyai_clientSecret',
   pluggyai_itemIds: 'pluggyai_itemIds',
+  exchange_rate_api_key: 'exchange_rate_api_key',
 };
 
 class SecretsDb {

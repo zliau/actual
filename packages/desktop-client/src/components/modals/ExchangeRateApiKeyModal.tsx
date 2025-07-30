@@ -73,10 +73,10 @@ export const ExchangeRateApiKeyModal = ({
                 you need to provide an API key from{' '}
                 <Link
                   variant="external"
-                  to="https://exchangerate-api.com/"
+                  to="https://openexchangerates.org/"
                   linkColor="purple"
                 >
-                  Exchange Rate API
+                  OpenExchangeRates
                 </Link>
                 . This service provides accurate historical and current exchange rates.
               </Trans>
@@ -86,7 +86,7 @@ export const ExchangeRateApiKeyModal = ({
               <Trans>
                 <strong>Note:</strong> The API key is stored securely and is only used 
                 to fetch exchange rates. You can get a free API key by signing up at 
-                the Exchange Rate API website.
+                the OpenExchangeRates website.
               </Trans>
             </Text>
 
@@ -100,7 +100,7 @@ export const ExchangeRateApiKeyModal = ({
                   setApiKey(value);
                   setIsValid(true);
                 }}
-                placeholder="Enter your Exchange Rate API key"
+                placeholder="Enter your OpenExchangeRates API key"
               />
             </FormField>
 

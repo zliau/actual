@@ -188,4 +188,11 @@ export interface ApiHandlers {
   'api/rule-update': (arg: { rule: RuleEntity }) => Promise<RuleEntity>;
 
   'api/rule-delete': (id: string) => Promise<boolean>;
+
+  'api/exchange-rate-fetch': (arg: {
+    fromCurrency: string;
+    toCurrency: string;
+    date: string;
+    source?: string;
+  }) => Promise<unknown>;
 }
