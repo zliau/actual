@@ -40,6 +40,7 @@ export const schema = {
     account: f('id', { ref: 'accounts', required: true }),
     category: f('id', { ref: 'categories' }),
     amount: f('integer', { default: 0, required: true }),
+    currency_amount: f('integer', { default: 0 }),
     payee: f('id', { ref: 'payees' }),
     notes: f('string'),
     date: f('date', { required: true }),
@@ -348,7 +349,15 @@ export const schemaConfig: SchemaConfig = {
         const fields = internalFields({
           payee: 'pm.targetId',
           category: `CASE WHEN _.isParent = 1 THEN NULL ELSE cm.transferId END`,
-          amount: `IFNULL(_.amount, 0)`,
+          amount: `CASE 
+            WHEN a.currency IS NULL OR a.currency = '' THEN IFNULL(_.amount, 0)
+            WHEN a.currency = 'USD' THEN IFNULL(_.amount, 0)  -- Assuming USD is base currency
+            ELSE COALESCE(
+              ROUND(IFNULL(_.amount, 0) * er.rate),
+              IFNULL(_.amount, 0)  -- Fallback to original amount if no exchange rate
+            )
+          END`,
+          currency_amount: `IFNULL(_.amount, 0)`,
           parent_id: 'CASE WHEN _.isChild = 0 THEN NULL ELSE _.parent_id END',
         });
 
@@ -356,6 +365,12 @@ export const schemaConfig: SchemaConfig = {
           SELECT ${fields} FROM transactions _
           LEFT JOIN category_mapping cm ON cm.id = _.category
           LEFT JOIN payee_mapping pm ON pm.id = _.description
+          LEFT JOIN accounts a ON a.id = _.acct
+          LEFT JOIN exchange_rates er ON (
+            er.from_currency = a.currency 
+            AND er.to_currency = 'USD'  -- Assuming USD is base currency
+            AND er.date = strftime('%Y-%m-%d', _.date, 'unixepoch')
+          )
           WHERE
            _.date IS NOT NULL AND
            _.acct IS NOT NULL AND

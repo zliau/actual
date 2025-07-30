@@ -332,3 +332,14 @@ export type DbTag = {
   description?: string | null;
   tombstone: 1 | 0;
 };
+
+export type DbExchangeRate = {
+  id: string;
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  date: string;
+  source: string | null;
+  created_at: string;
+  updated_at: string;
+};
