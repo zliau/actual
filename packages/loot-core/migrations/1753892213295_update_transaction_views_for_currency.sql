@@ -19,7 +19,7 @@ SELECT
   -- amount: converted to base currency (for reports/spreadsheets)
   CASE 
     WHEN a.currency IS NULL OR a.currency = '' THEN IFNULL(t.amount, 0)
-    WHEN a.currency = 'USD' THEN IFNULL(t.amount, 0)  -- Assuming USD is base currency
+    WHEN a.currency = COALESCE((SELECT value FROM preferences WHERE id = 'defaultCurrencyCode' LIMIT 1), 'USD') THEN IFNULL(t.amount, 0)
     ELSE COALESCE(
       ROUND(IFNULL(t.amount, 0) * er.rate),
       IFNULL(t.amount, 0)  -- Fallback to original amount if no exchange rate
@@ -42,7 +42,7 @@ LEFT JOIN payee_mapping pm ON pm.id = t.description
 LEFT JOIN accounts a ON a.id = t.acct
 LEFT JOIN exchange_rates er ON (
   er.from_currency = a.currency 
-  AND er.to_currency = 'USD'  -- Assuming USD is base currency
+  AND er.to_currency = COALESCE((SELECT value FROM preferences WHERE id = 'defaultCurrencyCode' LIMIT 1), 'USD')
   AND er.date = strftime('%Y-%m-%d', t.date, 'unixepoch')
 )
 WHERE
