@@ -108,6 +108,7 @@ import {
 import { useCachedSchedules } from '@desktop-client/hooks/useCachedSchedules';
 import { useContextMenu } from '@desktop-client/hooks/useContextMenu';
 import { useDisplayPayee } from '@desktop-client/hooks/useDisplayPayee';
+import { useFeatureFlag } from '@desktop-client/hooks/useFeatureFlag';
 import { useMergedRefs } from '@desktop-client/hooks/useMergedRefs';
 import { usePrevious } from '@desktop-client/hooks/usePrevious';
 import { useProperFocus } from '@desktop-client/hooks/useProperFocus';
@@ -115,6 +116,7 @@ import {
   useSelectedDispatch,
   useSelectedItems,
 } from '@desktop-client/hooks/useSelected';
+import { useSyncedPref } from '@desktop-client/hooks/useSyncedPref';
 import { SheetNameProvider } from '@desktop-client/hooks/useSheetName';
 import {
   type SplitsExpandedContextValue,
@@ -141,6 +143,8 @@ type TransactionHeaderProps = {
   onSort: (field: string, ascDesc: 'asc' | 'desc') => void;
   ascDesc: 'asc' | 'desc';
   field: string;
+  multiCurrencyEnabled?: boolean;
+  baseCurrency?: string;
 };
 
 const TransactionHeader = memo(
@@ -155,6 +159,8 @@ const TransactionHeader = memo(
     ascDesc,
     field,
     showSelection,
+    multiCurrencyEnabled,
+    baseCurrency,
   }: TransactionHeaderProps) => {
     const dispatchSelected = useSelectedDispatch();
     const { t } = useTranslation();
@@ -293,6 +299,24 @@ const TransactionHeader = memo(
             onSort('deposit', selectAscDesc(field, ascDesc, 'deposit', 'desc'))
           }
         />
+        {multiCurrencyEnabled && baseCurrency && (
+          <>
+            <HeaderCell
+              value={t('Payment') + ` (${baseCurrency})`}
+              width={100}
+              alignItems="flex-end"
+              marginRight={-5}
+              id="payment_base"
+            />
+            <HeaderCell
+              value={t('Deposit') + ` (${baseCurrency})`}
+              width={100}
+              alignItems="flex-end"
+              marginRight={-5}
+              id="deposit_base"
+            />
+          </>
+        )}
         {showBalance && (
           <HeaderCell
             value={t('Balance')}
@@ -860,6 +884,8 @@ type TransactionProps = {
   listContainerRef?: RefObject<HTMLDivElement>;
   showSelection?: boolean;
   allowSplitTransaction?: boolean;
+  multiCurrencyEnabled?: boolean;
+  baseCurrency?: string;
 };
 
 const Transaction = memo(function Transaction({
@@ -906,6 +932,8 @@ const Transaction = memo(function Transaction({
   listContainerRef,
   showSelection,
   allowSplitTransaction,
+  multiCurrencyEnabled,
+  baseCurrency,
 }: TransactionProps) {
   const { t } = useTranslation();
 
@@ -1086,6 +1114,28 @@ const Transaction = memo(function Transaction({
   const amountStyle = hideFraction ? { letterSpacing: -0.5 } : null;
 
   const runningBalance = !isTemporaryId(id) ? balance : balance + amount;
+
+  // Multi-currency logic
+  const accountCurrency = account?.currency || '';
+  const hasDifferentCurrency = multiCurrencyEnabled && 
+    accountCurrency && 
+    accountCurrency !== baseCurrency;
+  
+  // Determine which values to display
+  const displayDebit = hasDifferentCurrency ? 
+    ((originalTransaction as any).currency_amount < 0 ? -(originalTransaction as any).currency_amount : null) : 
+    (debit === '' && credit === '' ? 0 : debit);
+  const displayCredit = hasDifferentCurrency ? 
+    ((originalTransaction as any).currency_amount > 0 ? (originalTransaction as any).currency_amount : null) : 
+    credit;
+  
+  // Base currency values (converted amounts)
+  const baseDebit = hasDifferentCurrency ? 
+    (amount < 0 ? -amount : null) : 
+    null;
+  const baseCredit = hasDifferentCurrency ? 
+    (amount > 0 ? amount : null) : 
+    null;
 
   // Ok this entire logic is a dirty, dirty hack.. but let me explain.
   // Problem: the split-error Popover (which has the buttons to distribute/add split)
@@ -1570,10 +1620,10 @@ const Transaction = memo(function Transaction({
         name="debit"
         exposed={focusedField === 'debit'}
         focused={focusedField === 'debit'}
-        value={debit === '' && credit === '' ? amountToCurrency(0) : debit}
+        value={displayDebit === null ? '' : (displayDebit === '' && displayCredit === '' ? integerToCurrency(0) : integerToCurrency(Number(displayDebit)))}
         valueStyle={valueStyle}
         textAlign="right"
-        title={debit}
+        title={displayDebit === null ? '' : (displayDebit === '' && displayCredit === '' ? integerToCurrency(0) : integerToCurrency(Number(displayDebit)))}
         onExpose={name => !isPreview && onEdit(id, name)}
         style={{
           ...(isParent && { fontStyle: 'italic' }),
@@ -1581,7 +1631,7 @@ const Transaction = memo(function Transaction({
           ...amountStyle,
         }}
         inputProps={{
-          value: debit === '' && credit === '' ? amountToCurrency(0) : debit,
+          value: displayDebit === null ? '' : (displayDebit === '' && displayCredit === '' ? amountToCurrency(0) : amountToCurrency(Number(displayDebit))),
           onUpdate: onUpdate.bind(null, 'debit'),
         }}
         privacyFilter={{
@@ -1596,10 +1646,10 @@ const Transaction = memo(function Transaction({
         name="credit"
         exposed={focusedField === 'credit'}
         focused={focusedField === 'credit'}
-        value={credit}
+        value={displayCredit === null ? '' : integerToCurrency(Number(displayCredit))}
         valueStyle={valueStyle}
         textAlign="right"
-        title={credit}
+        title={displayCredit === null ? '' : integerToCurrency(Number(displayCredit))}
         onExpose={name => !isPreview && onEdit(id, name)}
         style={{
           ...(isParent && { fontStyle: 'italic' }),
@@ -1607,13 +1657,38 @@ const Transaction = memo(function Transaction({
           ...amountStyle,
         }}
         inputProps={{
-          value: credit,
+          value: displayCredit === null ? '' : integerToCurrency(Number(displayCredit)),
           onUpdate: onUpdate.bind(null, 'credit'),
         }}
         privacyFilter={{
           activationFilters: [!isTemporaryId(transaction.id)],
         }}
       />
+
+      {multiCurrencyEnabled && baseCurrency && hasDifferentCurrency && (
+        <>
+          <Cell
+            /* Payment (Base Currency) field for multi-currency transactions */
+            name="payment_base"
+            value={baseDebit === null ? '' : integerToCurrency(baseDebit)}
+            valueStyle={valueStyle}
+            style={{ ...styles.tnum, ...amountStyle }}
+            width={100}
+            textAlign="right"
+            privacyFilter
+          />
+          <Cell
+            /* Deposit (Base Currency) field for multi-currency transactions */
+            name="deposit_base"
+            value={baseCredit === null ? '' : integerToCurrency(baseCredit)}
+            valueStyle={valueStyle}
+            style={{ ...styles.tnum, ...amountStyle }}
+            width={100}
+            textAlign="right"
+            privacyFilter
+          />
+        </>
+      )}
 
       {showBalance && (
         <Cell
@@ -1980,6 +2055,9 @@ function TransactionTableInner({
   renderEmpty,
   ...props
 }: TransactionTableInnerProps) {
+  const multiCurrencyEnabled = useFeatureFlag('multiCurrency');
+  const [defaultCurrencyCode] = useSyncedPref('defaultCurrencyCode');
+  const baseCurrency = defaultCurrencyCode || 'USD';
   const containerRef = createRef<HTMLDivElement>();
   const isAddingPrev = usePrevious(props.isAdding);
   const [scrollWidth, setScrollWidth] = useState(0);
@@ -2142,6 +2220,8 @@ function TransactionTableInner({
         listContainerRef={listContainerRef}
         showSelection={showSelection}
         allowSplitTransaction={allowSplitTransaction}
+        multiCurrencyEnabled={multiCurrencyEnabled}
+        baseCurrency={baseCurrency}
       />
     );
   };
@@ -2167,6 +2247,8 @@ function TransactionTableInner({
           ascDesc={props.ascDesc}
           field={props.sortField}
           showSelection={props.showSelection}
+          multiCurrencyEnabled={multiCurrencyEnabled}
+          baseCurrency={baseCurrency}
         />
 
         {props.isAdding && (
@@ -2520,6 +2602,8 @@ export const TransactionTable = forwardRef(
         'category',
         'debit',
         'credit',
+        'payment_base',
+        'deposit_base',
         'cleared',
       ];
 
@@ -2534,6 +2618,8 @@ export const TransactionTable = forwardRef(
               (props.showAccount || f !== 'account') &&
               (props.showCategory || f !== 'category'),
           );
+
+
 
       if (item?.id && isPreviewId(item.id)) {
         fields = ['select'];

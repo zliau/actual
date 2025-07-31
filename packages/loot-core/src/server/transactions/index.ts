@@ -115,20 +115,13 @@ export async function batchUpdateTransactions({
             t.category = null;
           }
           
-          // Start a database transaction for rollback capability
-          await db.runQuery('BEGIN TRANSACTION');
           try {
             const id = await db.insertTransaction(t);
             
             // Fetch exchange rate for this transaction
             await fetchExchangeRateForTransaction(t);
-            
-            // Commit the transaction
-            await db.runQuery('COMMIT');
             return id;
           } catch (error) {
-            // Rollback the transaction if exchange rate fetching fails
-            await db.runQuery('ROLLBACK');
             throw error;
           }
         }),
@@ -159,8 +152,6 @@ export async function batchUpdateTransactions({
             }
           }
 
-          // Start a database transaction for rollback capability
-          await db.runQuery('BEGIN TRANSACTION');
           try {
             await db.updateTransaction(t);
             
@@ -169,11 +160,7 @@ export async function batchUpdateTransactions({
               await fetchExchangeRateForTransaction(t as TransactionEntity);
             }
             
-            // Commit the transaction
-            await db.runQuery('COMMIT');
           } catch (error) {
-            // Rollback the transaction if exchange rate fetching fails
-            await db.runQuery('ROLLBACK');
             throw error;
           }
         }),
