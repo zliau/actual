@@ -1123,19 +1123,19 @@ const Transaction = memo(function Transaction({
   
   // Determine which values to display
   const displayDebit = hasDifferentCurrency ? 
-    ((originalTransaction as any).currency_amount < 0 ? -(originalTransaction as any).currency_amount : null) : 
-    (debit === '' && credit === '' ? 0 : debit);
+    ((originalTransaction as any).currency_amount < 0 ? integerToCurrency(-(originalTransaction as any).currency_amount) : '') : 
+    (debit === '' && credit === '' ? integerToCurrency(0) : debit);
   const displayCredit = hasDifferentCurrency ? 
-    ((originalTransaction as any).currency_amount > 0 ? (originalTransaction as any).currency_amount : null) : 
+    ((originalTransaction as any).currency_amount > 0 ? integerToCurrency((originalTransaction as any).currency_amount) : '') : 
     credit;
   
   // Base currency values (converted amounts)
   const baseDebit = hasDifferentCurrency ? 
-    (amount < 0 ? -amount : null) : 
-    null;
+    (amount < 0 ? integerToCurrency(-amount) : '') : 
+    '';
   const baseCredit = hasDifferentCurrency ? 
-    (amount > 0 ? amount : null) : 
-    null;
+    (amount > 0 ? integerToCurrency(amount) : '') : 
+    '';
 
   // Ok this entire logic is a dirty, dirty hack.. but let me explain.
   // Problem: the split-error Popover (which has the buttons to distribute/add split)
@@ -1620,10 +1620,10 @@ const Transaction = memo(function Transaction({
         name="debit"
         exposed={focusedField === 'debit'}
         focused={focusedField === 'debit'}
-        value={displayDebit === null ? '' : (displayDebit === '' && displayCredit === '' ? integerToCurrency(0) : integerToCurrency(Number(displayDebit)))}
+        value={displayDebit}
         valueStyle={valueStyle}
         textAlign="right"
-        title={displayDebit === null ? '' : (displayDebit === '' && displayCredit === '' ? integerToCurrency(0) : integerToCurrency(Number(displayDebit)))}
+        title={displayDebit}
         onExpose={name => !isPreview && onEdit(id, name)}
         style={{
           ...(isParent && { fontStyle: 'italic' }),
@@ -1631,7 +1631,7 @@ const Transaction = memo(function Transaction({
           ...amountStyle,
         }}
         inputProps={{
-          value: displayDebit === null ? '' : (displayDebit === '' && displayCredit === '' ? amountToCurrency(0) : amountToCurrency(Number(displayDebit))),
+          value: displayDebit,
           onUpdate: onUpdate.bind(null, 'debit'),
         }}
         privacyFilter={{
@@ -1646,10 +1646,10 @@ const Transaction = memo(function Transaction({
         name="credit"
         exposed={focusedField === 'credit'}
         focused={focusedField === 'credit'}
-        value={displayCredit === null ? '' : integerToCurrency(Number(displayCredit))}
+        value={displayCredit}
         valueStyle={valueStyle}
         textAlign="right"
-        title={displayCredit === null ? '' : integerToCurrency(Number(displayCredit))}
+        title={displayCredit}
         onExpose={name => !isPreview && onEdit(id, name)}
         style={{
           ...(isParent && { fontStyle: 'italic' }),
@@ -1657,7 +1657,7 @@ const Transaction = memo(function Transaction({
           ...amountStyle,
         }}
         inputProps={{
-          value: displayCredit === null ? '' : integerToCurrency(Number(displayCredit)),
+          value: displayCredit,
           onUpdate: onUpdate.bind(null, 'credit'),
         }}
         privacyFilter={{
@@ -1670,7 +1670,7 @@ const Transaction = memo(function Transaction({
           <Cell
             /* Payment (Base Currency) field for multi-currency transactions */
             name="payment_base"
-            value={baseDebit === null ? '' : integerToCurrency(baseDebit)}
+            value={baseDebit}
             valueStyle={valueStyle}
             style={{ ...styles.tnum, ...amountStyle }}
             width={100}
@@ -1680,7 +1680,7 @@ const Transaction = memo(function Transaction({
           <Cell
             /* Deposit (Base Currency) field for multi-currency transactions */
             name="deposit_base"
-            value={baseCredit === null ? '' : integerToCurrency(baseCredit)}
+            value={baseCredit}
             valueStyle={valueStyle}
             style={{ ...styles.tnum, ...amountStyle }}
             width={100}
