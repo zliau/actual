@@ -1,5 +1,3 @@
-BEGIN TRANSACTION;
-
 -- Drop existing views
 DROP VIEW IF EXISTS v_transactions_layer2;
 DROP VIEW IF EXISTS v_transactions_layer1;
@@ -59,5 +57,3 @@ WHERE IFNULL(t.tombstone, 0) = 0 AND IFNULL(t2.tombstone, 0) = 0;
 CREATE VIEW v_transactions AS
 SELECT t.* FROM v_transactions_layer1 t
 ORDER BY t.date desc, t.starting_balance_flag, t.sort_order desc, t.id;
-
-COMMIT; 

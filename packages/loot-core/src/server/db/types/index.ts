@@ -340,7 +340,4 @@ export type DbExchangeRate = {
   to_currency: string;
   rate: number;
   date: string;
-  source: string | null;
-  created_at: string;
-  updated_at: string;
 };

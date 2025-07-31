@@ -40,7 +40,6 @@ export const schema = {
     account: f('id', { ref: 'accounts', required: true }),
     category: f('id', { ref: 'categories' }),
     amount: f('integer', { default: 0, required: true }),
-    currency_amount: f('integer', { default: 0 }),
     payee: f('id', { ref: 'payees' }),
     notes: f('string'),
     date: f('date', { required: true }),
@@ -190,6 +189,13 @@ export const schema = {
     y: f('integer', { required: true }),
     meta: f('json'),
     tombstone: f('boolean'),
+  },
+  exchange_rates: {
+    id: f('id'),
+    from_currency: f('string'),
+    to_currency: f('string'),
+    rate: f('float'),
+    date: f('string'),
   },
 };
 

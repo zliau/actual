@@ -52,7 +52,6 @@ export async function fetchAndStoreExchangeRate(
   const rate = response.rate;
   
   const id = `${fromCurrency}_${toCurrency}_${date}`;
-  const now = new Date().toISOString();
   
   const exchangeRate: ExchangeRateEntity = {
     id,
@@ -60,9 +59,6 @@ export async function fetchAndStoreExchangeRate(
     to_currency: toCurrency,
     rate,
     date,
-    source: source || 'openexchangerates',
-    created_at: now,
-    updated_at: now,
   };
   
   await db.insert('exchange_rates', exchangeRate);
@@ -80,7 +76,7 @@ export async function getExchangeRate(
   date: string,
 ): Promise<ExchangeRateEntity | null> {
   const result = await db.first(
-    'SELECT * FROM exchange_rates WHERE from_currency = ? AND to_currency = ? AND date = ?',
+    'SELECT id, from_currency, to_currency, rate, date FROM exchange_rates WHERE from_currency = ? AND to_currency = ? AND date = ?',
     [fromCurrency, toCurrency, date],
   );
   
