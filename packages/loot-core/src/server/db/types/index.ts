@@ -258,6 +258,7 @@ export type DbViewTransactionInternal = {
   date: DbTransaction['date'];
   account: DbAccount['id'];
   amount: DbTransaction['amount'];
+  currency_amount: DbTransaction['amount'];
   parent_id: DbTransaction['parent_id'] | null;
   category: DbCategory['id'] | null;
   payee: DbPayee['id'] | null;

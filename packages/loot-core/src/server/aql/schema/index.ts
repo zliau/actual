@@ -40,6 +40,7 @@ export const schema = {
     account: f('id', { ref: 'accounts', required: true }),
     category: f('id', { ref: 'categories' }),
     amount: f('integer', { default: 0, required: true }),
+    currency_amount: f('integer'),
     payee: f('id', { ref: 'payees' }),
     notes: f('string'),
     date: f('date', { required: true }),

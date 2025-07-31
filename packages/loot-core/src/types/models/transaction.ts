@@ -13,6 +13,7 @@ export interface TransactionEntity {
   account: AccountEntity['id'];
   category?: CategoryEntity['id'];
   amount: IntegerAmount;
+  currency_amount?: IntegerAmount;
   payee?: PayeeEntity['id'];
   notes?: string;
   date: string;
