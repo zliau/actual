@@ -1077,16 +1077,6 @@ const Transaction = memo(function Transaction({
         originalTransaction,
       );
 
-      // For multicurrency transactions, handle currencyDebit/currencyCredit fields
-      if (hasDifferentCurrency && (name === 'currencyDebit' || name === 'currencyCredit')) {
-        // Clear the other currency field when one is entered
-        if (name === 'currencyCredit') {
-          newTransaction['currencyDebit'] = '';
-        } else if (name === 'currencyDebit') {
-          newTransaction['currencyCredit'] = '';
-        }
-      }
-
       const deserializedName = ['credit', 'debit', 'currencyCredit', 'currencyDebit'].includes(name)
         ? 'amount'
         : name;
@@ -1628,9 +1618,9 @@ const Transaction = memo(function Transaction({
         /* Debit field for all transactions */
         type="input"
         width={100}
-        name="debit"
-        exposed={focusedField === 'debit'}
-        focused={focusedField === 'debit'}
+        name="currencyDebit"
+        exposed={focusedField === 'currencyDebit'}
+        focused={focusedField === 'currencyDebit'}
         value={displayDebit}
         valueStyle={valueStyle}
         textAlign="right"
@@ -1643,7 +1633,7 @@ const Transaction = memo(function Transaction({
         }}
         inputProps={{
           value: displayDebit,
-          onUpdate: onUpdate.bind(null, 'debit'),
+          onUpdate: onUpdate.bind(null, 'currencyDebit'),
         }}
         privacyFilter={{
           activationFilters: [!isTemporaryId(transaction.id)],
@@ -1654,9 +1644,9 @@ const Transaction = memo(function Transaction({
         /* Credit field for all transactions */
         type="input"
         width={100}
-        name="credit"
-        exposed={focusedField === 'credit'}
-        focused={focusedField === 'credit'}
+        name="currencyCredit"
+        exposed={focusedField === 'currencyCredit'}
+        focused={focusedField === 'currencyCredit'}
         value={displayCredit}
         valueStyle={valueStyle}
         textAlign="right"
@@ -1669,7 +1659,7 @@ const Transaction = memo(function Transaction({
         }}
         inputProps={{
           value: displayCredit,
-          onUpdate: onUpdate.bind(null, 'credit'),
+          onUpdate: onUpdate.bind(null, 'currencyCredit'),
         }}
         privacyFilter={{
           activationFilters: [!isTemporaryId(transaction.id)],
