@@ -975,6 +975,8 @@ const Transaction = memo(function Transaction({
         transaction.reconciled === true &&
         (name === 'credit' ||
           name === 'debit' ||
+          name === 'currencyCredit' ||
+          name === 'currencyDebit' ||
           name === 'payee' ||
           name === 'account' ||
           name === 'date')
@@ -1022,7 +1024,7 @@ const Transaction = memo(function Transaction({
     }
   };
 
-  const onUpdateAfterConfirm: TransactionUpdateFunction = (name, value) => {
+  const onUpdateAfterConfirm: TransactionUpdateFunction = async (name, value) => {
     const newTransaction = { ...transaction, [name]: value };
 
     // Don't change the note to an empty string if it's null (since they are both rendered the same)
@@ -1048,6 +1050,15 @@ const Transaction = memo(function Transaction({
       newTransaction['credit'] = '';
     }
 
+    // Handle currencyDebit/currencyCredit fields for all accounts
+    if (name === 'currencyCredit' || name === 'currencyDebit') {
+      if (name === 'currencyCredit') {
+        newTransaction['currencyDebit'] = '';
+      } else if (name === 'currencyDebit') {
+        newTransaction['currencyCredit'] = '';
+      }
+    }
+
     if (name === 'account' && transaction.account !== value) {
       newTransaction.reconciled = false;
     }
@@ -1065,11 +1076,18 @@ const Transaction = memo(function Transaction({
         newTransaction,
         originalTransaction,
       );
-      // Run the transaction through the formatting so that we know
-      // it's always showing the formatted result
-      setTransaction(serializeTransaction(deserialized, showZeroInDeposit));
 
-      const deserializedName = ['credit', 'debit'].includes(name)
+      // For multicurrency transactions, handle currencyDebit/currencyCredit fields
+      if (hasDifferentCurrency && (name === 'currencyDebit' || name === 'currencyCredit')) {
+        // Clear the other currency field when one is entered
+        if (name === 'currencyCredit') {
+          newTransaction['currencyDebit'] = '';
+        } else if (name === 'currencyDebit') {
+          newTransaction['currencyCredit'] = '';
+        }
+      }
+
+      const deserializedName = ['credit', 'debit', 'currencyCredit', 'currencyDebit'].includes(name)
         ? 'amount'
         : name;
       onSave(deserialized, subtransactions, deserializedName);
@@ -1101,6 +1119,12 @@ const Transaction = memo(function Transaction({
     (payees && payeeId && getPayeesById(payees)[payeeId]) || undefined;
   const account = accounts && accountId && getAccountsById(accounts)[accountId];
 
+  // Multi-currency logic
+  const accountCurrency = account?.currency || '';
+  const hasDifferentCurrency = multiCurrencyEnabled && 
+    accountCurrency && 
+    accountCurrency !== baseCurrency;
+
   const isChild = transaction.is_child;
   const transferAcct =
     isTemporaryId(id) && payee?.transfer_acct
@@ -1115,27 +1139,14 @@ const Transaction = memo(function Transaction({
 
   const runningBalance = !isTemporaryId(id) ? balance : balance + amount;
 
-  // Multi-currency logic
-  const accountCurrency = account?.currency || '';
-  const hasDifferentCurrency = multiCurrencyEnabled && 
-    accountCurrency && 
-    accountCurrency !== baseCurrency;
-  
   // Determine which values to display
-  const displayDebit = hasDifferentCurrency ? 
-    ((originalTransaction as any).currency_amount < 0 ? integerToCurrency(-(originalTransaction as any).currency_amount) : '') : 
-    (debit === '' && credit === '' ? integerToCurrency(0) : debit);
-  const displayCredit = hasDifferentCurrency ? 
-    ((originalTransaction as any).currency_amount > 0 ? integerToCurrency((originalTransaction as any).currency_amount) : '') : 
-    credit;
+  // Main Payment/Deposit columns always use currencyDebit/currencyCredit
+  const displayDebit = transaction.currencyDebit;
+  const displayCredit = transaction.currencyCredit;
   
-  // Base currency values (converted amounts)
-  const baseDebit = hasDifferentCurrency ? 
-    (amount < 0 ? integerToCurrency(-amount) : '') : 
-    '';
-  const baseCredit = hasDifferentCurrency ? 
-    (amount > 0 ? integerToCurrency(amount) : '') : 
-    '';
+  // Base currency values (converted amounts) only for multicurrency accounts
+  const baseDebit = hasDifferentCurrency ? debit : '';
+  const baseCredit = hasDifferentCurrency ? credit : '';
 
   // Ok this entire logic is a dirty, dirty hack.. but let me explain.
   // Problem: the split-error Popover (which has the buttons to distribute/add split)

@@ -194,5 +194,5 @@ export interface ApiHandlers {
     toCurrency: string;
     date: string;
     source?: string;
-  }) => Promise<unknown>;
+  }) => Promise<{ rate: number }>;
 }

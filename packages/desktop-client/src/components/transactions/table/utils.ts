@@ -1,4 +1,5 @@
 import { parseISO, isValid as isDateValid } from 'date-fns';
+import { send } from 'loot-core/platform/client/fetch/index-types';
 
 import { evalArithmetic } from 'loot-core/shared/arithmetic';
 import { currentDay } from 'loot-core/shared/months';
@@ -17,6 +18,8 @@ export type SerializedTransaction = Omit<TransactionEntity, 'date'> & {
   date: string;
   debit: CurrencyAmount;
   credit: CurrencyAmount;
+  currencyDebit: CurrencyAmount;
+  currencyCredit: CurrencyAmount;
 };
 
 export type TransactionEditFunction = (
@@ -33,8 +36,21 @@ export function serializeTransaction(
   transaction: TransactionEntity,
   showZeroInDeposit?: boolean,
 ): SerializedTransaction {
-  const { amount, date: originalDate } = transaction;
+  let { amount, currency_amount, date: originalDate } = transaction;
 
+  let date = originalDate;
+  // Validate the date format
+  if (!isDateValid(parseISO(date))) {
+    // Be a little forgiving if the date isn't valid. This at least
+    // stops the UI from crashing, but this is a serious problem with
+    // the data. This allows the user to go through and see empty
+    // dates and manually fix them.
+    console.error(`Date '${date}' is not valid.`);
+    // TODO: the fact that the date type is not nullable but we are setting it to null needs to be changed
+    date = null as unknown as string;
+  }
+
+  // Calculate debit/credit from amount (converted base currency)
   let debit = amount < 0 ? -amount : null;
   let credit = amount > 0 ? amount : null;
 
@@ -46,16 +62,16 @@ export function serializeTransaction(
     }
   }
 
-  let date = originalDate;
-  // Validate the date format
-  if (!isDateValid(parseISO(date))) {
-    // Be a little forgiving if the date isn't valid. This at least
-    // stops the UI from crashing, but this is a serious problem with
-    // the data. This allows the user to go through and see empty
-    // dates and manually fix them.
-    console.error(`Date ‘${date}’ is not valid.`);
-    // TODO: the fact that the date type is not nullable but we are setting it to null needs to be changed
-    date = null as unknown as string;
+  // Calculate currencyDebit/currencyCredit from currency_amount (original account currency)
+  let currencyDebit = currency_amount && currency_amount < 0 ? -currency_amount : null;
+  let currencyCredit = currency_amount && currency_amount > 0 ? currency_amount : null;
+
+  if (currency_amount === 0) {
+    if (showZeroInDeposit) {
+      currencyCredit = 0;
+    } else {
+      currencyDebit = 0;
+    }
   }
 
   return {
@@ -63,6 +79,8 @@ export function serializeTransaction(
     date,
     debit: debit != null ? integerToCurrency(debit) : '',
     credit: credit != null ? integerToCurrency(credit) : '',
+    currencyDebit: currencyDebit != null ? integerToCurrency(currencyDebit) : '',
+    currencyCredit: currencyCredit != null ? integerToCurrency(currencyCredit) : '',
   };
 }
 
@@ -70,14 +88,17 @@ export function deserializeTransaction(
   transaction: SerializedTransaction,
   originalTransaction: TransactionEntity,
 ) {
-  const { debit, credit, date: originalDate, ...realTransaction } = transaction;
+  const { debit, credit, currencyDebit, currencyCredit, date: originalDate, ...realTransaction } = transaction;
 
+  // Always use currencyDebit/currencyCredit to set amount (for all account types)
   let amount: number | null;
-  if (debit !== '') {
-    const parsed = evalArithmetic(debit, null);
+  if (currencyDebit !== '') {
+    const parsed = evalArithmetic(currencyDebit, null);
     amount = parsed != null ? -parsed : null;
+  } else if (currencyCredit !== '') {
+    amount = evalArithmetic(currencyCredit, null);
   } else {
-    amount = evalArithmetic(credit, null);
+    amount = null;
   }
 
   amount =
