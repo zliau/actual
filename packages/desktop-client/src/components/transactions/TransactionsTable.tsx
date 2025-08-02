@@ -131,6 +131,7 @@ import {
   getCategoriesById,
 } from '@desktop-client/queries/queriesSlice';
 import { useDispatch } from '@desktop-client/redux';
+import { send } from 'loot-core/platform/client/fetch';
 
 type TransactionHeaderProps = {
   hasSelected: boolean;
@@ -1046,17 +1047,10 @@ const Transaction = memo(function Transaction({
     // `deserializeTransaction`)
     if (name === 'credit') {
       newTransaction['debit'] = '';
+      newTransaction['currencyDebit'] = '';
     } else if (name === 'debit') {
       newTransaction['credit'] = '';
-    }
-
-    // Handle currencyDebit/currencyCredit fields for all accounts
-    if (name === 'currencyCredit' || name === 'currencyDebit') {
-      if (name === 'currencyCredit') {
-        newTransaction['currencyDebit'] = '';
-      } else if (name === 'currencyDebit') {
-        newTransaction['currencyCredit'] = '';
-      }
+      newTransaction['currencyCredit'] = '';
     }
 
     if (name === 'account' && transaction.account !== value) {
@@ -1076,11 +1070,29 @@ const Transaction = memo(function Transaction({
         newTransaction,
         originalTransaction,
       );
+      
+      // For multicurrency transactions, fetch exchange rate and update amount optimistically
+      let rate = null;
+      if (hasDifferentCurrency && (name === 'credit' || name === 'debit')) {
+          // Fetch exchange rate from sync-server
+          const response = await send('api/exchange-rate-fetch', {
+            fromCurrency: accountCurrency,
+            toCurrency: baseCurrency,
+            date: deserialized.date,
+          });
+          rate = response.rate;
+      }
+
+      // Run the transaction through the formatting so that we know
+      // it's always showing the formatted result
+      let serialized = serializeTransaction(deserialized, showZeroInDeposit, rate);
+
+      setTransaction(serialized);
 
       const deserializedName = ['credit', 'debit', 'currencyCredit', 'currencyDebit'].includes(name)
         ? 'amount'
         : name;
-      onSave(deserialized, subtransactions, deserializedName);
+      onSave(serialized, subtransactions, deserializedName);
     }
   };
 
@@ -1618,9 +1630,9 @@ const Transaction = memo(function Transaction({
         /* Debit field for all transactions */
         type="input"
         width={100}
-        name="currencyDebit"
-        exposed={focusedField === 'currencyDebit'}
-        focused={focusedField === 'currencyDebit'}
+        name="debit"
+        exposed={focusedField === 'debit'}
+        focused={focusedField === 'debit'}
         value={displayDebit}
         valueStyle={valueStyle}
         textAlign="right"
@@ -1633,7 +1645,7 @@ const Transaction = memo(function Transaction({
         }}
         inputProps={{
           value: displayDebit,
-          onUpdate: onUpdate.bind(null, 'currencyDebit'),
+          onUpdate: onUpdate.bind(null, 'debit'),
         }}
         privacyFilter={{
           activationFilters: [!isTemporaryId(transaction.id)],
@@ -1644,9 +1656,9 @@ const Transaction = memo(function Transaction({
         /* Credit field for all transactions */
         type="input"
         width={100}
-        name="currencyCredit"
-        exposed={focusedField === 'currencyCredit'}
-        focused={focusedField === 'currencyCredit'}
+        name="credit"
+        exposed={focusedField === 'credit'}
+        focused={focusedField === 'credit'}
         value={displayCredit}
         valueStyle={valueStyle}
         textAlign="right"
@@ -1659,7 +1671,7 @@ const Transaction = memo(function Transaction({
         }}
         inputProps={{
           value: displayCredit,
-          onUpdate: onUpdate.bind(null, 'currencyCredit'),
+          onUpdate: onUpdate.bind(null, 'credit'),
         }}
         privacyFilter={{
           activationFilters: [!isTemporaryId(transaction.id)],

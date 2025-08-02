@@ -35,8 +35,9 @@ export type TransactionUpdateFunction = <T extends keyof SerializedTransaction>(
 export function serializeTransaction(
   transaction: TransactionEntity,
   showZeroInDeposit?: boolean,
+  rate?: number,
 ): SerializedTransaction {
-  let { amount, currency_amount, date: originalDate } = transaction;
+  let { amount, date: originalDate } = transaction;
 
   let date = originalDate;
   // Validate the date format
@@ -50,26 +51,24 @@ export function serializeTransaction(
     date = null as unknown as string;
   }
 
+  let currencyAmount = amount;
+
+  if (rate) {
+    amount = Math.round(currencyAmount * rate);
+  }
+
   // Calculate debit/credit from amount (converted base currency)
   let debit = amount < 0 ? -amount : null;
   let credit = amount > 0 ? amount : null;
+  let currencyDebit = currencyAmount < 0 ? -currencyAmount : null;
+  let currencyCredit = currencyAmount > 0 ? currencyAmount : null;
 
   if (amount === 0) {
     if (showZeroInDeposit) {
       credit = 0;
-    } else {
-      debit = 0;
-    }
-  }
-
-  // Calculate currencyDebit/currencyCredit from currency_amount (original account currency)
-  let currencyDebit = currency_amount && currency_amount < 0 ? -currency_amount : null;
-  let currencyCredit = currency_amount && currency_amount > 0 ? currency_amount : null;
-
-  if (currency_amount === 0) {
-    if (showZeroInDeposit) {
       currencyCredit = 0;
     } else {
+      debit = 0;
       currencyDebit = 0;
     }
   }
@@ -90,13 +89,12 @@ export function deserializeTransaction(
 ) {
   const { debit, credit, currencyDebit, currencyCredit, date: originalDate, ...realTransaction } = transaction;
 
-  // Always use currencyDebit/currencyCredit to set amount (for all account types)
   let amount: number | null;
-  if (currencyDebit !== '') {
-    const parsed = evalArithmetic(currencyDebit, null);
+  if (debit !== '') {
+    const parsed = evalArithmetic(debit, null);
     amount = parsed != null ? -parsed : null;
-  } else if (currencyCredit !== '') {
-    amount = evalArithmetic(currencyCredit, null);
+  } else if (credit !== '') {
+    amount = evalArithmetic(credit, null);
   } else {
     amount = null;
   }
