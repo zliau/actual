@@ -90,11 +90,11 @@ export function deserializeTransaction(
   const { debit, credit, currencyDebit, currencyCredit, date: originalDate, ...realTransaction } = transaction;
 
   let amount: number | null;
-  if (debit !== '') {
-    const parsed = evalArithmetic(debit, null);
+  if (currencyDebit !== '') {
+    const parsed = evalArithmetic(currencyDebit, null);
     amount = parsed != null ? -parsed : null;
-  } else if (credit !== '') {
-    amount = evalArithmetic(credit, null);
+  } else if (currencyCredit !== '') {
+    amount = evalArithmetic(currencyCredit, null);
   } else {
     amount = null;
   }

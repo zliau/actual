@@ -1073,7 +1073,7 @@ const Transaction = memo(function Transaction({
       
       // For multicurrency transactions, fetch exchange rate and update amount optimistically
       let rate = null;
-      if (hasDifferentCurrency && (name === 'credit' || name === 'debit')) {
+      if (hasDifferentCurrency && (name === 'currencyCredit' || name === 'currencyDebit')) {
           // Fetch exchange rate from sync-server
           const response = await send('api/exchange-rate-fetch', {
             fromCurrency: accountCurrency,
@@ -1630,13 +1630,13 @@ const Transaction = memo(function Transaction({
         /* Debit field for all transactions */
         type="input"
         width={100}
-        name="debit"
-        exposed={focusedField === 'debit'}
-        focused={focusedField === 'debit'}
-        value={displayDebit}
+        name="currencyDebit"
+        exposed={focusedField === 'currencyDebit'}
+        focused={focusedField === 'currencyDebit'}
+        value={transaction.currencyDebit}
         valueStyle={valueStyle}
         textAlign="right"
-        title={displayDebit}
+        title={transaction.currencyDebit}
         onExpose={name => !isPreview && onEdit(id, name)}
         style={{
           ...(isParent && { fontStyle: 'italic' }),
@@ -1644,8 +1644,8 @@ const Transaction = memo(function Transaction({
           ...amountStyle,
         }}
         inputProps={{
-          value: displayDebit,
-          onUpdate: onUpdate.bind(null, 'debit'),
+          value: transaction.currencyDebit,
+          onUpdate: onUpdate.bind(null, 'currencyDebit'),
         }}
         privacyFilter={{
           activationFilters: [!isTemporaryId(transaction.id)],
@@ -1656,13 +1656,13 @@ const Transaction = memo(function Transaction({
         /* Credit field for all transactions */
         type="input"
         width={100}
-        name="credit"
-        exposed={focusedField === 'credit'}
-        focused={focusedField === 'credit'}
-        value={displayCredit}
+        name="currencyCredit"
+        exposed={focusedField === 'currencyCredit'}
+        focused={focusedField === 'currencyCredit'}
+        value={transaction.currencyCredit}
         valueStyle={valueStyle}
         textAlign="right"
-        title={displayCredit}
+        title={transaction.currencyCredit}
         onExpose={name => !isPreview && onEdit(id, name)}
         style={{
           ...(isParent && { fontStyle: 'italic' }),
@@ -1670,8 +1670,8 @@ const Transaction = memo(function Transaction({
           ...amountStyle,
         }}
         inputProps={{
-          value: displayCredit,
-          onUpdate: onUpdate.bind(null, 'credit'),
+          value: transaction.currencyCredit,
+          onUpdate: onUpdate.bind(null, 'currencyCredit'),
         }}
         privacyFilter={{
           activationFilters: [!isTemporaryId(transaction.id)],
