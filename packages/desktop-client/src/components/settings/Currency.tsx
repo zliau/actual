@@ -1,81 +1,26 @@
 import React, { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 
+import { Button } from '@actual-app/components/button';
 import { Select } from '@actual-app/components/select';
 import { theme } from '@actual-app/components/theme';
-import { currencies, getCurrency } from '@actual-app/core/shared/currencies';
+import { getCurrency } from '@actual-app/core/shared/currencies';
 import { css } from '@emotion/css';
 
 import { Checkbox } from '#components/forms';
+import { useCurrencyOptions } from '#hooks/useCurrencyOptions';
 import { useSyncedPref } from '#hooks/useSyncedPref';
+import { pushModal } from '#modals/modalsSlice';
+import { useDispatch } from '#redux';
 
 import { SettingsGroup } from './SettingsGroup';
 import { SettingsRow } from './SettingsRow';
 
 export function CurrencySettings() {
   const { t } = useTranslation();
+  const dispatch = useDispatch();
 
-  const currencyTranslations = useMemo(
-    () =>
-      new Map<string, string>([
-        ['', t('None')],
-        ['AED', t('UAE Dirham')],
-        ['ARS', t('Argentinian Peso')],
-        ['AUD', t('Australian Dollar')],
-        ['BDT', t('Bangladeshi Taka')],
-        ['BRL', t('Brazilian Real')],
-        ['BYN', t('Belarusian Ruble')],
-        ['CAD', t('Canadian Dollar')],
-        ['CHF', t('Swiss Franc')],
-        ['CLP', t('Chilean Peso')],
-        ['CNY', t('Yuan Renminbi')],
-        ['COP', t('Colombian Peso')],
-        ['CRC', t('Costa Rican Colón')],
-        ['CZK', t('Czech Koruna')],
-        ['DKK', t('Danish Krone')],
-        ['DOP', t('Dominican Peso')],
-        ['EGP', t('Egyptian Pound')],
-        ['EUR', t('Euro')],
-        ['GBP', t('Pound Sterling')],
-        ['GTQ', t('Guatemalan Quetzal')],
-        ['HKD', t('Hong Kong Dollar')],
-        ['HUF', t('Hungarian Forint')],
-        ['IDR', t('Indonesian Rupiah')],
-        ['ILS', t('Israeli New Shekel')],
-        ['INR', t('Indian Rupee')],
-        ['IRR', t('Iranian Rial')],
-        ['JMD', t('Jamaican Dollar')],
-        ['JPY', t('Japanese Yen')],
-        ['KRW', t('South Korean Won')],
-        ['LKR', t('Sri Lankan Rupee')],
-        ['MDL', t('Moldovan Leu')],
-        ['MKD', t('Macedonian Denar')],
-        ['MXN', t('Mexican Peso')],
-        ['MYR', t('Malaysian Ringgit')],
-        ['NOK', t('Norwegian Krone')],
-        ['PEN', t('Peruvian Sol')],
-        ['PHP', t('Philippine Peso')],
-        ['PKR', t('Pakistani Rupee')],
-        ['PLN', t('Polish Złoty')],
-        ['QAR', t('Qatari Riyal')],
-        ['RON', t('Romanian Leu')],
-        ['RSD', t('Serbian Dinar')],
-        ['RUB', t('Russian Ruble')],
-        ['SAR', t('Saudi Riyal')],
-        ['SEK', t('Swedish Krona')],
-        ['SGD', t('Singapore Dollar')],
-        ['THB', t('Thai Baht')],
-        ['TRY', t('Turkish Lira')],
-        ['TWD', t('New Taiwan Dollar')],
-        ['TZS', t('Tanzanian Shilling')],
-        ['UAH', t('Ukrainian Hryvnia')],
-        ['USD', t('US Dollar')],
-        ['UYU', t('Uruguayan Peso')],
-        ['UZS', t('Uzbek Soum')],
-        ['ZAR', t('South African Rand')],
-      ]),
-    [t],
-  );
+  const currencyOptions = useCurrencyOptions();
 
   const [defaultCurrencyCode, setDefaultCurrencyCodePref] = useSyncedPref(
     'defaultCurrencyCode',
@@ -95,18 +40,6 @@ export function CurrencySettings() {
     '&[data-hovered]': {
       backgroundColor: theme.buttonNormalBackgroundHover,
     },
-  });
-
-  const currencyOptions: [string, string][] = currencies.map(currency => {
-    const translatedName =
-      currencyTranslations.get(currency.code) ?? currency.name;
-    if (currency.code === '') {
-      return [currency.code, translatedName];
-    }
-    return [
-      currency.code,
-      `${currency.code} - ${translatedName} (${currency.symbol})`,
-    ];
   });
 
   const handleCurrencyChange = (code: string) => {
@@ -185,6 +118,25 @@ export function CurrencySettings() {
               }
               style={{ marginRight: 0 }}
             />
+          }
+        />
+      )}
+      {selectedCurrencyCode !== '' && (
+        <SettingsRow
+          title={t('Exchange rates')}
+          description={t(
+            'Accounts can use another currency than the default one. Their amounts are converted to the default currency with these rates.',
+          )}
+          control={
+            <Button
+              onPress={() =>
+                dispatch(
+                  pushModal({ modal: { name: 'exchange-rates', options: {} } }),
+                )
+              }
+            >
+              <Trans>Manage exchange rates</Trans>
+            </Button>
           }
         />
       )}

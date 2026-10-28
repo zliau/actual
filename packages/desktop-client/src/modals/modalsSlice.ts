@@ -6,6 +6,7 @@ import type {
   BankSyncCredentialSource,
   CategoryEntity,
   CategoryGroupEntity,
+  ExchangeRateEntity,
   GoCardlessToken,
   NewRuleEntity,
   NewUserEntity,
@@ -63,6 +64,30 @@ export type Modal =
       name: 'account-groups';
       options: {
         accountId: AccountEntity['id'];
+      };
+    }
+  | {
+      name: 'account-currency';
+      options: {
+        accountId: AccountEntity['id'];
+      };
+    }
+  | {
+      name: 'exchange-rates';
+      options: {
+        // The currency to show rates for, against the main currency
+        currency?: string;
+      };
+    }
+  | {
+      name: 'edit-exchange-rate';
+      options: {
+        fromCurrency: string;
+        toCurrency: string;
+        // The rate to change, otherwise a new rate is added
+        exchangeRate?: ExchangeRateEntity;
+        // The day of a new rate
+        date?: string;
       };
     }
   | {

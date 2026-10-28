@@ -85,6 +85,10 @@ export const schema = {
     bank_sync_status: f('string'),
     account_group_id: f('id', { ref: 'account_groups' }),
     currency: f('string'),
+    // Only in the views: the latest exchange rate from the account's currency
+    // to the main currency, or 1 when they match or no rate is known.
+    // Multiply balances by this to value them in the main currency.
+    latest_rate: f('float'),
   },
   account_groups: {
     id: f('id'),
@@ -274,9 +278,20 @@ export const schemaConfig: SchemaConfig = {
       case 'payees':
         return 'v_payees';
 
+      case 'accounts':
+        return 'v_accounts';
+
       default:
     }
     return name;
+  },
+
+  tableDependencies(name) {
+    // The accounts view looks up exchange rates and the main currency
+    if (name === 'accounts') {
+      return ['exchange_rates', 'preferences'];
+    }
+    return [];
   },
 
   customizeQuery(queryState) {
@@ -328,6 +343,34 @@ export const schemaConfig: SchemaConfig = {
   },
 
   views: {
+    accounts: {
+      v_accounts: internalFields => {
+        const mainCurrency = `(SELECT value FROM preferences WHERE id = 'defaultCurrencyCode')`;
+        const fields = internalFields({
+          // Prefer manual rates, then the direct pair, like getExchangeRate.
+          // The ORDER BY must not refer to `_`: the SQLite of the browser
+          // build fails on outer columns in a subquery's ORDER BY.
+          latest_rate: `
+            CASE
+              WHEN _.currency IS NULL OR _.currency = IFNULL(${mainCurrency}, '') THEN 1
+              ELSE IFNULL((
+                SELECT CASE WHEN r.from_currency = _.currency THEN r.rate ELSE 1.0 / r.rate END
+                FROM exchange_rates r
+                WHERE r.tombstone = 0 AND (
+                  (r.from_currency = _.currency AND r.to_currency = ${mainCurrency}) OR
+                  (r.from_currency = ${mainCurrency} AND r.to_currency = _.currency)
+                )
+                ORDER BY r.date DESC, CASE r.source WHEN 'manual' THEN 0 ELSE 1 END,
+                  r.to_currency = ${mainCurrency} DESC, r.id
+                LIMIT 1
+              ), 1)
+            END
+          `,
+        });
+        return `SELECT ${fields} FROM accounts _`;
+      },
+    },
+
     payees: {
       v_payees: internalFields => {
         const fields = internalFields({

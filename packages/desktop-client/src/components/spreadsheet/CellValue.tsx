@@ -32,12 +32,20 @@ type CellValueProps<
   }) => ReactNode;
   binding: Binding<SheetName, FieldName>;
   type?: FormatType;
+  // Formats the value in this currency instead of the main one
+  currency?: string;
 };
 
 export function CellValue<
   SheetName extends SheetNames,
   FieldName extends SheetFields<SheetName>,
->({ type, binding, children, ...props }: CellValueProps<SheetName, FieldName>) {
+>({
+  type,
+  binding,
+  currency,
+  children,
+  ...props
+}: CellValueProps<SheetName, FieldName>) {
   const { fullSheetName } = useSheetName(binding);
   const sheetValue = useSheetValue(binding);
 
@@ -48,6 +56,7 @@ export function CellValue<
       type={type}
       name={fullSheetName}
       value={sheetValue}
+      currency={currency}
       {...props}
     />
   );
@@ -63,6 +72,8 @@ type CellValueTextProps<
   name: string;
   value: Spreadsheets[SheetName][FieldName];
   style?: CSSProperties;
+  // Formats the value in this currency instead of the main one
+  currency?: string;
   formatter?: (
     value: Spreadsheets[SheetName][FieldName],
     type?: FormatType,
@@ -78,6 +89,7 @@ export function CellValueText<
   value,
   formatter,
   style,
+  currency,
   ...props
 }: CellValueTextProps<SheetName, FieldName>) {
   const format = useFormat();
@@ -104,7 +116,7 @@ export function CellValueText<
         <PrivacyFilter
           activationFilters={[PRIVACY_FILTER_TYPES.includes(type)]}
         >
-          {formatter ? formatter(value, type) : format(value, type)}
+          {formatter ? formatter(value, type) : format(value, type, currency)}
         </PrivacyFilter>
       </FinancialText>
     );
@@ -113,7 +125,7 @@ export function CellValueText<
   return (
     <Text {...sharedProps}>
       <PrivacyFilter activationFilters={[PRIVACY_FILTER_TYPES.includes(type)]}>
-        {formatter ? formatter(value, type) : format(value, type)}
+        {formatter ? formatter(value, type) : format(value, type, currency)}
       </PrivacyFilter>
     </Text>
   );

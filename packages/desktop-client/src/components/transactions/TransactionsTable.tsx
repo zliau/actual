@@ -148,6 +148,7 @@ import {
   isFutureTransaction,
 } from '#util/schedule-actions';
 
+import { ConvertedAmountCell } from './ConvertedAmountCell';
 import {
   isTransactionTableColumnAvailableInChildRows,
   isTransactionTableColumnDisplayOnly,
@@ -174,11 +175,13 @@ import { useTransactionRowContextActions } from './useTransactionRowContextActio
 type AmountColumnWidths = {
   amount: number; // Applies to both debit and credit columns
   balance: number;
+  converted: number;
 };
 
 export const DEFAULT_AMOUNT_COLUMN_WIDTHS: AmountColumnWidths = {
   amount: 100,
   balance: 103,
+  converted: 100,
 };
 
 // Tabular numerals (styles.tnum) make every digit glyph the same width, so a
@@ -210,6 +213,9 @@ export function useAmountColumnWidths(
   const balanceValues = balances
     ? Object.values(balances).map(balance => integerToCurrency(balance))
     : [];
+  const convertedValues = transactions.map(t =>
+    integerToCurrency(t.converted_amount ?? t.amount ?? 0),
+  );
 
   return {
     amount: measureAmountColumnWidth(
@@ -219,6 +225,10 @@ export function useAmountColumnWidths(
     balance: measureAmountColumnWidth(
       balanceValues,
       DEFAULT_AMOUNT_COLUMN_WIDTHS.balance,
+    ),
+    converted: measureAmountColumnWidth(
+      convertedValues,
+      DEFAULT_AMOUNT_COLUMN_WIDTHS.converted,
     ),
   };
 }
@@ -321,6 +331,20 @@ const TransactionHeader = memo(
         alignItems: 'flex-end',
         marginRight: -5,
         sortDirection: 'desc',
+      },
+      converted: {
+        value: columnLabels.converted,
+        width: amountColumnWidths.converted,
+        alignItems: 'flex-end',
+        marginRight: -5,
+        tooltip: (
+          <Text style={{ padding: 8, maxWidth: 260, lineHeight: 1.5 }}>
+            <Trans>
+              Amounts in the main currency, converted with the exchange rate of
+              each transaction's date.
+            </Trans>
+          </Text>
+        ),
       },
       balance: {
         value: t('Balance'),
@@ -2068,6 +2092,16 @@ const Transaction = memo(function Transaction({
             }}
           />
         );
+      case 'converted':
+        return (
+          <ConvertedAmountCell
+            key={columnId}
+            transaction={originalTransaction}
+            account={account || undefined}
+            width={amountColumnWidths.converted}
+            style={amountStyle}
+          />
+        );
       case 'balance':
         return (
           <Cell
@@ -3060,6 +3094,9 @@ export type TransactionTableProps = {
   showAccount: boolean;
   showCategory: boolean;
   showGroup?: boolean;
+  // Whether the converted column is available: it is only shown in views
+  // with accounts in another currency than the main one
+  showConverted?: boolean;
   // The full set of columns the user wants visible, in display order. When
   // provided, columns are rendered in this order; the show* flags above
   // still control the availability of the account/category/group/balance/
@@ -3144,6 +3181,7 @@ export const TransactionTable = forwardRef(
       showGroup,
       showBalances,
       showCleared,
+      showConverted,
     } = props;
     const visibleColumns = useMemo(
       () =>
@@ -3159,6 +3197,8 @@ export const TransactionTable = forwardRef(
               return showBalances;
             case 'cleared':
               return showCleared;
+            case 'converted':
+              return !!showConverted;
             default:
               return true;
           }
@@ -3170,6 +3210,7 @@ export const TransactionTable = forwardRef(
         showGroup,
         showBalances,
         showCleared,
+        showConverted,
       ],
     );
     const [prevIsAdding, setPrevIsAdding] = useState(false);

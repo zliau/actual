@@ -28,6 +28,7 @@ import { TransactionListWithBalances } from '#components/mobile/transactions/Tra
 import { useAccountPreviewTransactions } from '#hooks/useAccountPreviewTransactions';
 import { SchedulesProvider } from '#hooks/useCachedSchedules';
 import { useDateFormat } from '#hooks/useDateFormat';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useNavigate } from '#hooks/useNavigate';
 import { getSchedulesQuery } from '#hooks/useSchedules';
 import { useSheetValue } from '#hooks/useSheetValue';
@@ -289,6 +290,7 @@ function TransactionListWithPreviews({
     [dispatch, onBatchEdit],
   );
 
+  const mainCurrency = useMainCurrency();
   const balanceBindings = useMemo(
     () => ({
       balance: bindings.accountBalance(account.id),
@@ -325,6 +327,7 @@ function TransactionListWithPreviews({
         balance={balanceBindings.balance}
         balanceCleared={balanceBindings.cleared}
         balanceUncleared={balanceBindings.uncleared}
+        currency={getForeignCurrency(account, mainCurrency) ?? undefined}
         runningBalances={allBalances}
         showRunningBalances={shouldCalculateRunningBalances}
         isLoadingMore={isLoadingMoreTransactions}

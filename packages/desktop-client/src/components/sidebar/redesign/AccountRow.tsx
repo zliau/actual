@@ -16,6 +16,7 @@ import { css } from '@emotion/css';
 import { useReopenAccountMutation, useUpdateAccountMutation } from '#accounts';
 import { isAccountFailedSync } from '#accounts/syncStatus';
 import { useContextMenu } from '#hooks/useContextMenu';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useUpdatedAccounts } from '#hooks/useUpdatedAccounts';
 import { openAccountCloseModal, pushModal } from '#modals/modalsSlice';
 import { useDispatch, useSelector } from '#redux';
@@ -46,6 +47,7 @@ export function AccountRow({
   const location = useLocation();
   const syncingAccountIds = useSelector(state => state.account.accountsSyncing);
   const updatedAccounts = useUpdatedAccounts();
+  const mainCurrency = useMainCurrency();
   const isUpdated = !isClosed && updatedAccounts.includes(account.id);
   const [isEditing, setIsEditing] = useTreeItemEditing(
     treeKeys.account(account.id),
@@ -199,6 +201,9 @@ export function AccountRow({
               <Text style={styles.visuallyHidden}>{statusLabel}</Text>
               <SidebarBalance
                 binding={bindings.accountBalance(account.id)}
+                currency={
+                  getForeignCurrency(account, mainCurrency) ?? undefined
+                }
                 style={{
                   fontSize: 12,
                   color: 'inherit',

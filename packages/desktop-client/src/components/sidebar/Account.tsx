@@ -30,6 +30,7 @@ import { CellValue } from '#components/spreadsheet/CellValue';
 import { useContextMenu } from '#hooks/useContextMenu';
 import { useDragRef } from '#hooks/useDragRef';
 import { useIsTestEnv } from '#hooks/useIsTestEnv';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useNotes } from '#hooks/useNotes';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 import { openAccountCloseModal } from '#modals/modalsSlice';
@@ -124,7 +125,14 @@ export function Account<FieldName extends SheetFields<'account'>>({
   const reopenAccount = useReopenAccountMutation();
   const updateAccount = useUpdateAccountMutation();
 
-  const balanceCell = <CellValue binding={query} type="financial" />;
+  const mainCurrency = useMainCurrency();
+  const balanceCell = (
+    <CellValue
+      binding={query}
+      type="financial"
+      currency={getForeignCurrency(account, mainCurrency) ?? undefined}
+    />
+  );
 
   const isContextMenuOpen = useSelector(state =>
     state.contextMenu.items.some(
