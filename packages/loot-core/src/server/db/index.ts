@@ -864,16 +864,51 @@ function getExchangeRateSync(
   return row.from_currency === fromCurrency ? row.rate : 1 / row.rate;
 }
 
+type TransferSide = {
+  amount: DbTransaction['amount'];
+  currency: DbAccount['currency'];
+};
+
 // The amount of a transaction in the main currency, or null when its account
-// already uses the main currency or no exchange rate is known
+// already uses the main currency or no exchange rate is known. A transfer
+// with an account in the main currency was converted at the amount the other
+// side received, so it uses that instead of the rate and the two sides cancel
+// out in totals.
+function convertAmount({
+  currency,
+  amount,
+  date,
+  transfer,
+  mainCurrency,
+}: {
+  currency: DbAccount['currency'];
+  amount: number;
+  date: string;
+  transfer: TransferSide | null;
+  mainCurrency: string | null;
+}): number | null {
+  if (!currency || !mainCurrency || currency === mainCurrency) {
+    return null;
+  }
+
+  if (transfer && (transfer.currency ?? mainCurrency) === mainCurrency) {
+    return -transfer.amount;
+  }
+
+  const rate = getExchangeRateSync(currency, mainCurrency, date);
+  return rate == null ? null : Math.round(amount * rate);
+}
+
 function getConvertedAmount({
   account,
   amount,
   date,
+  transferId,
 }: {
   account: DbAccount['id'] | undefined;
   amount: number | undefined;
   date: string | undefined;
+  transferId: DbTransaction['id'] | null | undefined;
 }): number | null {
   if (account == null || amount == null || date == null) {
     return null;
@@ -883,18 +918,58 @@ function getConvertedAmount({
     'SELECT currency FROM accounts WHERE id = ?',
     [account],
   );
-  const mainCurrency = getMainCurrencySync();
-  if (!row?.currency || !mainCurrency || row.currency === mainCurrency) {
-    return null;
+  const transfer = transferId
+    ? firstSync<TransferSide>(
+        `SELECT t.amount, a.currency FROM transactions t
+         JOIN accounts a ON a.id = t.acct
+         WHERE t.id = ? AND t.tombstone = 0`,
+        [transferId],
+      )
+    : null;
+
+  return convertAmount({
+    currency: row?.currency ?? null,
+    amount,
+    date,
+    transfer: transfer ?? null,
+    mainCurrency: getMainCurrencySync(),
+  });
+}
+
+// Recalculates the converted amount of one transaction, for example when the
+// other side of its transfer changed
+export async function refreshConvertedAmount(
+  id: DbTransaction['id'],
+): Promise<void> {
+  const current = firstSync<
+    Pick<
+      DbTransaction,
+      'acct' | 'amount' | 'date' | 'transferred_id' | 'converted_amount'
+    >
+  >(
+    'SELECT acct, amount, date, transferred_id, converted_amount FROM transactions WHERE id = ?',
+    [id],
+  );
+  if (!current) {
+    return;
   }
 
-  const rate = getExchangeRateSync(row.currency, mainCurrency, date);
-  return rate == null ? null : Math.round(amount * rate);
+  const convertedAmount = getConvertedAmount({
+    account: current.acct,
+    amount: current.amount,
+    date: fromDateRepr(current.date),
+    transferId: current.transferred_id,
+  });
+  if (convertedAmount !== (current.converted_amount ?? null)) {
+    await update('transactions', { id, converted_amount: convertedAmount });
+  }
 }
 
 // Recalculates the stored converted amounts of transactions in foreign
 // currency accounts, for example after a rate or an account's currency
 // changed. Limit it to accounts in `currencies` and to days from `start`.
+// `accountIds` also covers transfers with those accounts, whose conversion
+// depends on the other side.
 export async function updateConvertedAmounts({
   accountIds,
   currencies,
@@ -907,8 +982,9 @@ export async function updateConvertedAmounts({
   const conditions = ['t.tombstone = 0'];
   const params: sqlite.SqlParam[] = [];
   if (accountIds) {
-    conditions.push(`t.acct IN (${toSqlQueryParameters(accountIds)})`);
-    params.push(...accountIds);
+    const ids = toSqlQueryParameters(accountIds);
+    conditions.push(`(t.acct IN (${ids}) OR c.acct IN (${ids}))`);
+    params.push(...accountIds, ...accountIds);
   }
   if (currencies) {
     conditions.push(`a.currency IN (${toSqlQueryParameters(currencies)})`);
@@ -922,11 +998,18 @@ export async function updateConvertedAmounts({
   const transactions = await all<
     Pick<DbTransaction, 'id' | 'amount' | 'date' | 'converted_amount'> & {
       currency: DbAccount['currency'];
+      transfer_amount: DbTransaction['amount'] | null;
+      transfer_currency: DbAccount['currency'];
+      has_transfer: number;
     }
   >(
-    `SELECT t.id, t.amount, t.date, t.converted_amount, a.currency
+    `SELECT t.id, t.amount, t.date, t.converted_amount, a.currency,
+       c.amount AS transfer_amount, ca.currency AS transfer_currency,
+       c.id IS NOT NULL AS has_transfer
      FROM transactions t
      JOIN accounts a ON a.id = t.acct
+     LEFT JOIN transactions c ON c.id = t.transferred_id AND c.tombstone = 0
+     LEFT JOIN accounts ca ON ca.id = c.acct
      WHERE ${conditions.join(' AND ')}`,
     params,
   );
@@ -936,20 +1019,18 @@ export async function updateConvertedAmounts({
 
   await batchMessages(async () => {
     for (const transaction of transactions) {
-      let convertedAmount: number | null = null;
-      if (
-        transaction.currency &&
-        mainCurrency &&
-        transaction.currency !== mainCurrency
-      ) {
-        const rate = await getExchangeRate(
-          transaction.currency,
-          mainCurrency,
-          fromDateRepr(transaction.date),
-        );
-        convertedAmount =
-          rate == null ? null : Math.round(transaction.amount * rate);
-      }
+      const convertedAmount = convertAmount({
+        currency: transaction.currency,
+        amount: transaction.amount,
+        date: fromDateRepr(transaction.date),
+        transfer: transaction.has_transfer
+          ? {
+              amount: transaction.transfer_amount ?? 0,
+              currency: transaction.transfer_currency,
+            }
+          : null,
+        mainCurrency,
+      });
 
       if (convertedAmount !== (transaction.converted_amount ?? null)) {
         await update('transactions', {
@@ -1078,7 +1159,10 @@ export function insertTransaction(
 ): Promise<TransactionEntity['id']> {
   return insertWithSchema('transactions', {
     ...transaction,
-    converted_amount: getConvertedAmount(transaction),
+    converted_amount: getConvertedAmount({
+      ...transaction,
+      transferId: transaction.transfer_id,
+    }),
   });
 }
 
@@ -1088,10 +1172,13 @@ export function updateTransaction(transaction) {
   if (
     transaction.amount !== undefined ||
     transaction.date !== undefined ||
-    transaction.account !== undefined
+    transaction.account !== undefined ||
+    transaction.transfer_id !== undefined
   ) {
-    const current = firstSync<Pick<DbTransaction, 'acct' | 'amount' | 'date'>>(
-      'SELECT acct, amount, date FROM transactions WHERE id = ?',
+    const current = firstSync<
+      Pick<DbTransaction, 'acct' | 'amount' | 'date' | 'transferred_id'>
+    >(
+      'SELECT acct, amount, date, transferred_id FROM transactions WHERE id = ?',
       [transaction.id],
     );
     transaction = {
@@ -1102,6 +1189,10 @@ export function updateTransaction(transaction) {
         date:
           transaction.date ??
           (current?.date != null ? fromDateRepr(current.date) : undefined),
+        transferId:
+          transaction.transfer_id !== undefined
+            ? transaction.transfer_id
+            : current?.transferred_id,
       }),
     };
   }
