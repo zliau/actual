@@ -2,7 +2,10 @@ import {
   clearServer,
   initServer,
 } from '@actual-app/core/platform/client/connection';
-import type { AccountEntity } from '@actual-app/core/types/models';
+import type {
+  AccountEntity,
+  ExchangeRateEntity,
+} from '@actual-app/core/types/models';
 import { enUS } from 'date-fns/locale';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -66,6 +69,8 @@ async function runReport({
   end = '2026-08',
   interval = 'Monthly',
   earliestTransactionDate = '2026-07-01',
+  exchangeRates = [],
+  mainCurrency = null,
 }: {
   accounts: AccountEntity[];
   accountQueryResults: AccountQueryResult[];
@@ -74,6 +79,8 @@ async function runReport({
   end?: string;
   interval?: string;
   earliestTransactionDate?: string;
+  exchangeRates?: ExchangeRateEntity[];
+  mainCurrency?: string | null;
 }) {
   const remainingAccountResults = [...accountQueryResults];
 
@@ -82,6 +89,12 @@ async function runReport({
     'get-earliest-transaction': async () => ({
       date: earliestTransactionDate,
     }),
+    'exchange-rates-get': async ({ from_currency, to_currency } = {}) =>
+      exchangeRates.filter(
+        rate =>
+          rate.from_currency === from_currency &&
+          rate.to_currency === to_currency,
+      ),
     query: async query => {
       if (query.selectExpressions.includes('transfer_id')) {
         const transferFilter = query.filterExpressions.find(
@@ -122,6 +135,8 @@ async function runReport({
     interval,
     '0',
     value => String(value),
+    undefined,
+    mainCurrency,
   );
 
   // The net worth factory does not use its spreadsheet dependency.
@@ -374,4 +389,86 @@ describe('net worth transfers', () => {
       expect(totals).toEqual(totals.map(() => 100_000));
     },
   );
+});
+
+describe('net worth in the main currency', () => {
+  const usAccount = { ...createAccount('us', 'US'), currency: 'USD' };
+  const exchangeRates: ExchangeRateEntity[] = [
+    {
+      id: 'july',
+      date: '2026-07-01',
+      from_currency: 'USD',
+      to_currency: 'EUR',
+      rate: 0.9,
+      source: 'api',
+    },
+    {
+      id: 'august',
+      date: '2026-08-15',
+      from_currency: 'USD',
+      to_currency: 'EUR',
+      rate: 0.8,
+      source: 'api',
+    },
+  ];
+
+  it('converts accounts in another currency at the rate at the end of each month', async () => {
+    const report = await runReport({
+      accounts: [accounts[0], usAccount],
+      accountQueryResults: [50_000, [], 100_000, []],
+      exchangeRates,
+      mainCurrency: 'EUR',
+    });
+
+    expect(report.graphData.data.map(point => point.y)).toEqual([
+      140_000, 130_000,
+    ]);
+    expect(report.graphData.data.at(-1)).toMatchObject({ us: 80_000 });
+    expect(report.netWorth).toBe(130_000);
+  });
+
+  it('adds up the original amounts when no main currency is set', async () => {
+    const report = await runReport({
+      accounts: [accounts[0], usAccount],
+      accountQueryResults: [50_000, [], 100_000, []],
+      exchangeRates,
+    });
+
+    expect(report.netWorth).toBe(150_000);
+  });
+
+  it('keeps a transfer between currencies neutral across months', async () => {
+    const report = await runReport({
+      accounts: [accounts[0], usAccount],
+      accountQueryResults: [
+        0,
+        [{ date: '2026-07', amount: 9_000 }],
+        110_000,
+        [{ date: '2026-08', amount: -10_000 }],
+      ],
+      linkedTransfers: [
+        {
+          id: 'checking-transfer',
+          account: 'checking',
+          amount: 9_000,
+          date: '2026-07-31',
+          transfer_id: 'us-transfer',
+        },
+        {
+          id: 'us-transfer',
+          account: 'us',
+          amount: -10_000,
+          date: '2026-08-01',
+          transfer_id: 'checking-transfer',
+        },
+      ],
+      exchangeRates: exchangeRates.slice(0, 1),
+      mainCurrency: 'EUR',
+    });
+
+    // The euros only count once the dollars have left
+    expect(report.graphData.data.map(point => point.y)).toEqual([
+      99_000, 99_000,
+    ]);
+  });
 });

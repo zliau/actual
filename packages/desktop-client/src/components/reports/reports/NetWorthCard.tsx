@@ -26,6 +26,7 @@ import { useReport } from '#components/reports/useReport';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFormat } from '#hooks/useFormat';
 import { useLocale } from '#hooks/useLocale';
+import { useMainCurrency } from '#hooks/useMainCurrency';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 
 type NetWorthCardProps = {
@@ -49,6 +50,7 @@ export function NetWorthCard({
   const [_firstDayOfWeekIdx] = useSyncedPref('firstDayOfWeekIdx');
   const firstDayOfWeekIdx = _firstDayOfWeekIdx || '0';
   const format = useFormat();
+  const mainCurrency = useMainCurrency();
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
 
   const [latestTransaction, setLatestTransaction] = useState<string>('');
@@ -86,6 +88,7 @@ export function NetWorthCard({
         firstDayOfWeekIdx,
         format,
         dateFormat,
+        mainCurrency,
       ),
     [
       start,
@@ -98,6 +101,7 @@ export function NetWorthCard({
       firstDayOfWeekIdx,
       format,
       dateFormat,
+      mainCurrency,
     ],
   );
   const data = useReport('net_worth', params);
