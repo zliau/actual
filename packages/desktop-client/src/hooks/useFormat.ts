@@ -25,7 +25,8 @@ export type FormatType =
   | 'financial-no-decimals';
 
 export type UseFormatResult = {
-  (value: unknown, type?: FormatType): string;
+  // `currencyCode` formats an amount in a currency other than the main one
+  (value: unknown, type?: FormatType, currencyCode?: string): string;
   forEdit: (value: IntegerAmount) => string;
   fromEdit: (
     value: string,
@@ -133,7 +134,8 @@ export function useFormat(): UseFormatResult {
   }, [numberFormatConfig]);
 
   const applyCurrencyStyling = useCallback(
-    (formattedNumericValue: string, currencySymbol: string): string => {
+    (formattedNumericValue: string, currency: Currency): string => {
+      const currencySymbol = currency.symbol;
       if (!currencySymbol) {
         return formattedNumericValue;
       }
@@ -145,8 +147,17 @@ export function useFormat(): UseFormatResult {
         valueWithoutSign = formattedNumericValue.slice(1);
       }
 
-      const space = spaceEnabledPref === 'true' ? '\u202F' : '';
-      const position = symbolPositionPref || 'before';
+      // Other currencies than the main one follow their own conventions
+      const isMainCurrency = currency.code === activeCurrency.code;
+      const isSpaceEnabled = isMainCurrency
+        ? spaceEnabledPref === 'true'
+        : !currency.symbolFirst || currency.symbol === currency.code;
+      const space = isSpaceEnabled ? '\u202F' : '';
+      const position = isMainCurrency
+        ? symbolPositionPref || 'before'
+        : currency.symbolFirst
+          ? 'before'
+          : 'after';
 
       const styledAmount =
         position === 'after'
@@ -155,11 +166,17 @@ export function useFormat(): UseFormatResult {
 
       return sign + styledAmount;
     },
-    [symbolPositionPref, spaceEnabledPref],
+    [symbolPositionPref, spaceEnabledPref, activeCurrency.code],
   );
 
   const formatDisplay = useCallback(
-    (value: unknown, type: FormatType = 'string'): string => {
+    (
+      value: unknown,
+      type: FormatType = 'string',
+      currencyCode?: string,
+    ): string => {
+      const currency =
+        currencyCode != null ? getCurrency(currencyCode) : activeCurrency;
       const isFinancialType =
         type === 'financial' ||
         type === 'financial-with-sign' ||
@@ -171,7 +188,7 @@ export function useFormat(): UseFormatResult {
         if (type === 'financial-no-decimals' || hideFractionPref === 'true') {
           displayDecimalPlaces = 0;
         } else {
-          displayDecimalPlaces = activeCurrency.decimalPlaces;
+          displayDecimalPlaces = currency.decimalPlaces;
         }
       }
 
@@ -187,11 +204,8 @@ export function useFormat(): UseFormatResult {
       );
 
       let styledValue = formattedString;
-      if (isFinancialType && activeCurrency && activeCurrency.code !== '') {
-        styledValue = applyCurrencyStyling(
-          formattedString,
-          activeCurrency.symbol,
-        );
+      if (isFinancialType && currency.code !== '') {
+        styledValue = applyCurrencyStyling(formattedString, currency);
       }
 
       if (

@@ -692,6 +692,9 @@ async function _loadBudget(id: Budget['id']): Promise<{
   sheet.get().meta().budgetType = budgetType as prefs.BudgetType;
   await budget.createAllBudgets();
 
+  // Accounts from before currencies were stored are in the main currency
+  await db.setBlankAccountCurrencies(await db.getMainCurrency());
+
   // Load all the in-memory state
   await mappings.loadMappings();
   await rules.loadRules();

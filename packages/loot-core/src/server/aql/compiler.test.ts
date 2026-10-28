@@ -263,6 +263,37 @@ describe('sheet language', () => {
     expect(result.sql).not.toMatch('payees.id AS id');
   });
 
+  it('`select` allows multiplying and rounding', () => {
+    const result = generateSQLWithState(
+      q('transactions')
+        .calculate({ $round: { $sum: { $mul: ['$amount', 0.5] } } })
+        .serialize(),
+      schemaWithRefs,
+    );
+    expect(result.sql).toMatch(
+      'SELECT CAST(ROUND(SUM((transactions.amount * 0.5))) AS INTEGER) AS result FROM transactions',
+    );
+  });
+
+  it('adds the tables a joined table depends on', () => {
+    const { state } = generateSQLWithState(
+      q('transactions')
+        .filter({ 'payee.account.id': 'one' })
+        .select(['amount'])
+        .serialize(),
+      schemaWithRefs,
+      {
+        tableDependencies: name => (name === 'accounts' ? ['rates'] : []),
+      },
+    );
+    expect(state.dependencies).toEqual([
+      'transactions',
+      'payees',
+      'accounts',
+      'rates',
+    ]);
+  });
+
   it('automatically joins tables if referenced by path', () => {
     // Join a simple table
     let result = generateSQLWithState(

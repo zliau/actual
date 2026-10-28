@@ -214,6 +214,7 @@ async function linkGoCardlessAccount({
   } else {
     id = uuidv4();
     await db.insertWithUUID('accounts', {
+      currency: await db.getMainCurrency(),
       id,
       account_id: account.account_id,
       mask: account.mask,
@@ -292,6 +293,7 @@ async function linkSimpleFinAccount({
   } else {
     id = uuidv4();
     await db.insertWithUUID('accounts', {
+      currency: await db.getMainCurrency(),
       id,
       account_id: externalAccount.account_id,
       name: externalAccount.name,
@@ -371,6 +373,7 @@ async function linkPluggyAiAccount({
   } else {
     id = uuidv4();
     await db.insertWithUUID('accounts', {
+      currency: await db.getMainCurrency(),
       id,
       account_id: externalAccount.account_id,
       name: externalAccount.name,
@@ -446,6 +449,7 @@ async function linkAkahuAccount({
   } else {
     id = uuidv4();
     await db.insertWithUUID('accounts', {
+      currency: await db.getMainCurrency(),
       id,
       account_id: externalAccount.account_id,
       name: externalAccount.name,
@@ -527,6 +531,7 @@ async function linkEnableBankingAccount({
   } else {
     id = uuidv4();
     await db.insertWithUUID('accounts', {
+      currency: await db.getMainCurrency(),
       id,
       account_id: externalAccount.account_id,
       name: externalAccount.name,

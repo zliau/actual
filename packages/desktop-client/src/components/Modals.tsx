@@ -13,6 +13,7 @@ import { useDispatch } from '#redux';
 
 import { EditSyncAccount } from './banksync/EditSyncAccount';
 import { AccountAutocompleteModal } from './modals/AccountAutocompleteModal';
+import { AccountCurrencyModal } from './modals/AccountCurrencyModal';
 import { AccountGroupsModal } from './modals/AccountGroupsModal';
 import { AccountMenuModal } from './modals/AccountMenuModal';
 import { AccountReconcileModal } from './modals/AccountReconcileModal';
@@ -37,6 +38,7 @@ import { CreateAccountModal } from './modals/CreateAccountModal';
 import { CreateEncryptionKeyModal } from './modals/CreateEncryptionKeyModal';
 import { CreateLocalAccountModal } from './modals/CreateLocalAccountModal';
 import { EditUserAccess } from './modals/EditAccess';
+import { EditExchangeRateModal } from './modals/EditExchangeRateModal';
 import { EditFieldModal } from './modals/EditFieldModal';
 import { EditRuleModal } from './modals/EditRuleModal';
 import { EditUserFinanceApp } from './modals/EditUser';
@@ -47,6 +49,7 @@ import { EnvelopeBudgetMenuModal } from './modals/EnvelopeBudgetMenuModal';
 import { EnvelopeBudgetMonthMenuModal } from './modals/EnvelopeBudgetMonthMenuModal';
 import { EnvelopeBudgetSummaryModal } from './modals/EnvelopeBudgetSummaryModal';
 import { EnvelopeIncomeBalanceMenuModal } from './modals/EnvelopeIncomeBalanceMenuModal';
+import { ExchangeRatesModal } from './modals/ExchangeRatesModal';
 import { FixEncryptionKeyModal } from './modals/FixEncryptionKeyModal';
 import { GoalTemplateModal } from './modals/GoalTemplateModal';
 import { GoCardlessExternalMsgModal } from './modals/GoCardlessExternalMsgModal';
@@ -140,6 +143,15 @@ export function Modals() {
 
         case 'account-groups':
           return <AccountGroupsModal key={key} {...modal.options} />;
+
+        case 'account-currency':
+          return <AccountCurrencyModal key={key} {...modal.options} />;
+
+        case 'exchange-rates':
+          return <ExchangeRatesModal key={key} {...modal.options} />;
+
+        case 'edit-exchange-rate':
+          return <EditExchangeRateModal key={key} {...modal.options} />;
 
         case 'close-account':
           return <CloseAccountModal key={key} {...modal.options} />;

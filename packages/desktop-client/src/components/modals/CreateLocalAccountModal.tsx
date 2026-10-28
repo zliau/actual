@@ -9,6 +9,7 @@ import { FormError } from '@actual-app/components/form-error';
 import { InitialFocus } from '@actual-app/components/initial-focus';
 import { InlineField } from '@actual-app/components/inline-field';
 import { Input } from '@actual-app/components/input';
+import { Select } from '@actual-app/components/select';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
@@ -26,6 +27,8 @@ import {
 import { Checkbox } from '#components/forms';
 import { validateAccountName } from '#components/util/accountValidation';
 import { useAccounts } from '#hooks/useAccounts';
+import { useAccountCurrencyOptions } from '#hooks/useCurrencyOptions';
+import { useMainCurrency } from '#hooks/useMainCurrency';
 import { useNavigate } from '#hooks/useNavigate';
 import { useSyncServerStatus } from '#hooks/useSyncServerStatus';
 import { closeModal } from '#modals/modalsSlice';
@@ -40,6 +43,10 @@ export function CreateLocalAccountModal() {
   const [name, setName] = useState('');
   const [offbudget, setOffbudget] = useState(false);
   const [balance, setBalance] = useState('0');
+  // An empty code is the main currency
+  const [currency, setCurrency] = useState('');
+  const mainCurrency = useMainCurrency();
+  const currencyOptions = useAccountCurrencyOptions();
 
   const [nameError, setNameError] = useState(null);
   const [balanceError, setBalanceError] = useState(false);
@@ -72,6 +79,7 @@ export function CreateLocalAccountModal() {
           name,
           balance: toRelaxedNumber(balance),
           offBudget: offbudget,
+          currency: currency || null,
         },
         {
           onSuccess: id => {
@@ -139,6 +147,18 @@ export function CreateLocalAccountModal() {
                 <FormError style={{ marginLeft: 75, color: theme.warningText }}>
                   {nameError}
                 </FormError>
+              )}
+
+              {mainCurrency && (
+                <InlineField label={t('Currency')} width="100%">
+                  <Select
+                    aria-label={t('Currency')}
+                    value={currency}
+                    onChange={setCurrency}
+                    options={currencyOptions}
+                    style={{ flex: 1 }}
+                  />
+                </InlineField>
               )}
 
               <View

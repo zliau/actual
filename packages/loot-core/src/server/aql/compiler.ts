@@ -600,6 +600,16 @@ const compileFunction = saveStack('function', (state, func) => {
         args[0].type,
       );
     }
+    case '$mul': {
+      validateArgLength(args, 2);
+      const [arg1, arg2] = valArray(state, args, ['float', 'float']);
+      return typed(`(${arg1} * ${arg2})`, 'float');
+    }
+    case '$round': {
+      validateArgLength(args, 1);
+      const [arg1] = valArray(state, args, ['float']);
+      return typed(`CAST(ROUND(${arg1}) AS INTEGER)`, 'integer');
+    }
 
     // id functions
     case '$id': {
@@ -1031,6 +1041,9 @@ export type SchemaConfig = {
     | Record<string, string>
     | ((name: string, config: { withDead; isJoin; tableOptions }) => string);
   tableFilters?: (name: string) => unknown[];
+  // Other tables a table's view reads from, so queries that use the table
+  // also update when those change
+  tableDependencies?: (name: string) => string[];
   customizeQuery?: (queryState: QueryState) => QueryState;
   views?: Record<
     string,
@@ -1087,6 +1100,7 @@ export function compileQuery(
   const {
     tableViews = {},
     tableFilters = () => [],
+    tableDependencies = () => [],
     customizeQuery = queryState => queryState,
   } = schemaConfig;
 
@@ -1189,6 +1203,14 @@ export function compileQuery(
     }
 
     throw e;
+  }
+
+  for (const table of [...state.dependencies]) {
+    for (const dependency of tableDependencies(table)) {
+      if (!state.dependencies.includes(dependency)) {
+        state.dependencies.push(dependency);
+      }
+    }
   }
 
   const sqlPieces: SqlPieces = {

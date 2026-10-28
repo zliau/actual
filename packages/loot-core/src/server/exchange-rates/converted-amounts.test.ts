@@ -1,6 +1,8 @@
+import { aqlQuery } from '#server/aql';
 import * as db from '#server/db';
 import { loadMappings } from '#server/db/mappings';
 import { handlers } from '#server/main';
+import { q } from '#shared/query';
 
 beforeEach(async () => {
   await global.emptyDatabase()();
@@ -142,12 +144,24 @@ describe('converted amounts', () => {
     expect(await getConvertedAmount(after)).toBe(-9500);
   });
 
+  it('converts earlier transactions with a new earliest rate', async () => {
+    await setRate('2026-01-10', 0.95);
+    const id = await addTransaction(usAccount, '2026-01-02', -10000);
+
+    await setRate('2026-01-05', 0.9);
+
+    // Still falls back to the earliest rate, which is now the new one
+    expect(await getConvertedAmount(id)).toBe(-9000);
+  });
+
   it('fills in converted amounts when the first rate arrives', async () => {
-    const id = await addTransaction(usAccount, '2026-01-05', -10000);
+    const before = await addTransaction(usAccount, '2025-12-20', -10000);
+    const after = await addTransaction(usAccount, '2026-01-05', -10000);
 
     await setRate('2026-01-01', 0.9);
 
-    expect(await getConvertedAmount(id)).toBe(-9000);
+    expect(await getConvertedAmount(before)).toBe(-9000);
+    expect(await getConvertedAmount(after)).toBe(-9000);
   });
 
   it('updates converted amounts when a rate is deleted', async () => {
@@ -197,5 +211,83 @@ describe('converted amounts', () => {
       value: 'EUR',
     });
     expect(await getConvertedAmount(id)).toBe(-9000);
+  });
+});
+
+describe('latest rates', () => {
+  let usAccount: string;
+  let mainAccount: string;
+
+  async function getLatestRates() {
+    const { data } = await aqlQuery(
+      q('accounts').select(['id', 'latest_rate']),
+    );
+    return Object.fromEntries(
+      (data as Array<{ id: string; latest_rate: number }>).map(row => [
+        row.id,
+        row.latest_rate,
+      ]),
+    );
+  }
+
+  async function getTotalBalance() {
+    const { data, dependencies } = await aqlQuery(
+      q('transactions').calculate({
+        $round: { $sum: { $mul: ['$amount', '$account.latest_rate'] } },
+      }),
+    );
+    return { total: data as number, dependencies };
+  }
+
+  beforeEach(async () => {
+    await setMainCurrency('EUR');
+    usAccount = await handlers['account-create']({
+      name: 'US',
+      currency: 'USD',
+    });
+    mainAccount = await handlers['account-create']({
+      name: 'Main',
+    });
+  });
+
+  it('gives each account the latest rate to the main currency', async () => {
+    await setRate('2026-01-01', 0.9);
+    await setRate('2026-01-10', 0.95);
+
+    expect(await getLatestRates()).toEqual({
+      [usAccount]: 0.95,
+      [mainAccount]: 1,
+    });
+  });
+
+  it('inverts a rate stored the other way round', async () => {
+    await handlers['exchange-rate-set']({
+      date: '2026-01-01',
+      from_currency: 'EUR',
+      to_currency: 'USD',
+      rate: 1.25,
+    });
+
+    expect((await getLatestRates())[usAccount]).toBeCloseTo(0.8);
+  });
+
+  it('uses a rate of 1 when no rate is known', async () => {
+    expect((await getLatestRates())[usAccount]).toBe(1);
+  });
+
+  it('totals balances at the latest rate', async () => {
+    await setRate('2026-01-01', 0.9);
+    await setRate('2026-01-10', 0.95);
+    await addTransaction(usAccount, '2026-01-05', 10000);
+    await addTransaction(usAccount, '2026-01-12', 333);
+    await addTransaction(mainAccount, '2026-01-05', 5000);
+
+    const { total, dependencies } = await getTotalBalance();
+
+    // 10,333 × 0.95 = 9,816.35, plus 5,000 in the main currency
+    expect(total).toBe(14816);
+    expect(dependencies).toEqual(
+      expect.arrayContaining(['transactions', 'accounts', 'exchange_rates']),
+    );
   });
 });

@@ -753,8 +753,40 @@ export async function insertAccount(account) {
   // Don't pass a target in, it will default to appending at the end
   const { sort_order } = shoveSortOrders(accounts);
 
-  account = accountModel.validate({ ...account, sort_order });
+  // An account without a currency is in the main currency. Store it, so it
+  // stays in that currency when the main currency changes later.
+  const currency = account.currency ?? (await getMainCurrency());
+  account = accountModel.validate({
+    ...account,
+    sort_order,
+    ...(currency && { currency }),
+  });
   return insertWithUUID('accounts', account);
+}
+
+// Gives accounts without a currency a currency, including closed and deleted
+// accounts so reopening them doesn't change their currency. Returns how many
+// accounts changed.
+export async function setBlankAccountCurrencies(
+  currency: string | null,
+): Promise<number> {
+  if (!currency) {
+    return 0;
+  }
+
+  const blank = await all<Pick<DbAccount, 'id'>>(
+    'SELECT id FROM accounts WHERE currency IS NULL',
+  );
+  if (blank.length === 0) {
+    return 0;
+  }
+
+  await batchMessages(async () => {
+    for (const { id } of blank) {
+      await update('accounts', { id, currency });
+    }
+  });
+  return blank.length;
 }
 
 export function updateAccount(account) {

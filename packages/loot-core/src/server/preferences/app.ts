@@ -55,6 +55,14 @@ async function saveSyncedPrefs({
     return;
   }
 
+  // Accounts without a currency are in the main currency. Stamp them with the
+  // one they were in before it changes.
+  const previousMainCurrency =
+    id === 'defaultCurrencyCode' ? await db.getMainCurrency() : null;
+  if (previousMainCurrency) {
+    await db.setBlankAccountCurrencies(previousMainCurrency);
+  }
+
   await db.update('preferences', {
     id,
     value,
@@ -65,6 +73,10 @@ async function saveSyncedPrefs({
   }
 
   if (id === 'defaultCurrencyCode') {
+    // With no main currency before, blank accounts take the new one
+    if (!previousMainCurrency) {
+      await db.setBlankAccountCurrencies(value || null);
+    }
     await db.updateConvertedAmounts();
   }
 }

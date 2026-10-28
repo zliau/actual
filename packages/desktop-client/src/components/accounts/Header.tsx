@@ -47,6 +47,7 @@ import { useDateFormat } from '#hooks/useDateFormat';
 import { useFeatureFlag } from '#hooks/useFeatureFlag';
 import { useLocale } from '#hooks/useLocale';
 import { useLocalPref } from '#hooks/useLocalPref';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useSplitsExpanded } from '#hooks/useSplitsExpanded';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 import { useSyncServerStatus } from '#hooks/useSyncServerStatus';
@@ -740,7 +741,9 @@ type AccountMenuProps = {
       | 'toggle-reconciled'
       | 'toggle-net-worth-chart'
       | 'manage-columns'
-      | 'account-group',
+      | 'account-group'
+      | 'account-currency'
+      | 'exchange-rates',
   ) => void;
 };
 
@@ -755,6 +758,7 @@ function AccountMenu({
   const { t } = useTranslation();
   const syncServerStatus = useSyncServerStatus();
   const newSidebarUIEnabled = useFeatureFlag('newSidebarUI');
+  const mainCurrency = useMainCurrency();
 
   return (
     <Menu
@@ -786,6 +790,22 @@ function AccountMenu({
               {
                 name: 'account-group',
                 text: t('Set account group'),
+              } as const,
+            ]
+          : []),
+        ...(mainCurrency
+          ? [
+              {
+                name: 'account-currency',
+                text: t('Change currency'),
+              } as const,
+            ]
+          : []),
+        ...(getForeignCurrency(account, mainCurrency)
+          ? [
+              {
+                name: 'exchange-rates',
+                text: t('Exchange rates'),
               } as const,
             ]
           : []),

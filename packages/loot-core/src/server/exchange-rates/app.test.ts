@@ -1,4 +1,5 @@
 import * as asyncStorage from '#platform/server/asyncStorage';
+import * as connection from '#platform/server/connection';
 import { app as accountsApp } from '#server/accounts/app';
 import * as db from '#server/db';
 import { loadMappings } from '#server/db/mappings';
@@ -14,7 +15,7 @@ beforeEach(async () => {
 // The mock server's handler map is untyped
 const handlers = mockServerHandlers as Record<
   string,
-  (data: { base: string }) => unknown
+  (data: { base: string; start: string; end?: string }) => unknown
 >;
 
 async function setMainCurrency(code: string) {
@@ -300,6 +301,32 @@ describe('exchange rates app', () => {
       expect(rates.every(rate => rate.source === 'api')).toBe(true);
     });
 
+    it('tells open screens about the new rates and converted amounts', async () => {
+      await setMainCurrency('EUR');
+      const account = await accountsApp.handlers['account-create']({
+        name: 'US',
+        currency: 'USD',
+      });
+      await db.insertTransaction({
+        account,
+        amount: -1000,
+        date: '2026-01-01',
+      });
+      handlers['/exchange-rates'] = () => ({
+        base: 'USD',
+        rates: { '2026-01-01': { EUR: 0.9 } },
+      });
+      const send = vi.spyOn(connection, 'send');
+
+      await app.handlers['exchange-rates-fetch']({ start: '2026-01-01' });
+
+      expect(send).toHaveBeenCalledWith('sync-event', {
+        type: 'success',
+        tables: ['exchange_rates', 'transactions'],
+      });
+      send.mockRestore();
+    });
+
     it('keeps manual rates', async () => {
       await setMainCurrency('EUR');
       await accountsApp.handlers['account-create']({
@@ -365,38 +392,93 @@ describe('exchange rates app', () => {
     });
   });
 
-  describe('exchange-rates-latest', () => {
-    it("returns today's rate for each foreign account currency", async () => {
+  describe('exchange-rates-update', () => {
+    let requests: Array<{ base: string; start: string; end?: string }>;
+
+    beforeEach(() => {
+      // Tests run on 2017-01-01
+      vi.mocked(asyncStorage.getItem).mockResolvedValue('token');
+      requests = [];
+      handlers['/exchange-rates'] = (data: {
+        base: string;
+        start: string;
+        end?: string;
+      }) => {
+        requests.push(data);
+        return { base: data.base, rates: { [data.start]: { EUR: 0.9 } } };
+      };
+    });
+
+    afterEach(() => {
+      delete handlers['/exchange-rates'];
+      vi.mocked(asyncStorage.getItem).mockReset();
+    });
+
+    async function createUsAccount() {
       await setMainCurrency('EUR');
-      await accountsApp.handlers['account-create']({
+      return accountsApp.handlers['account-create']({
         name: 'US',
         currency: 'USD',
       });
-      await accountsApp.handlers['account-create']({
-        name: 'UK',
-        currency: 'GBP',
-      });
+    }
+
+    it('fetches from the first transaction when no rate was fetched yet', async () => {
+      const account = await createUsAccount();
+      await db.insertTransaction({ account, date: '2016-12-05', amount: 100 });
+      await db.insertTransaction({ account, date: '2016-12-08', amount: 100 });
+
+      await app.handlers['exchange-rates-update']();
+
+      expect(requests).toEqual([
+        {
+          base: 'USD',
+          symbols: ['EUR'],
+          start: '2016-12-05',
+          end: '2017-01-01',
+        },
+      ]);
+    });
+
+    it('fetches the days after the latest fetched rate', async () => {
+      await createUsAccount();
+      await app.handlers['exchange-rates-fetch']({ start: '2016-12-15' });
+      // Manual rates don't count as fetched
       await app.handlers['exchange-rate-set']({
-        date: '2016-12-01',
-        from_currency: 'USD',
-        to_currency: 'EUR',
-        rate: 0.9,
-      });
-      await app.handlers['exchange-rate-set']({
-        date: '2016-12-20',
+        date: '2016-12-18',
         from_currency: 'USD',
         to_currency: 'EUR',
         rate: 0.95,
       });
+      requests = [];
 
-      expect(await app.handlers['exchange-rates-latest']()).toEqual({
-        GBP: null,
-        USD: 0.95,
-      });
+      await app.handlers['exchange-rates-update']();
+
+      expect(requests).toEqual([
+        expect.objectContaining({ start: '2016-12-16', end: '2017-01-01' }),
+      ]);
     });
 
-    it('returns nothing without a main currency', async () => {
-      expect(await app.handlers['exchange-rates-latest']()).toEqual({});
+    it('fetches a long history a year at a time', async () => {
+      const account = await createUsAccount();
+      await db.insertTransaction({ account, date: '2015-01-01', amount: 100 });
+
+      await app.handlers['exchange-rates-update']();
+
+      expect(requests).toEqual([
+        expect.objectContaining({ start: '2015-01-01', end: '2016-01-01' }),
+        expect.objectContaining({ start: '2016-01-02', end: '2017-01-01' }),
+      ]);
+    });
+
+    it('does nothing when the rates are up to date', async () => {
+      await createUsAccount();
+      await app.handlers['exchange-rates-fetch']({ start: '2017-01-01' });
+      requests = [];
+
+      const result = await app.handlers['exchange-rates-update']();
+
+      expect(result).toEqual({ count: 0, unavailable: [] });
+      expect(requests).toEqual([]);
     });
   });
 });

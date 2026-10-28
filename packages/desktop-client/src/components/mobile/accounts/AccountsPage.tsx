@@ -34,6 +34,7 @@ import { MobilePageHeader, Page } from '#components/Page';
 import { CellValue, CellValueText } from '#components/spreadsheet/CellValue';
 import { useAccounts } from '#hooks/useAccounts';
 import { useLocalPref } from '#hooks/useLocalPref';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useNavigate } from '#hooks/useNavigate';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 import { replaceModal } from '#modals/modalsSlice';
@@ -139,6 +140,7 @@ function AccountListItem({
   ...props
 }: AccountListItemProps) {
   const { value: account } = props;
+  const mainCurrency = useMainCurrency();
 
   if (!account) {
     return null;
@@ -207,6 +209,9 @@ function AccountListItem({
             {props => (
               <CellValueText<'account', 'balance'>
                 {...props}
+                currency={
+                  getForeignCurrency(account, mainCurrency) ?? undefined
+                }
                 style={{
                   fontSize: 16,
                   ...makeAmountFullStyle(props.value, {

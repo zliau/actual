@@ -10,6 +10,7 @@ export const TRANSACTION_TABLE_COLUMN_IDS = [
   'category',
   'payment',
   'deposit',
+  'converted',
   'balance',
   'cleared',
 ] as const;
@@ -36,7 +37,7 @@ export function isTransactionTableColumnLocked(
 export function isTransactionTableColumnDisplayOnly(
   id: TransactionTableColumnId,
 ): boolean {
-  return id === 'balance' || id === 'group';
+  return id === 'balance' || id === 'group' || id === 'converted';
 }
 
 // Child (split) transactions render the date/account cells as blank
@@ -64,6 +65,7 @@ export function useTransactionTableColumnLabels(): Record<
     category: t('Category'),
     payment: t('Payment'),
     deposit: t('Deposit'),
+    converted: t('Converted'),
     balance: t('Running balance'),
     cleared: t('Cleared'),
   };
