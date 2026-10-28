@@ -13,6 +13,9 @@ export type TransactionEntity = {
   account: AccountEntity['id'];
   category?: CategoryEntity['id'];
   amount: IntegerAmount;
+  // The amount in the budget's main currency, or null when the account
+  // already uses it or no exchange rate is known
+  converted_amount?: IntegerAmount | null;
   payee?: PayeeEntity['id'] | null;
   notes?: string;
   date: string;

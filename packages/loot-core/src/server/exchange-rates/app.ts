@@ -62,10 +62,23 @@ async function getExchangeRates({
   return rows.map(fromDbExchangeRate);
 }
 
+// Stores the rate for a currency pair on a day and updates the converted
+// amounts of the transactions it applies to
+async function setExchangeRate(
+  exchangeRate: Parameters<typeof storeExchangeRate>[0],
+): Promise<ExchangeRateEntity['id']> {
+  const id = await storeExchangeRate(exchangeRate);
+  await db.updateConvertedAmounts({
+    currencies: [exchangeRate.from_currency, exchangeRate.to_currency],
+    start: exchangeRate.date,
+  });
+  return id;
+}
+
 // Stores the rate for a currency pair on a day, replacing the one already
 // stored for that day. A rate from the API never replaces one the user
 // entered, so manual corrections survive the next fetch.
-async function setExchangeRate({
+async function storeExchangeRate({
   date,
   from_currency,
   to_currency,
@@ -117,16 +130,20 @@ async function setExchangeRate({
 async function deleteExchangeRate({
   id,
 }: Pick<ExchangeRateEntity, 'id'>): Promise<void> {
-  await db.delete_('exchange_rates', id);
-}
-
-// The budget's main currency, or null when none is chosen
-export async function getMainCurrency(): Promise<string | null> {
-  const row = await db.first<Pick<db.DbPreference, 'value'>>(
-    'SELECT value FROM preferences WHERE id = ?',
-    ['defaultCurrencyCode'],
+  const row = await db.first<
+    Pick<db.DbExchangeRate, 'date' | 'from_currency' | 'to_currency'>
+  >(
+    'SELECT date, from_currency, to_currency FROM exchange_rates WHERE id = ?',
+    [id],
   );
-  return row?.value || null;
+  await db.delete_('exchange_rates', id);
+  if (row) {
+    // Days before the deleted rate can fall back to it when no earlier rate
+    // exists, so update the whole currency
+    await db.updateConvertedAmounts({
+      currencies: [row.from_currency, row.to_currency],
+    });
+  }
 }
 
 // Currencies of accounts that differ from the main currency
@@ -165,7 +182,7 @@ async function fetchExchangeRates({
     return { error: 'no-server' };
   }
 
-  const mainCurrency = await getMainCurrency();
+  const mainCurrency = await db.getMainCurrency();
   if (!mainCurrency) {
     return { error: 'no-main-currency' };
   }
@@ -177,6 +194,7 @@ async function fetchExchangeRates({
   };
 
   let count = 0;
+  const fetched: string[] = [];
   const unavailable: string[] = [];
 
   for (const currency of await getForeignCurrencies(mainCurrency)) {
@@ -202,7 +220,7 @@ async function fetchExchangeRates({
         if (rate == null) {
           continue;
         }
-        await setExchangeRate({
+        await storeExchangeRate({
           date,
           from_currency: currency,
           to_currency: mainCurrency,
@@ -212,45 +230,13 @@ async function fetchExchangeRates({
         count++;
       }
     });
+    fetched.push(currency);
+  }
+
+  if (fetched.length > 0) {
+    // A fetched rate can also be the fallback for days before `start`
+    await db.updateConvertedAmounts({ currencies: fetched });
   }
 
   return { count, unavailable };
-}
-
-// Returns how many units of `toCurrency` one unit of `fromCurrency` is worth
-// on `date`, using the latest rate stored on or before that day. A rate stored
-// for the opposite direction is inverted. Returns null when no rate is known.
-export async function getExchangeRate(
-  fromCurrency: string,
-  toCurrency: string,
-  date: string,
-): Promise<number | null> {
-  if (fromCurrency === toCurrency) {
-    return 1;
-  }
-
-  const row = await db.first<Pick<db.DbExchangeRate, 'from_currency' | 'rate'>>(
-    `SELECT from_currency, rate FROM exchange_rates
-     WHERE tombstone = 0 AND date <= ?
-       AND ((from_currency = ? AND to_currency = ?)
-         OR (from_currency = ? AND to_currency = ?))
-     ORDER BY date DESC,
-       CASE source WHEN 'manual' THEN 0 ELSE 1 END,
-       from_currency = ? DESC,
-       id
-     LIMIT 1`,
-    [
-      db.toDateRepr(date),
-      fromCurrency,
-      toCurrency,
-      toCurrency,
-      fromCurrency,
-      fromCurrency,
-    ],
-  );
-
-  if (!row) {
-    return null;
-  }
-  return row.from_currency === fromCurrency ? row.rate : 1 / row.rate;
 }

@@ -63,6 +63,10 @@ async function saveSyncedPrefs({
   if (FORMULA_FORMAT_SYNCED_PREFS.has(id)) {
     resetFormulaPreferencesCache();
   }
+
+  if (id === 'defaultCurrencyCode') {
+    await db.updateConvertedAmounts();
+  }
 }
 
 async function getSyncedPrefs(): Promise<SyncedPrefs> {

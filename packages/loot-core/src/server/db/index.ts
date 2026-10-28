@@ -25,6 +25,7 @@ import {
   accountModel,
   categoryGroupModel,
   categoryModel,
+  fromDateRepr,
   payeeModel,
   toDateRepr,
 } from '#server/models';
@@ -48,8 +49,10 @@ import type {
   DbCategoryGroup,
   DbCategoryMapping,
   DbClockMessage,
+  DbExchangeRate,
   DbPayee,
   DbPayeeMapping,
+  DbPreference,
   DbTag,
   DbTransaction,
   DbViewTransaction,
@@ -799,6 +802,168 @@ export async function moveAccount(
   });
 }
 
+// The budget's main currency, or null when none is chosen
+export async function getMainCurrency(): Promise<string | null> {
+  return getMainCurrencySync();
+}
+
+function getMainCurrencySync(): string | null {
+  const row = firstSync<Pick<DbPreference, 'value'>>(
+    'SELECT value FROM preferences WHERE id = ?',
+    ['defaultCurrencyCode'],
+  );
+  return row?.value || null;
+}
+
+// Returns how many units of `toCurrency` one unit of `fromCurrency` is worth
+// on `date`, using the latest rate stored on or before that day, or the
+// earliest one after it when there is none before. A rate stored for the
+// opposite direction is inverted. Returns null when no rate is known.
+export async function getExchangeRate(
+  fromCurrency: string,
+  toCurrency: string,
+  date: string,
+): Promise<number | null> {
+  return getExchangeRateSync(fromCurrency, toCurrency, date);
+}
+
+function getExchangeRateSync(
+  fromCurrency: string,
+  toCurrency: string,
+  date: string,
+): number | null {
+  if (fromCurrency === toCurrency) {
+    return 1;
+  }
+
+  const row = firstSync<Pick<DbExchangeRate, 'from_currency' | 'rate'>>(
+    `SELECT from_currency, rate FROM exchange_rates
+     WHERE tombstone = 0
+       AND ((from_currency = ? AND to_currency = ?)
+         OR (from_currency = ? AND to_currency = ?))
+     ORDER BY date > ?,
+       CASE WHEN date <= ? THEN -date ELSE date END,
+       CASE source WHEN 'manual' THEN 0 ELSE 1 END,
+       from_currency = ? DESC,
+       id
+     LIMIT 1`,
+    [
+      fromCurrency,
+      toCurrency,
+      toCurrency,
+      fromCurrency,
+      toDateRepr(date),
+      toDateRepr(date),
+      fromCurrency,
+    ],
+  );
+
+  if (!row) {
+    return null;
+  }
+  return row.from_currency === fromCurrency ? row.rate : 1 / row.rate;
+}
+
+// The amount of a transaction in the main currency, or null when its account
+// already uses the main currency or no exchange rate is known
+function getConvertedAmount({
+  account,
+  amount,
+  date,
+}: {
+  account: DbAccount['id'] | undefined;
+  amount: number | undefined;
+  date: string | undefined;
+}): number | null {
+  if (account == null || amount == null || date == null) {
+    return null;
+  }
+
+  const row = firstSync<Pick<DbAccount, 'currency'>>(
+    'SELECT currency FROM accounts WHERE id = ?',
+    [account],
+  );
+  const mainCurrency = getMainCurrencySync();
+  if (!row?.currency || !mainCurrency || row.currency === mainCurrency) {
+    return null;
+  }
+
+  const rate = getExchangeRateSync(row.currency, mainCurrency, date);
+  return rate == null ? null : Math.round(amount * rate);
+}
+
+// Recalculates the stored converted amounts of transactions in foreign
+// currency accounts, for example after a rate or an account's currency
+// changed. Limit it to accounts in `currencies` and to days from `start`.
+export async function updateConvertedAmounts({
+  accountIds,
+  currencies,
+  start,
+}: {
+  accountIds?: Array<DbAccount['id']>;
+  currencies?: string[];
+  start?: string;
+} = {}): Promise<number> {
+  const conditions = ['t.tombstone = 0'];
+  const params: sqlite.SqlParam[] = [];
+  if (accountIds) {
+    conditions.push(`t.acct IN (${toSqlQueryParameters(accountIds)})`);
+    params.push(...accountIds);
+  }
+  if (currencies) {
+    conditions.push(`a.currency IN (${toSqlQueryParameters(currencies)})`);
+    params.push(...currencies);
+  }
+  if (start) {
+    conditions.push('t.date >= ?');
+    params.push(toDateRepr(start));
+  }
+
+  const transactions = await all<
+    Pick<DbTransaction, 'id' | 'amount' | 'date' | 'converted_amount'> & {
+      currency: DbAccount['currency'];
+    }
+  >(
+    `SELECT t.id, t.amount, t.date, t.converted_amount, a.currency
+     FROM transactions t
+     JOIN accounts a ON a.id = t.acct
+     WHERE ${conditions.join(' AND ')}`,
+    params,
+  );
+
+  const mainCurrency = await getMainCurrency();
+  let count = 0;
+
+  await batchMessages(async () => {
+    for (const transaction of transactions) {
+      let convertedAmount: number | null = null;
+      if (
+        transaction.currency &&
+        mainCurrency &&
+        transaction.currency !== mainCurrency
+      ) {
+        const rate = await getExchangeRate(
+          transaction.currency,
+          mainCurrency,
+          fromDateRepr(transaction.date),
+        );
+        convertedAmount =
+          rate == null ? null : Math.round(transaction.amount * rate);
+      }
+
+      if (convertedAmount !== (transaction.converted_amount ?? null)) {
+        await update('transactions', {
+          id: transaction.id,
+          converted_amount: convertedAmount,
+        });
+        count++;
+      }
+    }
+  });
+
+  return count;
+}
+
 export function getAccountGroups() {
   return all<DbAccountGroup>(
     `SELECT * FROM account_groups WHERE tombstone = 0 ORDER BY sort_order, id`,
@@ -904,13 +1069,42 @@ export async function getTransactions(accountId: DbTransaction['acct']) {
   );
 }
 
+// The converted amount is looked up synchronously so the insert is queued
+// immediately, like any other insert in a batch
 export function insertTransaction(
   transaction,
 ): Promise<TransactionEntity['id']> {
+  if (transaction.converted_amount === undefined) {
+    transaction = {
+      ...transaction,
+      converted_amount: getConvertedAmount(transaction),
+    };
+  }
   return insertWithSchema('transactions', transaction);
 }
 
 export function updateTransaction(transaction) {
+  if (
+    transaction.converted_amount === undefined &&
+    (transaction.amount !== undefined ||
+      transaction.date !== undefined ||
+      transaction.account !== undefined)
+  ) {
+    const current = firstSync<Pick<DbTransaction, 'acct' | 'amount' | 'date'>>(
+      'SELECT acct, amount, date FROM transactions WHERE id = ?',
+      [transaction.id],
+    );
+    transaction = {
+      ...transaction,
+      converted_amount: getConvertedAmount({
+        account: transaction.account ?? current?.acct,
+        amount: transaction.amount ?? current?.amount,
+        date:
+          transaction.date ??
+          (current?.date != null ? fromDateRepr(current.date) : undefined),
+      }),
+    };
+  }
   return updateWithSchema('transactions', transaction);
 }
 

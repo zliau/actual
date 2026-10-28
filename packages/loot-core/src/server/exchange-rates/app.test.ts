@@ -3,7 +3,7 @@ import { app as accountsApp } from '#server/accounts/app';
 import * as db from '#server/db';
 import { loadMappings } from '#server/db/mappings';
 import { PostError } from '#server/errors';
-import { app, getExchangeRate } from '#server/exchange-rates/app';
+import { app } from '#server/exchange-rates/app';
 import { handlers as mockServerHandlers } from '#server/tests/mockSyncServer';
 
 beforeEach(async () => {
@@ -151,24 +151,41 @@ describe('exchange rates app', () => {
       await app.handlers['exchange-rate-delete']({ id });
 
       expect(await app.handlers['exchange-rates-get']()).toEqual([]);
-      expect(await getExchangeRate('USD', 'EUR', '2026-01-01')).toBeNull();
+      expect(await db.getExchangeRate('USD', 'EUR', '2026-01-01')).toBeNull();
     });
   });
 
   describe('getExchangeRate', () => {
     it('returns 1 for the same currency', async () => {
-      expect(await getExchangeRate('EUR', 'EUR', '2026-01-01')).toBe(1);
+      expect(await db.getExchangeRate('EUR', 'EUR', '2026-01-01')).toBe(1);
     });
 
-    it('returns null when no rate is known on or before the date', async () => {
+    it('returns null when no rate is known for the pair', async () => {
+      await app.handlers['exchange-rate-set']({
+        date: '2026-01-05',
+        from_currency: 'GBP',
+        to_currency: 'EUR',
+        rate: 1.15,
+      });
+
+      expect(await db.getExchangeRate('USD', 'EUR', '2026-01-05')).toBeNull();
+    });
+
+    it('falls back to the earliest later rate when none is known before the date', async () => {
       await app.handlers['exchange-rate-set']({
         date: '2026-01-05',
         from_currency: 'USD',
         to_currency: 'EUR',
         rate: 0.9,
       });
+      await app.handlers['exchange-rate-set']({
+        date: '2026-01-07',
+        from_currency: 'USD',
+        to_currency: 'EUR',
+        rate: 0.95,
+      });
 
-      expect(await getExchangeRate('USD', 'EUR', '2026-01-04')).toBeNull();
+      expect(await db.getExchangeRate('USD', 'EUR', '2026-01-04')).toBe(0.9);
     });
 
     it('uses the latest rate on or before the date', async () => {
@@ -185,9 +202,9 @@ describe('exchange rates app', () => {
         rate: 0.92,
       });
 
-      expect(await getExchangeRate('USD', 'EUR', '2026-01-02')).toBe(0.9);
-      expect(await getExchangeRate('USD', 'EUR', '2026-01-03')).toBe(0.92);
-      expect(await getExchangeRate('USD', 'EUR', '2026-02-01')).toBe(0.92);
+      expect(await db.getExchangeRate('USD', 'EUR', '2026-01-02')).toBe(0.9);
+      expect(await db.getExchangeRate('USD', 'EUR', '2026-01-03')).toBe(0.92);
+      expect(await db.getExchangeRate('USD', 'EUR', '2026-02-01')).toBe(0.92);
     });
 
     it('inverts a rate stored for the opposite direction', async () => {
@@ -198,7 +215,7 @@ describe('exchange rates app', () => {
         rate: 1.25,
       });
 
-      expect(await getExchangeRate('USD', 'EUR', '2026-01-01')).toBe(0.8);
+      expect(await db.getExchangeRate('USD', 'EUR', '2026-01-01')).toBe(0.8);
     });
 
     it('prefers the direct rate when both directions exist on the same day', async () => {
@@ -215,7 +232,7 @@ describe('exchange rates app', () => {
         rate: 0.79,
       });
 
-      expect(await getExchangeRate('USD', 'EUR', '2026-01-01')).toBe(0.79);
+      expect(await db.getExchangeRate('USD', 'EUR', '2026-01-01')).toBe(0.79);
     });
   });
 
@@ -277,8 +294,8 @@ describe('exchange rates app', () => {
           end: '2026-01-02',
         },
       ]);
-      expect(await getExchangeRate('USD', 'EUR', '2026-01-02')).toBe(0.91);
-      expect(await getExchangeRate('GBP', 'EUR', '2026-01-01')).toBe(1.15);
+      expect(await db.getExchangeRate('USD', 'EUR', '2026-01-02')).toBe(0.91);
+      expect(await db.getExchangeRate('GBP', 'EUR', '2026-01-01')).toBe(1.15);
       const rates = await app.handlers['exchange-rates-get']();
       expect(rates.every(rate => rate.source === 'api')).toBe(true);
     });
@@ -302,7 +319,7 @@ describe('exchange rates app', () => {
 
       await app.handlers['exchange-rates-fetch']({ start: '2026-01-01' });
 
-      expect(await getExchangeRate('USD', 'EUR', '2026-01-01')).toBe(0.95);
+      expect(await db.getExchangeRate('USD', 'EUR', '2026-01-01')).toBe(0.95);
     });
 
     it('lists currencies the provider does not cover', async () => {

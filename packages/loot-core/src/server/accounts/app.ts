@@ -114,6 +114,9 @@ async function updateAccount({
     ...(account_group_id !== undefined && { account_group_id }),
     ...(currency !== undefined && { currency }),
   });
+  if (currency !== undefined) {
+    await db.updateConvertedAmounts({ accountIds: [id] });
+  }
   return {};
 }
 
