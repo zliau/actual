@@ -3,6 +3,7 @@ import * as monthUtils from '@actual-app/core/shared/months';
 import { q } from '@actual-app/core/shared/query';
 import type {
   AccountEntity,
+  ExchangeRateEntity,
   RuleConditionEntity,
   TransactionEntity,
 } from '@actual-app/core/types/models';
@@ -11,7 +12,9 @@ import type { Locale } from 'date-fns';
 import { keyBy } from 'es-toolkit';
 
 import { getIntervalFormat } from '#components/reports/ReportOptions';
+import { findExchangeRate, loadExchangeRates } from '#exchange-rates';
 import type { FormatType } from '#hooks/useFormat';
+import { getForeignCurrency } from '#hooks/useMainCurrency';
 import type { useSpreadsheet } from '#hooks/useSpreadsheet';
 import { aqlQuery } from '#queries/aqlQuery';
 
@@ -23,6 +26,8 @@ type Balance = {
 type AccountBalanceData = {
   id: string;
   name: string;
+  // Null when the account uses the main currency
+  currency: string | null;
   balances: Record<string, Balance>;
   starting: number;
 };
@@ -52,6 +57,7 @@ export function createSpreadsheet(
   firstDayOfWeekIdx: string = '0',
   format: (value: unknown, type?: FormatType) => string,
   dateFormat?: string,
+  mainCurrency: string | null = null,
 ) {
   return async (
     spreadsheet: ReturnType<typeof useSpreadsheet>,
@@ -203,14 +209,28 @@ export function createSpreadsheet(
         return {
           id: acct.id,
           name: acct.name,
+          currency: getForeignCurrency(acct, mainCurrency),
           balances: processedBalances,
           starting,
         };
       }),
     );
-    const [data, transferLegs] = await Promise.all([
+    const foreignCurrencies = [
+      ...new Set(
+        accounts
+          .map(account => getForeignCurrency(account, mainCurrency))
+          .filter(currency => currency != null),
+      ),
+    ];
+    const ratesPromise =
+      mainCurrency && foreignCurrencies.length > 0
+        ? loadExchangeRates(foreignCurrencies, mainCurrency)
+        : Promise.resolve<ExchangeRateEntity[]>([]);
+
+    const [data, transferLegs, rates] = await Promise.all([
       accountDataPromise,
       transferLegsPromise,
+      ratesPromise,
     ]);
 
     const loadedTransferIds = new Set(transferLegs.map(leg => leg.id));
@@ -248,6 +268,15 @@ export function createSpreadsheet(
       firstDayOfWeekIdx,
     });
 
+    // Accounts in another currency count at the rate on the last day of
+    // each interval, so the latest point matches the balances elsewhere
+    const toMainCurrency = (account: AccountBalanceData, date: string) => {
+      if (!account.currency || !mainCurrency) {
+        return 1;
+      }
+      return findExchangeRate(rates, account.currency, mainCurrency, date) ?? 1;
+    };
+
     setData(
       recalculate(
         data,
@@ -258,6 +287,7 @@ export function createSpreadsheet(
         firstDayOfWeekIdx,
         format,
         dateFormat,
+        toMainCurrency,
       ),
     );
   };
@@ -282,9 +312,21 @@ function alignInternalTransferDates(
       !counterpart ||
       counterpart.transfer_id !== leg.id ||
       counterpart.account === leg.account ||
-      counterpart.amount + leg.amount !== 0 ||
       !accountsById.has(leg.account) ||
       !accountsById.has(counterpart.account)
+    ) {
+      return;
+    }
+
+    // Between currencies the two sides hold different amounts, so only
+    // check that the money flows from one account into the other
+    const isSameCurrency =
+      accountsById.get(leg.account)?.currency ===
+      accountsById.get(counterpart.account)?.currency;
+    if (
+      isSameCurrency
+        ? counterpart.amount + leg.amount !== 0
+        : Math.sign(counterpart.amount) === Math.sign(leg.amount)
     ) {
       return;
     }
@@ -361,6 +403,35 @@ function getIntervalKey(
   return monthUtils.getMonth(date);
 }
 
+function getIntervalStart(intervalItem: string, interval: string) {
+  if (interval === 'Daily' || interval === 'Weekly') {
+    return intervalItem;
+  }
+  if (interval === 'Yearly') {
+    return `${intervalItem}-01-01`;
+  }
+  return monthUtils.firstDayOfMonth(intervalItem);
+}
+
+// The last day of an interval, no later than the end of the report
+function getIntervalEnd(
+  intervalItem: string,
+  interval: string,
+  endDate: string,
+) {
+  let end: string;
+  if (interval === 'Daily') {
+    end = intervalItem;
+  } else if (interval === 'Weekly') {
+    end = monthUtils.addDays(intervalItem, 6);
+  } else if (interval === 'Yearly') {
+    end = `${intervalItem}-12-31`;
+  } else {
+    end = monthUtils.lastDayOfMonth(intervalItem);
+  }
+  return end > endDate ? endDate : end;
+}
+
 function recalculate(
   data: AccountBalanceData[],
   startDate: string,
@@ -370,6 +441,8 @@ function recalculate(
   firstDayOfWeekIdx: string = '0',
   format: (value: unknown, type?: FormatType) => string,
   dateFormat?: string,
+  toMainCurrency: (account: AccountBalanceData, date: string) => number = () =>
+    1,
 ) {
   // Get intervals using the same pattern as other working spreadsheets
   const intervals =
@@ -384,18 +457,28 @@ function recalculate(
               monthUtils.getMonth(endDate),
             );
 
+  const intervalEnds = intervals.map(intervalItem =>
+    getIntervalEnd(intervalItem, interval, endDate),
+  );
+
   const accountBalances = data.map(account => {
     let balance = account.starting;
-    return intervals.map(intervalItem => {
+    return intervals.map((intervalItem, idx) => {
       if (account.balances[intervalItem]) {
         balance += account.balances[intervalItem].amount;
       }
-      return balance;
+      return Math.round(balance * toMainCurrency(account, intervalEnds[idx]));
     });
   });
 
+  const dayBeforeStart = monthUtils.subDays(
+    getIntervalStart(intervals[0] ?? startDate, interval),
+    1,
+  );
   const priorPeriodNetWorth = data.reduce(
-    (sum, account) => sum + account.starting,
+    (sum, account) =>
+      sum +
+      Math.round(account.starting * toMainCurrency(account, dayBeforeStart)),
     0,
   );
 

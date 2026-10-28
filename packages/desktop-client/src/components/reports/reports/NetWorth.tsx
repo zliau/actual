@@ -41,6 +41,7 @@ import { useDashboardWidget } from '#hooks/useDashboardWidget';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFormat } from '#hooks/useFormat';
 import { useLocale } from '#hooks/useLocale';
+import { useMainCurrency } from '#hooks/useMainCurrency';
 import { useNavigate } from '#hooks/useNavigate';
 import { useRuleConditionFilters } from '#hooks/useRuleConditionFilters';
 import { useSyncedPref } from '#hooks/useSyncedPref';
@@ -71,6 +72,7 @@ function NetWorthInner({ widget }: NetWorthInnerProps) {
   const dispatch = useDispatch();
   const { t } = useTranslation();
   const format = useFormat();
+  const mainCurrency = useMainCurrency();
 
   const getDefaultIntervalForMode = useCallback(
     (mode: TimeFrame['mode']): 'Daily' | 'Weekly' | 'Monthly' | 'Yearly' => {
@@ -140,6 +142,7 @@ function NetWorthInner({ widget }: NetWorthInnerProps) {
         firstDayOfWeekIdx,
         format,
         dateFormat,
+        mainCurrency,
       ),
     [
       start,
@@ -152,6 +155,7 @@ function NetWorthInner({ widget }: NetWorthInnerProps) {
       firstDayOfWeekIdx,
       format,
       dateFormat,
+      mainCurrency,
     ],
   );
   const data = useReport('net_worth', reportParams);
