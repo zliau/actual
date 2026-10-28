@@ -11,6 +11,7 @@ import {
   closeAndDownloadBudget,
   uploadBudget,
 } from './budgetfiles/budgetfilesSlice';
+import { exchangeRateQueries } from './exchange-rates';
 import { pushModal } from './modals/modalsSlice';
 import { addNotification } from './notifications/notificationsSlice';
 import type { Notification } from './notifications/notificationsSlice';
@@ -151,6 +152,12 @@ export function listenForSyncEvent(store: AppStore, queryClient: QueryClient) {
       if (tables.includes('accounts')) {
         void queryClient.invalidateQueries({
           queryKey: accountQueries.lists(),
+        });
+      }
+
+      if (tables.includes('exchange_rates')) {
+        void queryClient.invalidateQueries({
+          queryKey: exchangeRateQueries.lists(),
         });
       }
 

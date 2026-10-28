@@ -1,8 +1,9 @@
 import React, { useRef } from 'react';
 import type { RefObject } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 
 import { Button } from '@actual-app/components/button';
+import { SvgExclamationOutline } from '@actual-app/components/icons/v1';
 import { SvgArrowButtonRight1 } from '@actual-app/components/icons/v2';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
@@ -12,27 +13,35 @@ import type { Query } from '@actual-app/core/shared/query';
 import { getScheduledAmount } from '@actual-app/core/shared/schedules';
 import { isPreviewId } from '@actual-app/core/shared/transactions';
 import type { AccountEntity } from '@actual-app/core/types/models';
+import { useQuery } from '@tanstack/react-query';
 import { useHover } from 'usehooks-ts';
 
 import { FinancialText } from '#components/FinancialText';
 import { PrivacyFilter } from '#components/PrivacyFilter';
 import { CellValue, CellValueText } from '#components/spreadsheet/CellValue';
+import { exchangeRateQueries } from '#exchange-rates';
 import { useCachedSchedules } from '#hooks/useCachedSchedules';
 import { useFormat } from '#hooks/useFormat';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useSelectedItems } from '#hooks/useSelected';
 import { useSheetValue } from '#hooks/useSheetValue';
+import { pushModal } from '#modals/modalsSlice';
+import { useDispatch } from '#redux';
 import type { Binding } from '#spreadsheet';
+import { sumInMainCurrency } from '#spreadsheet/bindings';
 
 type DetailedBalanceProps = {
   name: string;
   balance: number;
   isExactBalance?: boolean;
+  currency?: string;
 };
 
 function DetailedBalance({
   name,
   balance,
   isExactBalance = true,
+  currency,
 }: DetailedBalanceProps) {
   const format = useFormat();
   return (
@@ -48,7 +57,7 @@ function DetailedBalance({
       <PrivacyFilter>
         <FinancialText style={{ fontWeight: 600 }}>
           {!isExactBalance && '~ '}
-          {format(balance, 'financial')}
+          {format(balance, 'financial', currency)}
         </FinancialText>
       </PrivacyFilter>
     </Text>
@@ -65,6 +74,8 @@ export function SelectedBalance({
   account,
 }: SelectedBalanceProps) {
   const { t } = useTranslation();
+  const mainCurrency = useMainCurrency();
+  const currency = getForeignCurrency(account, mainCurrency) ?? undefined;
 
   const name = `selected-balance-${[...selectedItems].join('-')}`;
 
@@ -84,7 +95,8 @@ export function SelectedBalance({
     name: (name + '-sum') as `selected-balance-${string}`,
     query: q('transactions')
       .filter({ id: { $oneof: finalIds } })
-      .options({ splits: 'all' })
+      // Across accounts, add up the amounts in the base currency
+      .options({ splits: 'all', currency: account ? 'account' : 'base' })
       .calculate({ $sum: '$amount' }),
   });
 
@@ -127,15 +139,17 @@ export function SelectedBalance({
       name={t('Selected balance:')}
       balance={balance}
       isExactBalance={isExactBalance}
+      currency={currency}
     />
   );
 }
 
 type FilteredBalanceProps = {
   filteredAmount?: number | null;
+  currency?: string;
 };
 
-function FilteredBalance({ filteredAmount }: FilteredBalanceProps) {
+function FilteredBalance({ filteredAmount, currency }: FilteredBalanceProps) {
   const { t } = useTranslation();
 
   return (
@@ -143,15 +157,17 @@ function FilteredBalance({ filteredAmount }: FilteredBalanceProps) {
       name={t('Filtered balance:')}
       balance={filteredAmount ?? 0}
       isExactBalance
+      currency={currency}
     />
   );
 }
 
 type MoreBalancesProps = {
   balanceQuery: { name: `balance-query-${string}`; query: Query };
+  currency?: string;
 };
 
-function MoreBalances({ balanceQuery }: MoreBalancesProps) {
+function MoreBalances({ balanceQuery, currency }: MoreBalancesProps) {
   const { t } = useTranslation();
 
   const cleared = useSheetValue<'balance', `balance-query-${string}-cleared`>({
@@ -169,9 +185,86 @@ function MoreBalances({ balanceQuery }: MoreBalancesProps) {
 
   return (
     <>
-      <DetailedBalance name={t('Cleared total:')} balance={cleared ?? 0} />
-      <DetailedBalance name={t('Uncleared total:')} balance={uncleared ?? 0} />
+      <DetailedBalance
+        name={t('Cleared total:')}
+        balance={cleared ?? 0}
+        currency={currency}
+      />
+      <DetailedBalance
+        name={t('Uncleared total:')}
+        balance={uncleared ?? 0}
+        currency={currency}
+      />
     </>
+  );
+}
+
+type MainCurrencyBalanceProps = {
+  account: AccountEntity;
+  mainCurrency: string;
+};
+
+// The balance of an account in another currency, valued in the main currency
+// at the latest exchange rate
+function MainCurrencyBalance({
+  account,
+  mainCurrency,
+}: MainCurrencyBalanceProps) {
+  const { t } = useTranslation();
+
+  const dispatch = useDispatch();
+  const currency = account.currency ?? '';
+
+  const balance = useSheetValue<'balance', `balance-query-${string}`>({
+    name: `balance-query-${account.id}-main-currency`,
+    query: q('transactions')
+      .filter({ account: account.id })
+      .calculate(sumInMainCurrency),
+  });
+  const { data: rates, isPlaceholderData } = useQuery(
+    exchangeRateQueries.list({ currency, mainCurrency }),
+  );
+
+  if (isPlaceholderData) {
+    return null;
+  }
+
+  // Without a rate the balance can't be valued in the main currency
+  if (!rates?.length) {
+    return (
+      <Button
+        variant="bare"
+        onPress={() =>
+          dispatch(
+            pushModal({
+              modal: {
+                name: 'edit-exchange-rate',
+                options: { fromCurrency: currency, toCurrency: mainCurrency },
+              },
+            }),
+          )
+        }
+        style={{
+          padding: '4px 6px',
+          gap: 4,
+          color: theme.warningText,
+          backgroundColor: theme.pillBackground,
+        }}
+      >
+        <SvgExclamationOutline style={{ width: 12, height: 12 }} />
+        <Trans>
+          Add a {{ currency }} to {{ mainCurrency }} rate to see the balance in{' '}
+          {{ mainCurrency }}
+        </Trans>
+      </Button>
+    );
+  }
+
+  return (
+    <DetailedBalance
+      name={t('In {{currency}}:', { currency: mainCurrency })}
+      balance={balance ?? 0}
+    />
   );
 }
 
@@ -193,6 +286,8 @@ export function Balances({
   filteredAmount,
 }: BalancesProps) {
   const selectedItems = useSelectedItems();
+  const mainCurrency = useMainCurrency();
+  const currency = getForeignCurrency(account, mainCurrency) ?? undefined;
   const buttonRef = useRef<HTMLButtonElement>(null);
   const isButtonHovered = useHover(buttonRef as RefObject<HTMLButtonElement>);
 
@@ -229,6 +324,7 @@ export function Balances({
           {props => (
             <CellValueText
               {...props}
+              currency={currency}
               style={{
                 fontSize: 22,
                 fontWeight: 400,
@@ -258,12 +354,20 @@ export function Balances({
         />
       </Button>
 
-      {showExtraBalances && <MoreBalances balanceQuery={balanceQuery} />}
+      {account && currency && mainCurrency && (
+        <MainCurrencyBalance account={account} mainCurrency={mainCurrency} />
+      )}
+
+      {showExtraBalances && (
+        <MoreBalances balanceQuery={balanceQuery} currency={currency} />
+      )}
 
       {selectedItems.size > 0 && (
         <SelectedBalance selectedItems={selectedItems} account={account} />
       )}
-      {isFiltered && <FilteredBalance filteredAmount={filteredAmount} />}
+      {isFiltered && (
+        <FilteredBalance filteredAmount={filteredAmount} currency={currency} />
+      )}
     </View>
   );
 }

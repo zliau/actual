@@ -61,6 +61,7 @@ import { SchedulesProvider } from '#hooks/useCachedSchedules';
 import { useCategories } from '#hooks/useCategories';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useLocalPref } from '#hooks/useLocalPref';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { usePayees } from '#hooks/usePayees';
 import { getSchedulesQuery } from '#hooks/useSchedules';
 import { SelectedProviderWithItems } from '#hooks/useSelected';
@@ -91,6 +92,7 @@ import { pagedQuery } from '#queries/pagedQuery';
 import type { PagedQuery } from '#queries/pagedQuery';
 import { useDispatch, useSelector } from '#redux';
 import type { AppDispatch } from '#redux/store';
+import { sumInMainCurrency } from '#spreadsheet/bindings';
 import { updateNewTransactions } from '#transactions/transactionsSlice';
 
 import { AccountEmptyMessage } from './AccountEmptyMessage';
@@ -235,6 +237,8 @@ type AccountInternalProps = {
   showReconciled: boolean;
   setShowReconciled: (newValue: boolean) => void;
   showGroup: boolean;
+  // Whether the view has accounts in another currency than the main one
+  showConverted: boolean;
   showExtraBalances?: boolean;
   setShowExtraBalances: (newValue: boolean) => void;
   transactionColumns: TransactionTableColumn[];
@@ -887,7 +891,9 @@ class AccountInternal extends PureComponent<
       | 'toggle-reconciled'
       | 'toggle-net-worth-chart'
       | 'manage-columns'
-      | 'account-group',
+      | 'account-group'
+      | 'account-currency'
+      | 'exchange-rates',
   ) => {
     const accountId = this.props.accountId!;
     const account = this.props.accounts.find(
@@ -934,6 +940,23 @@ class AccountInternal extends PureComponent<
               options: {
                 accountId,
               },
+            },
+          }),
+        );
+        break;
+      case 'account-currency':
+        this.props.dispatch(
+          pushModal({
+            modal: { name: 'account-currency', options: { accountId } },
+          }),
+        );
+        break;
+      case 'exchange-rates':
+        this.props.dispatch(
+          pushModal({
+            modal: {
+              name: 'exchange-rates',
+              options: { currency: account.currency ?? undefined },
             },
           }),
         );
@@ -996,7 +1019,8 @@ class AccountInternal extends PureComponent<
       .filter(
         column =>
           (column.id !== 'account' || this.showAccountColumn()) &&
-          (column.id !== 'balance' || this.canCalculateBalance()),
+          (column.id !== 'balance' || this.canCalculateBalance()) &&
+          (column.id !== 'converted' || this.props.showConverted),
       )
       .map(column => {
         // Balance and cleared visibility can be temporarily overridden in
@@ -1106,10 +1130,19 @@ class AccountInternal extends PureComponent<
     return account.name;
   }
 
+  // Views across several accounts total in the main currency
+  isSingleAccount() {
+    return this.props.accounts.some(
+      account => account.id === this.props.accountId,
+    );
+  }
+
   getBalanceQuery(id?: string) {
     return {
       name: `balance-query-${id}`,
-      query: this.makeRootTransactionsQuery().calculate({ $sum: '$amount' }),
+      query: this.makeRootTransactionsQuery().calculate(
+        this.isSingleAccount() ? { $sum: '$amount' } : sumInMainCurrency,
+      ),
     } as const;
   }
 
@@ -1119,7 +1152,9 @@ class AccountInternal extends PureComponent<
     }
 
     const { data: amount } = await aqlQuery(
-      this.paged.query.calculate({ $sum: '$amount' }),
+      this.paged.query
+        .options({ currency: this.isSingleAccount() ? 'account' : 'base' })
+        .calculate({ $sum: '$amount' }),
     );
     return amount;
   };
@@ -1999,6 +2034,7 @@ class AccountInternal extends PureComponent<
                   showReconciled={showReconciled}
                   showCleared={!!showCleared}
                   showGroup={this.props.showGroup}
+                  showConverted={this.props.showConverted}
                   showAccount={this.showAccountColumn()}
                   columnOrder={this.props.columnOrder}
                   allowReorder={
@@ -2121,6 +2157,13 @@ export function Account() {
   );
   const { data: accounts = [] } = useAccounts();
   const { data: payees = [] } = usePayees();
+  const mainCurrency = useMainCurrency();
+  const currentAccount = accounts.find(account => account.id === params.id);
+  const showConverted = currentAccount
+    ? getForeignCurrency(currentAccount, mainCurrency) != null
+    : accounts.some(
+        account => getForeignCurrency(account, mainCurrency) != null,
+      );
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
   const [hideFraction] = useSyncedPref('hideFraction');
   const [expandSplits] = useLocalPref('expand-splits');
@@ -2191,6 +2234,7 @@ export function Account() {
             showReconciled={String(hideReconciled) !== 'true'}
             setShowReconciled={val => setHideReconciled(String(!val))}
             showGroup={showGroup}
+            showConverted={showConverted}
             showExtraBalances={String(showExtraBalances) === 'true'}
             setShowExtraBalances={extraBalances =>
               setShowExtraBalances(String(extraBalances))

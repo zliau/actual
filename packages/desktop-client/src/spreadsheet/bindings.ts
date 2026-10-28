@@ -20,6 +20,12 @@ const categoryParametrizedField = parametrizedField<'category'>();
 const envelopeParametrizedField = parametrizedField<'envelope-budget'>();
 const trackingParametrizedField = parametrizedField<'tracking-budget'>();
 
+// Sums transaction amounts across accounts in the main currency, valuing
+// accounts in other currencies at their latest exchange rate
+export const sumInMainCurrency = {
+  $round: { $sum: { $mul: ['$amount', '$account.latest_rate'] } },
+};
+
 export function accountBalance(accountId: AccountEntity['id']) {
   return {
     name: accountParametrizedField('balance')(accountId),
@@ -54,7 +60,7 @@ export function allAccountBalance() {
   return {
     query: q('transactions')
       .filter({ 'account.closed': false })
-      .calculate({ $sum: '$amount' }),
+      .calculate(sumInMainCurrency),
     name: 'accounts-balance',
   } satisfies Binding<'account', 'accounts-balance'>;
 }
@@ -64,7 +70,7 @@ export function onBudgetAccountBalance() {
     name: `onbudget-accounts-balance`,
     query: q('transactions')
       .filter({ 'account.offbudget': false, 'account.closed': false })
-      .calculate({ $sum: '$amount' }),
+      .calculate(sumInMainCurrency),
   } satisfies Binding<'account', 'onbudget-accounts-balance'>;
 }
 
@@ -73,7 +79,7 @@ export function offBudgetAccountBalance() {
     name: `offbudget-accounts-balance`,
     query: q('transactions')
       .filter({ 'account.offbudget': true, 'account.closed': false })
-      .calculate({ $sum: '$amount' }),
+      .calculate(sumInMainCurrency),
   } satisfies Binding<'account', 'offbudget-accounts-balance'>;
 }
 
@@ -82,7 +88,7 @@ export function closedAccountBalance() {
     name: `closed-accounts-balance`,
     query: q('transactions')
       .filter({ 'account.closed': true })
-      .calculate({ $sum: '$amount' }),
+      .calculate(sumInMainCurrency),
   } satisfies Binding<'account', 'closed-accounts-balance'>;
 }
 
@@ -99,7 +105,7 @@ export function accountGroupBalance(
         'account.closed': false,
       })
       .options({ splits: 'none' })
-      .calculate({ $sum: '$amount' }),
+      .calculate(sumInMainCurrency),
   } satisfies Binding<'account', `account-group-balance-${string}`>;
 }
 
