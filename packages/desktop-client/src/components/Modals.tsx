@@ -84,6 +84,7 @@ import { TrackingBudgetMenuModal } from './modals/TrackingBudgetMenuModal';
 import { TrackingBudgetMonthMenuModal } from './modals/TrackingBudgetMonthMenuModal';
 import { TrackingBudgetSummaryModal } from './modals/TrackingBudgetSummaryModal';
 import { TransactionTableColumnsModal } from './modals/TransactionTableColumnsModal';
+import { TransferAmountsModal } from './modals/TransferAmountsModal';
 import { TransferModal } from './modals/TransferModal';
 import { TransferOwnership } from './modals/TransferOwnership';
 import { UnmigrateBudgetAutomationsModal } from './modals/UnmigrateBudgetAutomationsModal';
@@ -152,6 +153,9 @@ export function Modals() {
 
         case 'edit-exchange-rate':
           return <EditExchangeRateModal key={key} {...modal.options} />;
+
+        case 'transfer-amounts':
+          return <TransferAmountsModal key={key} {...modal.options} />;
 
         case 'close-account':
           return <CloseAccountModal key={key} {...modal.options} />;

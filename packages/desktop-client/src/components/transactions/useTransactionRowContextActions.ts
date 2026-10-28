@@ -11,7 +11,10 @@ import { isPreviewId } from '@actual-app/core/shared/transactions';
 import type { TransactionEntity } from '@actual-app/core/types/models';
 
 import type { ContextMenuItem } from '#contextmenu/types';
+import { useAccounts } from '#hooks/useAccounts';
 import { useContextMenu } from '#hooks/useContextMenu';
+import { useMainCurrency } from '#hooks/useMainCurrency';
+import { usePayees } from '#hooks/usePayees';
 import { useSchedules } from '#hooks/useSchedules';
 import { useSelectedItems } from '#hooks/useSelected';
 import { pushModal } from '#modals/modalsSlice';
@@ -48,6 +51,9 @@ export function useTransactionRowContextActions({
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const selectedItems = useSelectedItems();
+  const mainCurrency = useMainCurrency();
+  const { data: accounts = [] } = useAccounts();
+  const { data: payees = [] } = usePayees();
 
   const selectedIds = useMemo(() => {
     const ids =
@@ -134,6 +140,23 @@ export function useTransactionRowContextActions({
     return areNoReconciledTransactions && areAllSplitTransactions;
   }, [selectedIds, types, getTransaction]);
 
+  // A transfer between accounts in different currencies has an amount on
+  // each side
+  const isCrossCurrencyTransfer = (() => {
+    if (!mainCurrency || !transaction.transfer_id) {
+      return false;
+    }
+    const transferAccountId = payees.find(
+      payee => payee.id === transaction.payee,
+    )?.transfer_acct;
+    const currencyOf = (id: string | null | undefined) =>
+      accounts.find(account => account.id === id)?.currency ?? mainCurrency;
+    return (
+      transferAccountId != null &&
+      currencyOf(transaction.account) !== currencyOf(transferAccountId)
+    );
+  })();
+
   function onViewSchedule() {
     const firstId = selectedIds[0];
     let scheduleId;
@@ -186,6 +209,20 @@ export function useTransactionRowContextActions({
   ];
 
   const transactionActions: ContextMenuItem[] = [
+    {
+      name: 'transfer-amounts',
+      text: t('Edit both amounts'),
+      onClick: () =>
+        dispatch(
+          pushModal({
+            modal: {
+              name: 'transfer-amounts',
+              options: { transactionId: transaction.id },
+            },
+          }),
+        ),
+      hidden: selectedIds.length !== 1 || !isCrossCurrencyTransfer,
+    },
     {
       name: 'duplicate',
       text: t('Duplicate'),
