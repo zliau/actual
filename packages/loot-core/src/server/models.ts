@@ -1,3 +1,4 @@
+import { isCurrencyCode } from '#shared/currencies';
 import type {
   CategoryEntity,
   CategoryGroupEntity,
@@ -62,6 +63,15 @@ export function fromDateRepr(number: number) {
   );
 }
 
+export function validateCurrencyCode(
+  name: string,
+  code: string | null | undefined,
+) {
+  if (code != null && !isCurrencyCode(code)) {
+    throw new ValidationError(`${name} has unknown currency code '${code}'`);
+  }
+}
+
 export const accountModel = {
   validate(account: Partial<DbAccount>, { update }: { update?: boolean } = {}) {
     requiredFields(
@@ -70,6 +80,7 @@ export const accountModel = {
       update ? ['name', 'offbudget', 'closed'] : ['name'],
       update,
     );
+    validateCurrencyCode('account', account.currency);
 
     return account as DbAccount;
   },

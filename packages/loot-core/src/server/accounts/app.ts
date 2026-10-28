@@ -13,6 +13,7 @@ import {
   TransactionError,
 } from '#server/errors';
 import { app as mainApp } from '#server/main-app';
+import { validateCurrencyCode } from '#server/models';
 import { mutator } from '#server/mutators';
 import { del, get, post } from '#server/post';
 import { getPrefs } from '#server/prefs';
@@ -97,15 +98,21 @@ async function updateAccount({
   name,
   last_reconciled,
   account_group_id,
+  currency,
 }: Pick<AccountEntity, 'id'> &
   Partial<
-    Pick<AccountEntity, 'name' | 'last_reconciled' | 'account_group_id'>
+    Pick<
+      AccountEntity,
+      'name' | 'last_reconciled' | 'account_group_id' | 'currency'
+    >
   >) {
+  validateCurrencyCode('account', currency);
   await db.update('accounts', {
     id,
     ...(name !== undefined && { name }),
     ...(last_reconciled && { last_reconciled }),
     ...(account_group_id !== undefined && { account_group_id }),
+    ...(currency !== undefined && { currency }),
   });
   return {};
 }
@@ -135,6 +142,7 @@ async function getAccounts(): Promise<AccountEntity[]> {
         last_sync: dbAccount.last_sync ?? null,
         bank_sync_status: dbAccount.bank_sync_status ?? null,
         account_group_id: dbAccount.account_group_id ?? null,
+        currency: dbAccount.currency ?? null,
       }) satisfies AccountEntity,
   );
 }
@@ -559,16 +567,19 @@ async function createAccount({
   balance = 0,
   offBudget = false,
   closed = false,
+  currency = null,
 }: {
   name: string;
   balance?: number | undefined;
   offBudget?: boolean | undefined;
   closed?: boolean | undefined;
+  currency?: AccountEntity['currency'] | undefined;
 }) {
   const id: AccountEntity['id'] = await db.insertAccount({
     name,
     offbudget: offBudget ? 1 : 0,
     closed: closed ? 1 : 0,
+    currency,
   });
 
   await db.insertPayee({

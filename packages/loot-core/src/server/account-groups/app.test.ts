@@ -158,6 +158,7 @@ describe('account groups app', () => {
         id: 'acct1',
         name: 'Marcus Savings',
         account_group_id: null,
+        currency: null,
       });
       accounts = await accountsApp.handlers['accounts-get']();
       expect(accounts[0].account_group_id).toBeNull();
