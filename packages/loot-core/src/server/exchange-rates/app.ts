@@ -1,8 +1,14 @@
+import * as asyncStorage from '#platform/server/asyncStorage';
+import { logger } from '#platform/server/log';
 import { createApp } from '#server/app';
 import * as db from '#server/db';
-import { ValidationError } from '#server/errors';
+import { PostError, ValidationError } from '#server/errors';
 import { validateCurrencyCode } from '#server/models';
 import { mutator } from '#server/mutators';
+import { post } from '#server/post';
+import { getPrefs } from '#server/prefs';
+import { getServer } from '#server/server-config';
+import { batchMessages } from '#server/sync';
 import { undoable } from '#server/undo';
 import { isValidYearMonthDay } from '#shared/months';
 import type { ExchangeRateEntity, ExchangeRateSource } from '#types/models';
@@ -11,12 +17,14 @@ export type ExchangeRatesHandlers = {
   'exchange-rates-get': typeof getExchangeRates;
   'exchange-rate-set': typeof setExchangeRate;
   'exchange-rate-delete': typeof deleteExchangeRate;
+  'exchange-rates-fetch': typeof fetchExchangeRates;
 };
 
 export const app = createApp<ExchangeRatesHandlers>();
 app.method('exchange-rates-get', getExchangeRates);
 app.method('exchange-rate-set', mutator(undoable(setExchangeRate)));
 app.method('exchange-rate-delete', mutator(undoable(deleteExchangeRate)));
+app.method('exchange-rates-fetch', mutator(fetchExchangeRates));
 
 function fromDbExchangeRate(row: db.DbExchangeRate): ExchangeRateEntity {
   return {
@@ -110,6 +118,103 @@ async function deleteExchangeRate({
   id,
 }: Pick<ExchangeRateEntity, 'id'>): Promise<void> {
   await db.delete_('exchange_rates', id);
+}
+
+// The budget's main currency, or null when none is chosen
+export async function getMainCurrency(): Promise<string | null> {
+  const row = await db.first<Pick<db.DbPreference, 'value'>>(
+    'SELECT value FROM preferences WHERE id = ?',
+    ['defaultCurrencyCode'],
+  );
+  return row?.value || null;
+}
+
+// Currencies of accounts that differ from the main currency
+async function getForeignCurrencies(mainCurrency: string): Promise<string[]> {
+  const rows = await db.all<{ currency: string }>(
+    `SELECT DISTINCT currency FROM accounts
+     WHERE tombstone = 0 AND currency IS NOT NULL AND currency != ?
+     ORDER BY currency`,
+    [mainCurrency],
+  );
+  return rows.map(row => row.currency);
+}
+
+type FetchExchangeRatesResult =
+  | { error: 'unauthorized' | 'no-server' | 'no-main-currency' }
+  | { count: number; unavailable: string[] };
+
+// Fetches rates from each foreign account currency to the main currency via
+// the sync server, for the day `start` or every day from `start` to `end`, and
+// stores them. Currencies the provider does not cover are listed in
+// `unavailable` so the user can enter those rates by hand.
+async function fetchExchangeRates({
+  start,
+  end,
+}: {
+  start: string;
+  end?: string | undefined;
+}): Promise<FetchExchangeRatesResult> {
+  const userToken = await asyncStorage.getItem('user-token');
+  if (!userToken) {
+    return { error: 'unauthorized' };
+  }
+
+  const serverConfig = getServer();
+  if (!serverConfig) {
+    return { error: 'no-server' };
+  }
+
+  const mainCurrency = await getMainCurrency();
+  if (!mainCurrency) {
+    return { error: 'no-main-currency' };
+  }
+
+  const fileId = getPrefs()?.cloudFileId;
+  const headers = {
+    'X-ACTUAL-TOKEN': userToken,
+    ...(fileId ? { 'X-Actual-File-Id': fileId } : {}),
+  };
+
+  let count = 0;
+  const unavailable: string[] = [];
+
+  for (const currency of await getForeignCurrencies(mainCurrency)) {
+    let rates: Record<string, Record<string, number>>;
+    try {
+      ({ rates } = await post(
+        serverConfig.EXCHANGE_RATES_SERVER,
+        { base: currency, symbols: [mainCurrency], start, end },
+        headers,
+      ));
+    } catch (error) {
+      if (error instanceof PostError && error.reason === 'rates-unavailable') {
+        logger.warn(`No exchange rates available for ${currency}`, error);
+        unavailable.push(currency);
+        continue;
+      }
+      throw error;
+    }
+
+    await batchMessages(async () => {
+      for (const [date, rateByCurrency] of Object.entries(rates)) {
+        const rate = rateByCurrency[mainCurrency];
+        if (rate == null) {
+          continue;
+        }
+        await setExchangeRate({
+          date,
+          from_currency: currency,
+          to_currency: mainCurrency,
+          rate,
+          source: 'api',
+        });
+        count++;
+      }
+    });
+  }
+
+  return { count, unavailable };
 }
 
 // Returns how many units of `toCurrency` one unit of `fromCurrency` is worth
