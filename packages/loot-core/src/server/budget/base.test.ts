@@ -625,3 +625,57 @@ describe('Base budget', () => {
     expect(sheet.getCellValue(jan, `sum-amount-${foodId}`)).toBe(-1000);
   });
 });
+
+describe('Budget in several currencies', () => {
+  it('counts spending from foreign currency accounts in the main currency', async () => {
+    await db.run('INSERT INTO preferences (id, value) VALUES (?, ?)', [
+      'defaultCurrencyCode',
+      'EUR',
+    ]);
+    await sheet.loadSpreadsheet(db);
+    await db.insertCategoryGroup({ id: 'group1', name: 'Group' });
+    await db.insertCategoryGroup({
+      id: 'income',
+      name: 'Income',
+      is_income: 1,
+    });
+    const catId = await db.insertCategory({
+      name: 'Food',
+      cat_group: 'group1',
+    });
+    await createAllBudgets();
+
+    await db.insertAccount({ id: 'main', name: 'Main' });
+    await db.insertAccount({ id: 'us', name: 'US', currency: 'USD' });
+    await db.insertWithUUID('exchange_rates', {
+      date: 20170101,
+      from_currency: 'USD',
+      to_currency: 'EUR',
+      rate: 0.9,
+      source: 'manual',
+    });
+
+    await db.insertTransaction({
+      date: '2017-01-15',
+      amount: -1000,
+      account: 'main',
+      category: catId,
+    });
+    const usId = await db.insertTransaction({
+      date: '2017-01-16',
+      amount: -2000,
+      account: 'us',
+      category: catId,
+    });
+    await sheet.waitOnSpreadsheet();
+
+    const jan = monthUtils.sheetForMonth('2017-01');
+    expect(sheet.getCellValue(jan, `sum-amount-${catId}`)).toBe(-2800);
+
+    // A changed converted amount updates the budget
+    await db.update('transactions', { id: usId, converted_amount: -1500 });
+    await sheet.waitOnSpreadsheet();
+
+    expect(sheet.getCellValue(jan, `sum-amount-${catId}`)).toBe(-2500);
+  });
+});

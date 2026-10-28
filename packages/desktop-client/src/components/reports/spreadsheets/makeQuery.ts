@@ -24,6 +24,8 @@ export function makeQuery(
       : '$' + ReportOptions.intervalMap.get(interval)?.toLowerCase() || 'month';
 
   const query = q('transactions')
+    //Add up amounts in the base currency
+    .options({ currency: 'base' })
     //Apply filters and split by "Group By"
     .filter({
       [conditionsOpKey]: filters,

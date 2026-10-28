@@ -127,6 +127,7 @@ export function createCrossoverSpreadsheet({
       }
 
       const query = q('transactions')
+        .options({ currency: 'base' })
         .filter({
           $and: [
             { $or: expenseCategoryIds.map(id => ({ category: id })) },

@@ -35,6 +35,7 @@ export function simpleCashFlow(
 
     function makeQuery() {
       return q('transactions')
+        .options({ currency: 'base' })
         .filter({
           [conditionsOpKey]: filters,
         })
@@ -96,6 +97,7 @@ export function cashFlowByDate(
 
     function makeQuery() {
       const query = q('transactions')
+        .options({ currency: 'base' })
         .filter({
           [conditionsOpKey]: filters,
         })
@@ -129,6 +131,7 @@ export function cashFlowByDate(
     return runAll(
       [
         q('transactions')
+          .options({ currency: 'base' })
           .filter({
             [conditionsOpKey]: filters,
             date: { $transform: '$month', $lt: start },

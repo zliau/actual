@@ -133,8 +133,13 @@ export class Query {
     return new Query({ ...this.state, validateRefs: false });
   }
 
+  // Adds to the options already set, so `splits` and `currency` can be set
+  // separately
   options(opts: Record<string, unknown>) {
-    return new Query({ ...this.state, tableOptions: opts });
+    return new Query({
+      ...this.state,
+      tableOptions: { ...this.state.tableOptions, ...opts },
+    });
   }
 
   reset() {

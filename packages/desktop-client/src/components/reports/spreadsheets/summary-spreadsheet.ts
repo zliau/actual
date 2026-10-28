@@ -85,6 +85,7 @@ export function summarySpreadsheet(
 
     const makeRootQuery = () =>
       q('transactions')
+        .options({ currency: 'base' })
         .filter({
           $and: [
             {
@@ -290,6 +291,7 @@ async function calculatePercentage(
 
   const makeDivisorQuery = () =>
     q('transactions')
+      .options({ currency: 'base' })
       .filter({
         [conditionsOpKey]: filters,
       })

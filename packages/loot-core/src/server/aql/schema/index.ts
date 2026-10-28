@@ -244,21 +244,25 @@ export const schemaConfig: SchemaConfig = {
   tableViews(name, { isJoin, withDead, tableOptions = { splits: undefined } }) {
     switch (name) {
       case 'transactions': {
+        // With `currency: 'base'`, `amount` is in the budget's base currency
+        // instead of the account's, for adding up amounts across accounts
+        const suffix = tableOptions.currency === 'base' ? '_base' : '';
+
         // If joining, we always only show alive transactions. There's
         // no way to configure join behavior yet
         if (isJoin) {
-          return 'v_transactions_internal_alive';
+          return 'v_transactions_internal_alive' + suffix;
         }
 
         const splitType = tableOptions.splits || 'inline';
         // Use the view to exclude dead transactions if using `inline` or `none`
         if (!withDead && (splitType === 'inline' || splitType === 'none')) {
-          return 'v_transactions_internal_alive';
+          return 'v_transactions_internal_alive' + suffix;
         }
 
         // Otherwse we disregard the `withDead` option here and handle
         // that in the executors to improve performance
-        return 'v_transactions_internal';
+        return 'v_transactions_internal' + suffix;
       }
 
       case 'schedules':
@@ -401,6 +405,9 @@ export const schemaConfig: SchemaConfig = {
           payee: 'pm.targetId',
           category: `CASE WHEN _.isParent = 1 THEN NULL ELSE cm.transferId END`,
           amount: `IFNULL(_.amount, 0)`,
+          // Not in the schema, so queries can't read it: the base views show
+          // it as `amount`
+          base_amount: `COALESCE(_.converted_amount, _.amount, 0)`,
           parent_id: 'CASE WHEN _.isChild = 0 THEN NULL ELSE _.parent_id END',
         });
 
@@ -423,6 +430,15 @@ export const schemaConfig: SchemaConfig = {
         LEFT JOIN transactions t2 ON (_.is_child = 1 AND t2.id = _.parent_id)
         WHERE IFNULL(_.tombstone, 0) = 0 AND (_.is_child = 0 OR t2.tombstone = 0)
       `,
+
+      // The same as the two views above, but with `amount` in the budget's
+      // base currency. Use these only to add up amounts: saving a row read
+      // from them would overwrite the amount with the converted one.
+      v_transactions_internal_base: (_, publicFields) =>
+        `SELECT ${publicFields({ amount: '_.base_amount' })} FROM v_transactions_internal _`,
+
+      v_transactions_internal_alive_base: (_, publicFields) =>
+        `SELECT ${publicFields({ amount: '_.base_amount' })} FROM v_transactions_internal_alive _`,
 
       v_transactions: (_, publicFields) => {
         const fields = publicFields({

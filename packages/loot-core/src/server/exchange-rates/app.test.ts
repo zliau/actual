@@ -364,4 +364,39 @@ describe('exchange rates app', () => {
       expect(result).toEqual({ error: 'unauthorized' });
     });
   });
+
+  describe('exchange-rates-latest', () => {
+    it("returns today's rate for each foreign account currency", async () => {
+      await setMainCurrency('EUR');
+      await accountsApp.handlers['account-create']({
+        name: 'US',
+        currency: 'USD',
+      });
+      await accountsApp.handlers['account-create']({
+        name: 'UK',
+        currency: 'GBP',
+      });
+      await app.handlers['exchange-rate-set']({
+        date: '2016-12-01',
+        from_currency: 'USD',
+        to_currency: 'EUR',
+        rate: 0.9,
+      });
+      await app.handlers['exchange-rate-set']({
+        date: '2016-12-20',
+        from_currency: 'USD',
+        to_currency: 'EUR',
+        rate: 0.95,
+      });
+
+      expect(await app.handlers['exchange-rates-latest']()).toEqual({
+        GBP: null,
+        USD: 0.95,
+      });
+    });
+
+    it('returns nothing without a main currency', async () => {
+      expect(await app.handlers['exchange-rates-latest']()).toEqual({});
+    });
+  });
 });

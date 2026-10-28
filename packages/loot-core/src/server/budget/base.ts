@@ -114,7 +114,7 @@ function getSumAmountsByMonth(
     `SELECT t.category AS category,
             t.date / 100 AS month,
             SUM(t.amount) AS amount
-       FROM v_transactions_internal_alive t
+       FROM v_transactions_internal_alive_base t
        LEFT JOIN accounts a ON a.id = t.account
       WHERE t.date >= ${rangeStart} AND t.date <= ${rangeEnd}
         AND t.category IS NOT NULL
@@ -176,7 +176,7 @@ export function createCategory(cat, sheetName, prevSheetName, start, end) {
     run: () => {
       // Making this sync is faster!
       const rows = db.runQuery<{ amount: number }>(
-        `SELECT SUM(amount) as amount FROM v_transactions_internal_alive t
+        `SELECT SUM(amount) as amount FROM v_transactions_internal_alive_base t
            LEFT JOIN accounts a ON a.id = t.account
          WHERE t.date >= ${start} AND t.date <= ${end}
            AND category = '${cat.id}' AND a.offbudget = 0`,
@@ -224,6 +224,7 @@ function handleTransactionChange(transaction, changedFields) {
     (changedFields.has('date') ||
       changedFields.has('acct') ||
       changedFields.has('amount') ||
+      changedFields.has('converted_amount') ||
       changedFields.has('category') ||
       changedFields.has('tombstone') ||
       changedFields.has('isParent')) &&

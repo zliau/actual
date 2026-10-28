@@ -76,6 +76,7 @@ export function calendarSpreadsheet(
 
     const makeRootQuery = () =>
       q('transactions')
+        .options({ currency: 'base' })
         .filter({
           $and: [
             { date: { $gte: d.format(startDay, 'yyyy-MM-dd') } },

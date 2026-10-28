@@ -54,6 +54,12 @@ function execTransactions(
   if (!isValidSplitsOption(splitType)) {
     throw new Error(`Invalid "splits" option for transactions: "${splitType}"`);
   }
+  const currency = tableOptions.currency ?? 'account';
+  if (currency !== 'account' && currency !== 'base') {
+    throw new Error(
+      `Invalid "currency" option for transactions: "${String(currency)}"`,
+    );
+  }
 
   if (splitType === 'all' || splitType === 'inline' || splitType === 'none') {
     return execTransactionsBasic(
@@ -122,7 +128,11 @@ async function execTransactionsGrouped(
     // name here; instead, we change it and map it back to the name
     // used elsewhere in the query. Ideally we'd improve this
     if (!withDead) {
-      s.from = 'v_transactions_internal_alive v_transactions_internal';
+      const alive = s.from.replace(
+        'v_transactions_internal',
+        'v_transactions_internal_alive',
+      );
+      s.from = `${alive} ${s.from}`;
     }
 
     return execQuery(queryState, compilerState, s, params, outputTypes);

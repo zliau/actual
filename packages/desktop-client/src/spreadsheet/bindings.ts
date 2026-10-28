@@ -114,7 +114,7 @@ export function categoryBalance(
         category: categoryId,
         date: { $transform: '$month', $eq: month },
       })
-      .options({ splits: 'inline' })
+      .options({ splits: 'inline', currency: 'base' })
       .calculate({ $sum: '$amount' }),
   } satisfies Binding<'category', 'balance'>;
 }
@@ -131,7 +131,7 @@ export function categoryBalanceCleared(
         date: { $transform: '$month', $eq: month },
         cleared: true,
       })
-      .options({ splits: 'inline' })
+      .options({ splits: 'inline', currency: 'base' })
       .calculate({ $sum: '$amount' }),
   } satisfies Binding<'category', 'balanceCleared'>;
 }
@@ -148,7 +148,7 @@ export function categoryBalanceUncleared(
         date: { $transform: '$month', $eq: month },
         cleared: false,
       })
-      .options({ splits: 'inline' })
+      .options({ splits: 'inline', currency: 'base' })
       .calculate({ $sum: '$amount' }),
   } satisfies Binding<'category', 'balanceUncleared'>;
 }
@@ -156,7 +156,9 @@ export function categoryBalanceUncleared(
 export function uncategorizedBalance<SheetName extends SheetNames>() {
   return {
     name: 'uncategorized-balance',
-    query: uncategorizedTransactions().calculate({ $sum: '$amount' }),
+    query: uncategorizedTransactions()
+      .options({ currency: 'base' })
+      .calculate({ $sum: '$amount' }),
   } satisfies Binding<SheetName, 'uncategorized-balance'>;
 }
 

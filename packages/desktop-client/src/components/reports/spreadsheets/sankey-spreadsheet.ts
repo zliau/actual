@@ -533,6 +533,7 @@ async function fetchCategoryData(
         (categoryGroup.categories || []).map(async category => {
           const results = await aqlQuery(
             q('transactions')
+              .options({ currency: 'base' })
               .filter({ [conditionsOpKey]: filters })
               .filter({
                 $and: [
