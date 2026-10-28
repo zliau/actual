@@ -75,7 +75,7 @@ describe('converted amounts', () => {
     expect(await getConvertedAmount(id)).toBeNull();
   });
 
-  it('keeps an explicit converted amount', async () => {
+  it('ignores a converted amount copied with a transaction', async () => {
     await setRate('2026-01-01', 0.9);
 
     const id = await db.insertTransaction({
@@ -84,8 +84,10 @@ describe('converted amounts', () => {
       amount: -10000,
       converted_amount: -9300,
     });
+    expect(await getConvertedAmount(id)).toBe(-9000);
 
-    expect(await getConvertedAmount(id)).toBe(-9300);
+    await db.updateTransaction({ id, converted_amount: -9300 });
+    expect(await getConvertedAmount(id)).toBe(-9000);
   });
 
   it('updates the converted amount when the amount, date or account change', async () => {
@@ -104,12 +106,8 @@ describe('converted amounts', () => {
   });
 
   it('does not touch the converted amount for other changes', async () => {
-    const id = await db.insertTransaction({
-      account: usAccount,
-      date: '2026-01-05',
-      amount: -10000,
-      converted_amount: -9300,
-    });
+    const id = await addTransaction(usAccount, '2026-01-05', -10000);
+    await db.update('transactions', { id, converted_amount: -9300 });
 
     await db.updateTransaction({ id, notes: 'Lunch' });
 

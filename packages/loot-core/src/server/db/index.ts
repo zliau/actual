@@ -1069,26 +1069,26 @@ export async function getTransactions(accountId: DbTransaction['acct']) {
   );
 }
 
-// The converted amount is looked up synchronously so the insert is queued
-// immediately, like any other insert in a batch
+// The converted amount is always derived from the amount, date and account,
+// so a copied transaction can't carry a stale one. It is looked up
+// synchronously so the insert is queued immediately, like any other insert
+// in a batch.
 export function insertTransaction(
   transaction,
 ): Promise<TransactionEntity['id']> {
-  if (transaction.converted_amount === undefined) {
-    transaction = {
-      ...transaction,
-      converted_amount: getConvertedAmount(transaction),
-    };
-  }
-  return insertWithSchema('transactions', transaction);
+  return insertWithSchema('transactions', {
+    ...transaction,
+    converted_amount: getConvertedAmount(transaction),
+  });
 }
 
 export function updateTransaction(transaction) {
+  const { converted_amount: _convertedAmount, ...fields } = transaction;
+  transaction = fields;
   if (
-    transaction.converted_amount === undefined &&
-    (transaction.amount !== undefined ||
-      transaction.date !== undefined ||
-      transaction.account !== undefined)
+    transaction.amount !== undefined ||
+    transaction.date !== undefined ||
+    transaction.account !== undefined
   ) {
     const current = firstSync<Pick<DbTransaction, 'acct' | 'amount' | 'date'>>(
       'SELECT acct, amount, date FROM transactions WHERE id = ?',
