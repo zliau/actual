@@ -86,7 +86,7 @@ export function calendarSpreadsheet(
           [conditionsOpKey]: filters,
         })
         .groupBy(['date'])
-        .select(['date', { amount: { $sum: '$amount' } }]);
+        .select(['date', { amount: { $sum: '$main_amount' } }]);
 
     let expenseData;
     try {

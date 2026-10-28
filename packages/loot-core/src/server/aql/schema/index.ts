@@ -41,6 +41,10 @@ export const schema = {
     category: f('id', { ref: 'categories' }),
     amount: f('integer', { default: 0, required: true }),
     converted_amount: f('integer'),
+    // Only in the views: the converted amount, or the amount when the account
+    // uses the main currency or no rate is known. Sum this for totals in the
+    // main currency.
+    main_amount: f('integer'),
     payee: f('id', { ref: 'payees' }),
     notes: f('string'),
     date: f('date', { required: true }),
@@ -401,6 +405,7 @@ export const schemaConfig: SchemaConfig = {
           payee: 'pm.targetId',
           category: `CASE WHEN _.isParent = 1 THEN NULL ELSE cm.transferId END`,
           amount: `IFNULL(_.amount, 0)`,
+          main_amount: `COALESCE(_.converted_amount, _.amount, 0)`,
           parent_id: 'CASE WHEN _.isChild = 0 THEN NULL ELSE _.parent_id END',
         });
 

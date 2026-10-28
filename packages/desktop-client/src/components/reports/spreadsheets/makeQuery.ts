@@ -58,7 +58,7 @@ export function makeQuery(
     { accountOffBudget: { $id: '$account.offbudget' } },
     { payee: { $id: '$payee.id' } },
     { transferAccount: { $id: '$payee.transfer_acct.id' } },
-    { amount: { $sum: '$amount' } },
+    { amount: { $sum: '$main_amount' } },
   ];
 
   if (groupBy === 'Tag') {

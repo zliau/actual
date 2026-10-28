@@ -1076,14 +1076,19 @@ export async function getTransactions(accountId: DbTransaction['acct']) {
 export function insertTransaction(
   transaction,
 ): Promise<TransactionEntity['id']> {
+  const { main_amount: _mainAmount, ...fields } = transaction;
   return insertWithSchema('transactions', {
-    ...transaction,
+    ...fields,
     converted_amount: getConvertedAmount(transaction),
   });
 }
 
 export function updateTransaction(transaction) {
-  const { converted_amount: _convertedAmount, ...fields } = transaction;
+  const {
+    converted_amount: _convertedAmount,
+    main_amount: _mainAmount,
+    ...fields
+  } = transaction;
   transaction = fields;
   if (
     transaction.amount !== undefined ||

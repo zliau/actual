@@ -51,7 +51,7 @@ export function simpleCashFlow(
           'account.offbudget': false,
           'payee.transfer_acct': null,
         })
-        .calculate({ $sum: '$amount' });
+        .calculate({ $sum: '$main_amount' });
     }
 
     return runAll(
@@ -113,7 +113,7 @@ export function cashFlowByDate(
           .select([
             { date: { $month: '$date' } },
             { isTransfer: 'payee.transfer_acct' },
-            { amount: { $sum: '$amount' } },
+            { amount: { $sum: '$main_amount' } },
           ]);
       }
 
@@ -122,7 +122,7 @@ export function cashFlowByDate(
         .select([
           'date',
           { isTransfer: 'payee.transfer_acct' },
-          { amount: { $sum: '$amount' } },
+          { amount: { $sum: '$main_amount' } },
         ]);
     }
 
@@ -134,7 +134,7 @@ export function cashFlowByDate(
             date: { $transform: '$month', $lt: start },
             'account.offbudget': false,
           })
-          .calculate({ $sum: '$amount' }),
+          .calculate({ $sum: '$main_amount' }),
         makeQuery().filter({ amount: { $gt: 0 } }),
         makeQuery().filter({ amount: { $lt: 0 } }),
       ],

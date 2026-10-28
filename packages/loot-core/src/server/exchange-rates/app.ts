@@ -10,6 +10,7 @@ import { getPrefs } from '#server/prefs';
 import { getServer } from '#server/server-config';
 import { batchMessages } from '#server/sync';
 import { undoable } from '#server/undo';
+import * as monthUtils from '#shared/months';
 import { isValidYearMonthDay } from '#shared/months';
 import type { ExchangeRateEntity, ExchangeRateSource } from '#types/models';
 
@@ -18,6 +19,7 @@ export type ExchangeRatesHandlers = {
   'exchange-rate-set': typeof setExchangeRate;
   'exchange-rate-delete': typeof deleteExchangeRate;
   'exchange-rates-fetch': typeof fetchExchangeRates;
+  'exchange-rates-latest': typeof getLatestExchangeRates;
 };
 
 export const app = createApp<ExchangeRatesHandlers>();
@@ -25,6 +27,7 @@ app.method('exchange-rates-get', getExchangeRates);
 app.method('exchange-rate-set', mutator(undoable(setExchangeRate)));
 app.method('exchange-rate-delete', mutator(undoable(deleteExchangeRate)));
 app.method('exchange-rates-fetch', mutator(fetchExchangeRates));
+app.method('exchange-rates-latest', getLatestExchangeRates);
 
 function fromDbExchangeRate(row: db.DbExchangeRate): ExchangeRateEntity {
   return {
@@ -155,6 +158,24 @@ async function getForeignCurrencies(mainCurrency: string): Promise<string[]> {
     [mainCurrency],
   );
   return rows.map(row => row.currency);
+}
+
+// Today's rate from each foreign account currency to the main currency, used
+// to value balances. A currency maps to null when no rate is known.
+async function getLatestExchangeRates(): Promise<
+  Record<string, number | null>
+> {
+  const mainCurrency = await db.getMainCurrency();
+  if (!mainCurrency) {
+    return {};
+  }
+
+  const today = monthUtils.currentDay();
+  const rates: Record<string, number | null> = {};
+  for (const currency of await getForeignCurrencies(mainCurrency)) {
+    rates[currency] = await db.getExchangeRate(currency, mainCurrency, today);
+  }
+  return rates;
 }
 
 type FetchExchangeRatesResult =

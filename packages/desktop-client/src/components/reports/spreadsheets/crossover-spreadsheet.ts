@@ -137,7 +137,7 @@ export function createCrossoverSpreadsheet({
         .groupBy({ $month: '$date' })
         .select([
           { date: { $month: '$date' } },
-          { amount: { $sum: '$amount' } },
+          { amount: { $sum: '$main_amount' } },
         ]);
 
       const { data } = await aqlQuery(query);

@@ -16,6 +16,8 @@ export type TransactionEntity = {
   // The amount in the budget's main currency, or null when the account
   // already uses it or no exchange rate is known
   converted_amount?: IntegerAmount | null;
+  // The converted amount, or the amount when there is none. Read only.
+  main_amount?: IntegerAmount;
   payee?: PayeeEntity['id'] | null;
   notes?: string;
   date: string;

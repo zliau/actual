@@ -104,7 +104,7 @@ export function summarySpreadsheet(
         })
         .select([
           'date',
-          { amount: { $sum: '$amount' } },
+          { amount: { $sum: '$main_amount' } },
           { count: { $count: '*' } },
         ]);
 
@@ -293,7 +293,7 @@ async function calculatePercentage(
       .filter({
         [conditionsOpKey]: filters,
       })
-      .select([{ amount: { $sum: '$amount' } }]);
+      .select([{ amount: { $sum: '$main_amount' } }]);
 
   let query = makeDivisorQuery();
 

@@ -553,7 +553,7 @@ async function fetchCategoryData(
               .select([
                 { accountId: { $id: '$account.id' } },
                 { accountName: { $id: '$account.name' } },
-                { amount: { $sum: '$amount' } },
+                { amount: { $sum: '$main_amount' } },
                 { payeeId: { $id: '$payee.id' } },
                 { payeeName: { $id: '$payee.name' } },
               ]),

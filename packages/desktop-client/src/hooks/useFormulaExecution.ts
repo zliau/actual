@@ -427,7 +427,7 @@ export async function buildFilteredTransactionsQuery(
 async function fetchQuerySum(config: QueryConfig): Promise<number> {
   try {
     const transQuery = await buildFilteredTransactionsQuery(config);
-    const summedQuery = transQuery.calculate({ $sum: '$amount' });
+    const summedQuery = transQuery.calculate({ $sum: '$main_amount' });
     const { data } = await send('query', summedQuery.serialize());
     return data || 0;
   } catch (err) {

@@ -22,7 +22,10 @@ afterEach(() => {
 });
 
 const tableSchema = schema.transactions;
-const fields = Object.keys(tableSchema);
+// `main_amount` only exists in the views, so it is never synced
+const fields = Object.keys(tableSchema).filter(
+  field => field !== 'main_amount',
+);
 
 function toInternalField(publicField) {
   return schemaConfig.views.transactions.fields[publicField];
