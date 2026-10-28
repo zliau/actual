@@ -73,6 +73,12 @@ export type Modal =
       };
     }
   | {
+      name: 'transfer-amounts';
+      options: {
+        transactionId: TransactionEntity['id'];
+      };
+    }
+  | {
       name: 'exchange-rates';
       options: {
         // The currency to show rates for, against the main currency
