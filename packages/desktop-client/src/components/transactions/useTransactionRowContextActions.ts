@@ -13,7 +13,10 @@ import type { TransactionEntity } from '@actual-app/core/types/models';
 import type { ContextMenuItem } from '#contextmenu/types';
 import { useAccounts } from '#hooks/useAccounts';
 import { useContextMenu } from '#hooks/useContextMenu';
-import { useMainCurrency } from '#hooks/useMainCurrency';
+import {
+  isCrossCurrencyTransfer,
+  useMainCurrency,
+} from '#hooks/useMainCurrency';
 import { usePayees } from '#hooks/usePayees';
 import { useSchedules } from '#hooks/useSchedules';
 import { useSelectedItems } from '#hooks/useSelected';
@@ -142,18 +145,17 @@ export function useTransactionRowContextActions({
 
   // A transfer between accounts in different currencies has an amount on
   // each side
-  const isCrossCurrencyTransfer = (() => {
-    if (!mainCurrency || !transaction.transfer_id) {
+  const hasAmountOnEachSide = (() => {
+    if (!transaction.transfer_id) {
       return false;
     }
     const transferAccountId = payees.find(
       payee => payee.id === transaction.payee,
     )?.transfer_acct;
-    const currencyOf = (id: string | null | undefined) =>
-      accounts.find(account => account.id === id)?.currency ?? mainCurrency;
-    return (
-      transferAccountId != null &&
-      currencyOf(transaction.account) !== currencyOf(transferAccountId)
+    return isCrossCurrencyTransfer(
+      accounts.find(account => account.id === transaction.account),
+      accounts.find(account => account.id === transferAccountId),
+      mainCurrency,
     );
   })();
 
@@ -221,7 +223,7 @@ export function useTransactionRowContextActions({
             },
           }),
         ),
-      hidden: selectedIds.length !== 1 || !isCrossCurrencyTransfer,
+      hidden: selectedIds.length !== 1 || !hasAmountOnEachSide,
     },
     {
       name: 'duplicate',

@@ -76,6 +76,7 @@ export type Modal =
       name: 'transfer-amounts';
       options: {
         transactionId: TransactionEntity['id'];
+        onSave?: () => void;
       };
     }
   | {
