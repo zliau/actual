@@ -38,6 +38,8 @@ import { useDispatch, useSelector } from '#redux';
 import type { Binding, SheetFields } from '#spreadsheet';
 import { isTouchDevice } from '#util/isTouchDevice';
 
+import { AccountMainCurrencyBalance } from './AccountMainCurrencyBalance';
+
 export const accountNameStyle: CSSProperties = {
   marginTop: -2,
   marginBottom: 2,
@@ -273,6 +275,7 @@ export function Account<FieldName extends SheetFields<'account'>>({
                 )
               }
             />
+            {account && <AccountMainCurrencyBalance account={account} />}
           </Link>
         </View>
       </View>
