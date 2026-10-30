@@ -306,39 +306,54 @@ async function fetchExchangeRates({
   return fetchRates(async () => [{ start, end }]);
 }
 
+// Splits a range of days into the ranges the sync server returns at once
+function splitDateRange(start: string, end: string): DateRange[] {
+  const ranges: DateRange[] = [];
+  while (start <= end) {
+    const rangeEnd = monthUtils.addDays(start, MAX_FETCH_DAYS);
+    ranges.push({ start, end: rangeEnd < end ? rangeEnd : end });
+    start = monthUtils.addDays(rangeEnd, 1);
+  }
+  return ranges;
+}
+
 // Fetches the rates each foreign account currency is missing: the days after
-// the latest fetched rate, or since the account's first transaction when no
-// rate was fetched yet, until today
+// the latest fetched rate until today, and the days before the earliest one
+// back to the account's first transaction, which can be older once history is
+// imported
 async function updateExchangeRates(): Promise<FetchExchangeRatesResult> {
   const today = monthUtils.currentDay();
 
   return fetchRates(async (currency, mainCurrency) => {
-    const latest = await db.first<{ date: number | null }>(
-      `SELECT MAX(date) AS date FROM exchange_rates
+    const fetched = await db.first<{
+      earliest: number | null;
+      latest: number | null;
+    }>(
+      `SELECT MIN(date) AS earliest, MAX(date) AS latest FROM exchange_rates
        WHERE tombstone = 0 AND source = 'api'
          AND from_currency = ? AND to_currency = ?`,
       [currency, mainCurrency],
     );
-    let start: string;
-    if (latest?.date != null) {
-      start = monthUtils.addDays(db.fromDateRepr(latest.date), 1);
-    } else {
-      const first = await db.first<{ date: number | null }>(
-        `SELECT MIN(t.date) AS date FROM transactions t
-         JOIN accounts a ON a.id = t.acct
-         WHERE t.tombstone = 0 AND a.tombstone = 0 AND a.currency = ?`,
-        [currency],
-      );
-      start = first?.date != null ? db.fromDateRepr(first.date) : today;
-    }
+    const first = await db.first<{ date: number | null }>(
+      `SELECT MIN(t.date) AS date FROM transactions t
+       JOIN accounts a ON a.id = t.acct
+       WHERE t.tombstone = 0 AND a.tombstone = 0 AND a.currency = ?`,
+      [currency],
+    );
+    const firstDate = first?.date != null ? db.fromDateRepr(first.date) : today;
 
-    // The sync server returns a limited range of days at once
-    const ranges: DateRange[] = [];
-    while (start <= today) {
-      const end = monthUtils.addDays(start, MAX_FETCH_DAYS);
-      ranges.push({ start, end: end < today ? end : today });
-      start = monthUtils.addDays(end, 1);
+    if (fetched?.earliest == null || fetched.latest == null) {
+      return splitDateRange(firstDate, today);
     }
-    return ranges;
+    return [
+      ...splitDateRange(
+        firstDate,
+        monthUtils.subDays(db.fromDateRepr(fetched.earliest), 1),
+      ),
+      ...splitDateRange(
+        monthUtils.addDays(db.fromDateRepr(fetched.latest), 1),
+        today,
+      ),
+    ];
   });
 }
