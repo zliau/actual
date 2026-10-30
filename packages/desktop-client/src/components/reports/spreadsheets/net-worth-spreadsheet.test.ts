@@ -427,6 +427,16 @@ describe('net worth in the main currency', () => {
     expect(report.netWorth).toBe(130_000);
   });
 
+  it('leaves out accounts in a currency without a rate', async () => {
+    const report = await runReport({
+      accounts: [accounts[0], usAccount],
+      accountQueryResults: [50_000, [], 100_000, []],
+      mainCurrency: 'EUR',
+    });
+
+    expect(report.netWorth).toBe(50_000);
+  });
+
   it('adds up the original amounts when no main currency is set', async () => {
     const report = await runReport({
       accounts: [accounts[0], usAccount],

@@ -24,6 +24,26 @@ export async function loadExchangeRates(
   return results.flat();
 }
 
+// Loads what's needed to value balances in the main currency. The result gives
+// how many units of the main currency one unit of `currency` is worth on `date`:
+// 1 for the main currency or when there is none, and 0 when no rate is known,
+// since those balances can't be valued and don't count towards totals.
+export async function loadRatesToMainCurrency(
+  currencies: Array<string | null | undefined>,
+  mainCurrency: string | null,
+): Promise<(currency: string | null | undefined, date: string) => number> {
+  if (!mainCurrency) {
+    return () => 1;
+  }
+  const foreignCurrencies = [
+    ...new Set(currencies.filter(currency => currency != null)),
+  ];
+  const rates = await loadExchangeRates(foreignCurrencies, mainCurrency);
+
+  return (currency, date) =>
+    currency ? (findExchangeRate(rates, currency, mainCurrency, date) ?? 0) : 1;
+}
+
 // Returns how many units of `toCurrency` one unit of `fromCurrency` is worth
 // on `date`, picked the same way as on the server: the latest rate on or
 // before that day, or the earliest one after it when there is none before,

@@ -3,6 +3,8 @@ import { q } from '@actual-app/core/shared/query';
 import type { AccountEntity } from '@actual-app/core/types/models';
 import * as d from 'date-fns';
 
+import { loadRatesToMainCurrency } from '#exchange-rates';
+import { getForeignCurrency } from '#hooks/useMainCurrency';
 import type { useSpreadsheet } from '#hooks/useSpreadsheet';
 import { aqlQuery } from '#queries/aqlQuery';
 
@@ -82,6 +84,7 @@ export type CrossoverParams = {
   expectedContribution?: number | null; // optional monthly contribution to project future balances
   projectionType: 'hampel' | 'median' | 'mean'; // expense projection method
   expenseAdjustmentFactor?: number; // multiplier for expenses (default 1.0)
+  mainCurrency?: string | null; // balances in other currencies are valued in it
 };
 
 export function createCrossoverSpreadsheet({
@@ -94,6 +97,7 @@ export function createCrossoverSpreadsheet({
   expectedContribution,
   projectionType,
   expenseAdjustmentFactor,
+  mainCurrency = null,
 }: CrossoverParams) {
   return async (
     _spreadsheet: ReturnType<typeof useSpreadsheet>,
@@ -187,9 +191,22 @@ export function createCrossoverSpreadsheet({
       }),
     );
 
-    const [expenses, historicalBalances] = await Promise.all([
+    const { data: accountCurrencies } = (await aqlQuery(
+      q('accounts')
+        .filter({ id: { $oneof: incomeAccountIds } })
+        .select(['id', 'currency']),
+    )) as { data: Array<Pick<AccountEntity, 'id' | 'currency'>> };
+    const currencyByAccount = new Map(
+      accountCurrencies.map(account => [
+        account.id,
+        getForeignCurrency(account, mainCurrency),
+      ]),
+    );
+
+    const [expenses, historicalBalances, getRate] = await Promise.all([
       expensesPromise,
       historicalBalancesPromise,
+      loadRatesToMainCurrency([...currencyByAccount.values()], mainCurrency),
     ]);
 
     setData(
@@ -207,6 +224,7 @@ export function createCrossoverSpreadsheet({
         },
         expenses,
         historicalBalances,
+        (accountId, date) => getRate(currencyByAccount.get(accountId), date),
       ),
     );
   };
@@ -231,6 +249,7 @@ function recalculate(
     starting: number;
     balances: MonthlyAgg[];
   }>,
+  getRate: (accountId: AccountEntity['id'], date: string) => number,
 ) {
   const months = monthUtils.rangeInclusive(params.start, params.end);
 
@@ -257,8 +276,12 @@ function recalculate(
 
       runningBalance += delta;
 
-      // Add this account's balance to the total for this month
-      historicalBalances[i] += runningBalance;
+      // Add this account's balance to the total for this month, valued at the
+      // exchange rate on its last day like the net worth report
+      historicalBalances[i] += Math.round(
+        runningBalance *
+          getRate(acct.accountId, monthUtils.lastDayOfMonth(month)),
+      );
     }
   }
 

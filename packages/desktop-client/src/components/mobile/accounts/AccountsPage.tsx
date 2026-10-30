@@ -27,6 +27,7 @@ import { css } from '@emotion/css';
 
 import { useMoveAccountMutation, useSyncAndDownloadMutation } from '#accounts';
 import { isAccountFailedSync } from '#accounts/syncStatus';
+import { MissingExchangeRates } from '#components/accounts/MissingExchangeRates';
 import { makeAmountFullStyle } from '#components/budget/util';
 import { MOBILE_NAV_HEIGHT } from '#components/mobile/MobileNavTabs';
 import { PullToRefresh } from '#components/mobile/PullToRefresh';
@@ -361,6 +362,7 @@ function AllAccountList({
         <EmptyMessage onAddAccount={onAddAccount} />
       ) : (
         <PullToRefresh onRefresh={onSync}>
+          <MissingExchangeRates style={{ margin: '10px 8px 0' }} />
           <View
             aria-label={t('Account list')}
             style={{ paddingBottom: MOBILE_NAV_HEIGHT }}

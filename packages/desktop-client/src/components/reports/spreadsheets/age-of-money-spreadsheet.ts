@@ -504,6 +504,7 @@ export function createAgeOfMoneySpreadsheet({
     // Excludes: on-budget transfers within the filtered account set
     function makeIncomeQuery() {
       return q('transactions')
+        .options({ currency: 'base' })
         .filter({
           [conditionsOpKey]: filters,
         })
@@ -523,6 +524,7 @@ export function createAgeOfMoneySpreadsheet({
     // Excludes: on-budget transfers within the filtered account set
     function makeExpenseQuery() {
       return q('transactions')
+        .options({ currency: 'base' })
         .filter({
           [conditionsOpKey]: filters,
         })

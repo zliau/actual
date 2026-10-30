@@ -196,8 +196,24 @@ export function createCategory(cat, sheetName, prevSheetName, start, end) {
   }
 }
 
+function recomputeCategorySpending(months, rows) {
+  months.forEach(month => {
+    const sheetName = monthUtils.sheetForMonth(month);
+
+    rows.forEach(row => {
+      sheet
+        .get()
+        .recompute(resolveName(sheetName, 'sum-amount-' + row.category));
+    });
+  });
+}
+
 function handleAccountChange(months, oldValue, newValue) {
-  if (!oldValue || oldValue.offbudget !== newValue.offbudget) {
+  if (
+    !oldValue ||
+    oldValue.offbudget !== newValue.offbudget ||
+    oldValue.currency !== newValue.currency
+  ) {
     const rows = db.runQuery<Pick<db.DbTransaction, 'category'>>(
       `
         SELECT DISTINCT(category) as category FROM transactions
@@ -207,16 +223,20 @@ function handleAccountChange(months, oldValue, newValue) {
       true,
     );
 
-    months.forEach(month => {
-      const sheetName = monthUtils.sheetForMonth(month);
-
-      rows.forEach(row => {
-        sheet
-          .get()
-          .recompute(resolveName(sheetName, 'sum-amount-' + row.category));
-      });
-    });
+    recomputeCategorySpending(months, rows);
   }
+}
+
+// Amounts without an exchange rate stop counting, or start again, without
+// any transaction changing
+function handleMainCurrencyChange(months) {
+  const rows = db.runQuery<Pick<db.DbTransaction, 'category'>>(
+    'SELECT DISTINCT(category) as category FROM transactions',
+    [],
+    true,
+  );
+
+  recomputeCategorySpending(months, rows);
 }
 
 function handleTransactionChange(transaction, changedFields) {
@@ -335,6 +355,11 @@ export function triggerBudgetChanges(oldValues, newValues) {
           }
         } else if (table === 'accounts') {
           handleAccountChange(createdMonths, oldValue, newValue);
+        } else if (
+          table === 'preferences' &&
+          newValue.id === 'defaultCurrencyCode'
+        ) {
+          handleMainCurrencyChange(createdMonths);
         }
       });
     });
