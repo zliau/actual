@@ -8,6 +8,7 @@ export type Spreadsheets = {
 
     // Account fields
     balance: number;
+    balanceInMainCurrency: number;
     [key: `balance-${string}-cleared`]: number | null;
     'accounts-balance': number;
     'onbudget-accounts-balance': number;
