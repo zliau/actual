@@ -7,10 +7,6 @@ import { styles } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { Tooltip } from '@actual-app/components/tooltip';
-import {
-  isPreviewId,
-  isTemporaryId,
-} from '@actual-app/core/shared/transactions';
 import { integerToCurrency } from '@actual-app/core/shared/util';
 import type {
   AccountEntity,
@@ -18,8 +14,7 @@ import type {
 } from '@actual-app/core/types/models';
 
 import { Cell } from '#components/table';
-import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
-import { useRatesToMainCurrency } from '#hooks/useRatesToMainCurrency';
+import { useConvertedAmount } from '#hooks/useConvertedAmount';
 import { pushModal } from '#modals/modalsSlice';
 import { useDispatch } from '#redux';
 
@@ -43,20 +38,12 @@ export function ConvertedAmountCell({
 }: ConvertedAmountCellProps) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
-  const mainCurrency = useMainCurrency();
-  const currency = getForeignCurrency(account, mainCurrency);
-  const getRate = useRatesToMainCurrency();
+  const { currency, mainCurrency, value, isMissingRate } = useConvertedAmount(
+    transaction,
+    account,
+  );
 
-  // Scheduled and unsaved transactions are only converted once they're saved
-  const isSaved =
-    !isPreviewId(transaction.id) && !isTemporaryId(transaction.id);
-
-  if (
-    isSaved &&
-    currency != null &&
-    mainCurrency != null &&
-    transaction.converted_amount == null
-  ) {
+  if (isMissingRate && currency != null && mainCurrency != null) {
     return (
       <Cell name="converted" width={width} plain>
         <Tooltip
@@ -105,20 +92,6 @@ export function ConvertedAmountCell({
       </Cell>
     );
   }
-
-  // Transactions in the main currency need no conversion, and scheduled ones
-  // are estimated until they're saved with the rate of their date
-  const previewRate = isPreviewId(transaction.id)
-    ? getRate(currency, transaction.date)
-    : 0;
-  const value =
-    previewRate > 0
-      ? Math.round((transaction.amount ?? 0) * previewRate)
-      : !isSaved
-        ? null
-        : currency == null
-          ? transaction.amount
-          : transaction.converted_amount;
 
   return (
     <Cell

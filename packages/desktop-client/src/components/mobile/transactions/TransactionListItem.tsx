@@ -2,7 +2,7 @@ import React from 'react';
 import type { CSSProperties } from 'react';
 import { mergeProps } from 'react-aria';
 import type { ListBoxItemRenderProps } from 'react-aria-components';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 
 import { Button } from '@actual-app/components/button';
 import { SvgSplit } from '@actual-app/components/icons/v0';
@@ -35,7 +35,9 @@ import { TransferDirectionIcon } from '#components/common/TransferDirectionIcon'
 import { useAccount } from '#hooks/useAccount';
 import { useCachedSchedules } from '#hooks/useCachedSchedules';
 import { useCategories } from '#hooks/useCategories';
+import { useConvertedAmount } from '#hooks/useConvertedAmount';
 import { useDisplayPayee } from '#hooks/useDisplayPayee';
+import { useFormat } from '#hooks/useFormat';
 import { usePayee } from '#hooks/usePayee';
 import { NotesTagFormatter } from '#notes/NotesTagFormatter';
 import { useSelector } from '#redux';
@@ -96,6 +98,17 @@ export function TransactionListItem({
   const transferAccount = useAccount(payee?.transfer_acct || '');
   const isPreview = isPreviewId(transaction?.id || '');
   const { schedules = [] } = useCachedSchedules();
+  const format = useFormat();
+  const {
+    currency,
+    value: convertedAmount,
+    isMissingRate,
+  } = useConvertedAmount(transaction, account);
+  // Amounts in another currency show which one, as lists can mix currencies
+  const formatAmount = (value: IntegerAmount) =>
+    currency != null
+      ? format(value, 'financial', currency)
+      : integerToCurrency(value);
 
   const newTransactions = useSelector(
     state => state.transactions.newTransactions,
@@ -319,8 +332,27 @@ export function TransactionListItem({
                   ...textStyle,
                 }}
               >
-                {integerToCurrency(amount)}
+                {formatAmount(amount)}
               </Text>
+              {currency != null &&
+                (isMissingRate ? (
+                  <Text style={{ fontSize: 11, color: theme.warningText }}>
+                    <Trans>No rate</Trans>
+                  </Text>
+                ) : (
+                  convertedAmount != null && (
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '400',
+                        color: theme.pageTextLight,
+                        ...styles.tnum,
+                      }}
+                    >
+                      {format(convertedAmount, 'financial')}
+                    </Text>
+                  )
+                ))}
               {showRunningBalance && runningBalance !== undefined && (
                 <Text
                   style={{
@@ -334,7 +366,7 @@ export function TransactionListItem({
                     }),
                   }}
                 >
-                  {integerToCurrency(runningBalance)}
+                  {formatAmount(runningBalance)}
                 </Text>
               )}
             </View>

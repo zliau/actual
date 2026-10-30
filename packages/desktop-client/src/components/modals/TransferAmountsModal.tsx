@@ -29,12 +29,14 @@ import { aqlQuery } from '#queries/aqlQuery';
 
 type TransferAmountsModalProps = {
   transactionId: TransactionEntity['id'];
+  onSave?: () => void;
 };
 
 // Edits what left one account and what arrived in the other for a transfer
 // between accounts in different currencies
 export function TransferAmountsModal({
   transactionId,
+  onSave,
 }: TransferAmountsModalProps) {
   const { t } = useTranslation();
   const format = useFormat();
@@ -113,6 +115,7 @@ export function TransferAmountsModal({
         { id: sides.received.id, amount: Math.abs(receivedAmount) },
       ],
     });
+    onSave?.();
     close();
   };
 

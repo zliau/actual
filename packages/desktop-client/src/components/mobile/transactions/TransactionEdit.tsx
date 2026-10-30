@@ -96,6 +96,11 @@ import { useCategories } from '#hooks/useCategories';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useLocalPref } from '#hooks/useLocalPref';
 import { useLocationPermission } from '#hooks/useLocationPermission';
+import {
+  getForeignCurrency,
+  isCrossCurrencyTransfer,
+  useMainCurrency,
+} from '#hooks/useMainCurrency';
 import { useNavigate } from '#hooks/useNavigate';
 import { useNearbyPayees } from '#hooks/useNearbyPayees';
 import { usePayees } from '#hooks/usePayees';
@@ -120,6 +125,7 @@ import {
 
 import { AmountInput } from './AmountInput';
 import { SplitAmountInput } from './SplitAmountInput';
+import { TransactionMainCurrencyAmount } from './TransactionMainCurrencyAmount';
 
 function getFieldName(transactionId: TransactionEntity['id'], field: string) {
   return `${field}-${transactionId}`;
@@ -629,6 +635,7 @@ type TransactionEditInnerProps = {
   onSelectNearestPayee?: () => void;
   onRequestLocation?: () => void;
   nearestPayee?: PayeeEntity | null;
+  onTransferAmountsSaved: () => void;
 };
 
 const TransactionEditInner = memo<TransactionEditInnerProps>(
@@ -649,8 +656,10 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
     onSelectNearestPayee,
     onRequestLocation,
     nearestPayee,
+    onTransferAmountsSaved,
   }) {
     const { t } = useTranslation();
+    const mainCurrency = useMainCurrency();
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const [showHiddenCategories] = useLocalPref('budget.showHiddenCategories');
@@ -1185,6 +1194,15 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
     );
 
     const account = getAccount(transaction);
+    const foreignCurrency = getForeignCurrency(account, mainCurrency);
+    const hasAmountOnEachSide =
+      !isAdding &&
+      !!transaction.transfer_id &&
+      isCrossCurrencyTransfer(
+        account,
+        getTransferAccount(transaction),
+        mainCurrency,
+      );
     const isOffBudget = account ? !!account.offbudget : false;
     const title = getPrettyPayee({
       t,
@@ -1243,7 +1261,15 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
               alignItems: 'center',
             }}
           >
-            <FieldLabel title={t('Amount')} flush style={{ marginBottom: 0 }} />
+            <FieldLabel
+              title={
+                foreignCurrency != null
+                  ? t('Amount ({{currency}})', { currency: foreignCurrency })
+                  : t('Amount')
+              }
+              flush
+              style={{ marginBottom: 0 }}
+            />
             <AmountInput
               value={transaction.amount}
               negate
@@ -1260,6 +1286,31 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
               onChange={onTotalAmountUpdate}
               variant="large"
             />
+            <TransactionMainCurrencyAmount
+              transaction={unserializedTransactions[0]}
+              account={account}
+            />
+            {hasAmountOnEachSide && (
+              <Button
+                variant="bare"
+                style={{ marginTop: 4, color: theme.pageTextLink }}
+                onPress={() =>
+                  dispatch(
+                    pushModal({
+                      modal: {
+                        name: 'transfer-amounts',
+                        options: {
+                          transactionId: transaction.id,
+                          onSave: onTransferAmountsSaved,
+                        },
+                      },
+                    }),
+                  )
+                }
+              >
+                <Trans>Edit both amounts</Trans>
+              </Button>
+            )}
           </View>
 
           <View>
@@ -1684,6 +1735,30 @@ function TransactionEditUnconnected({
     return () => {
       unmounted = true;
     };
+  }, [transactionId]);
+
+  // Both sides were saved separately, so only pick up their new amounts and
+  // keep anything else being edited
+  const onTransferAmountsSaved = useCallback(async () => {
+    const { data } = await aqlQuery(
+      q('transactions').filter({ id: transactionId }).select('*'),
+    );
+    const [saved] = data as TransactionEntity[];
+    if (!saved) {
+      return;
+    }
+    const withSavedAmounts = (rows: TransactionEntity[]) =>
+      rows.map(row =>
+        row.id === saved.id
+          ? {
+              ...row,
+              amount: saved.amount,
+              converted_amount: saved.converted_amount,
+            }
+          : row,
+      );
+    setTransactions(withSavedAmounts);
+    setFetchedTransactions(withSavedAmounts);
   }, [transactionId]);
 
   useEffect(() => {
@@ -2140,6 +2215,7 @@ function TransactionEditUnconnected({
         onSaveLocation={onSaveLocation}
         onSelectNearestPayee={onSelectNearestPayee}
         nearestPayee={isLocationGranted ? nearestPayee : null}
+        onTransferAmountsSaved={onTransferAmountsSaved}
         onRequestLocation={shouldPromptLocation ? requestPermission : undefined}
       />
     </View>
