@@ -237,6 +237,32 @@ describe('exchange rates app', () => {
     });
   });
 
+  describe('storing the same rate twice', () => {
+    const rate = {
+      date: '2026-01-01',
+      from_currency: 'USD',
+      to_currency: 'EUR',
+      rate: 0.9,
+    };
+
+    it('gives the rate of a pair and day the same id on every device', async () => {
+      const id = await app.handlers['exchange-rate-set'](rate);
+
+      expect(id).toBe('USD-EUR-2026-01-01');
+    });
+
+    it('brings back a rate that was deleted', async () => {
+      const id = await app.handlers['exchange-rate-set'](rate);
+      await app.handlers['exchange-rate-delete']({ id });
+
+      await app.handlers['exchange-rate-set']({ ...rate, rate: 0.8 });
+
+      const rates = await app.handlers['exchange-rates-get']();
+      expect(rates).toHaveLength(1);
+      expect(rates[0]).toMatchObject({ id, rate: 0.8 });
+    });
+  });
+
   describe('exchange-rates-fetch', () => {
     beforeEach(() => {
       vi.mocked(asyncStorage.getItem).mockResolvedValue('token');
