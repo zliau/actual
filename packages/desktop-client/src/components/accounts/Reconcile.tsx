@@ -21,6 +21,7 @@ import { t } from 'i18next';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFormat } from '#hooks/useFormat';
 import { useLocale } from '#hooks/useLocale';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useSheetValue } from '#hooks/useSheetValue';
 import * as bindings from '#spreadsheet/bindings';
 
@@ -29,6 +30,8 @@ type ReconcilingMessageProps = {
   targetBalance: number;
   onDone: () => void;
   onCreateTransaction: (targetDiff: number) => void;
+  // Set when the account is in another currency than the main one
+  currency?: string | undefined;
 };
 
 export function ReconcilingMessage({
@@ -36,6 +39,7 @@ export function ReconcilingMessage({
   targetBalance,
   onDone,
   onCreateTransaction,
+  currency,
 }: ReconcilingMessageProps) {
   const cleared =
     useSheetValue<'balance', `balance-query-${string}-cleared`>({
@@ -47,10 +51,10 @@ export function ReconcilingMessage({
   const format = useFormat();
   const targetDiff = targetBalance - cleared;
 
-  const clearedBalance = format(cleared, 'financial');
-  const bankBalance = format(targetBalance, 'financial');
+  const clearedBalance = format(cleared, 'financial', currency);
+  const bankBalance = format(targetBalance, 'financial', currency);
   const difference =
-    (targetDiff > 0 ? '+' : '') + format(targetDiff, 'financial');
+    (targetDiff > 0 ? '+' : '') + format(targetDiff, 'financial', currency);
 
   return (
     <View
@@ -140,6 +144,8 @@ export function ReconcileMenu({
   });
   const lastSyncedBalance = account.balance_current;
   const format = useFormat();
+  const mainCurrency = useMainCurrency();
+  const currency = getForeignCurrency(account, mainCurrency) ?? undefined;
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
   const locale = useLocale();
 
@@ -148,9 +154,9 @@ export function ReconcileMenu({
   // to use a button to update inputValue we can't use defaultValue in the input form below
   useEffect(() => {
     if (clearedBalance != null) {
-      setInputValue(format(clearedBalance, 'financial'));
+      setInputValue(format(clearedBalance, 'financial', currency));
     }
-  }, [clearedBalance, format]);
+  }, [clearedBalance, format, currency]);
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -190,11 +196,11 @@ export function ReconcileMenu({
           <View>
             <Text style={{ margin: '0 6px 8px 0', textAlign: 'right' }}>
               <Trans>Last Balance from Bank: </Trans>
-              {format(lastSyncedBalance, 'financial')}
+              {format(lastSyncedBalance, 'financial', currency)}
             </Text>
             <Button
               onPress={() =>
-                setInputValue(format(lastSyncedBalance, 'financial'))
+                setInputValue(format(lastSyncedBalance, 'financial', currency))
               }
               style={{ marginBottom: 7 }}
             >
