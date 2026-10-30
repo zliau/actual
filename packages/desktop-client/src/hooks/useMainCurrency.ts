@@ -14,6 +14,24 @@ export function useMainCurrency(): string | null {
 }
 
 /**
+ * Whether a transfer between these accounts has a different amount on each
+ * side, because they use different currencies.
+ */
+export function isCrossCurrencyTransfer(
+  account: Pick<AccountEntity, 'currency'> | null | undefined,
+  transferAccount: Pick<AccountEntity, 'currency'> | null | undefined,
+  mainCurrency: string | null,
+): boolean {
+  return (
+    mainCurrency != null &&
+    account != null &&
+    transferAccount != null &&
+    (account.currency ?? mainCurrency) !==
+      (transferAccount.currency ?? mainCurrency)
+  );
+}
+
+/**
  * The account's currency when it differs from the main currency, otherwise
  * null.
  */
