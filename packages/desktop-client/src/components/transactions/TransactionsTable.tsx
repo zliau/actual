@@ -65,6 +65,7 @@ import {
 } from '@actual-app/core/shared/transactions';
 import {
   amountToCurrency,
+  amountToInteger,
   currencyToAmount,
   integerToCurrency,
   titleFirst,
@@ -125,7 +126,9 @@ import type {
   OnDragChangeCallback,
   OnDropCallback,
 } from '#hooks/useDragDrop';
+import { useFormat } from '#hooks/useFormat';
 import { useLocalPref } from '#hooks/useLocalPref';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useMergedRefs } from '#hooks/useMergedRefs';
 import { usePrevious } from '#hooks/usePrevious';
 import { useProperFocus } from '#hooks/useProperFocus';
@@ -189,6 +192,8 @@ export const DEFAULT_AMOUNT_COLUMN_WIDTHS: AmountColumnWidths = {
 // formatted amount. This would need to be adjusted with the font size.
 const AMOUNT_COLUMN_CHAR_WIDTH = 7;
 const AMOUNT_COLUMN_PADDING = 16;
+// Room for a currency symbol, up to three letters like CHF and a space
+const AMOUNT_COLUMN_SYMBOL_CHARS = 4;
 
 function measureAmountColumnWidth(values: string[], minWidth: number) {
   const maxChars = values.reduce(
@@ -206,9 +211,11 @@ function measureAmountColumnWidth(values: string[], minWidth: number) {
 export function useAmountColumnWidths(
   transactions: TransactionEntity[],
   balances: Record<TransactionEntity['id'], IntegerAmount> | null,
+  showCurrencySymbols = false,
 ): AmountColumnWidths {
-  const debitCreditValues = transactions.map(t =>
-    integerToCurrency(Math.abs(t.amount ?? 0)),
+  const symbolRoom = showCurrencySymbols ? AMOUNT_COLUMN_SYMBOL_CHARS : 0;
+  const debitCreditValues = transactions.map(
+    t => integerToCurrency(Math.abs(t.amount ?? 0)) + ' '.repeat(symbolRoom),
   );
   const balanceValues = balances
     ? Object.values(balances).map(balance => integerToCurrency(balance))
@@ -1084,6 +1091,8 @@ type TransactionProps = {
   onDrop?: OnDropCallback;
   index: number;
   amountColumnWidths: AmountColumnWidths;
+  // Lists that mix accounts show which currency each amount is in
+  showCurrencySymbols?: boolean;
 };
 
 const Transaction = memo(function Transaction({
@@ -1144,8 +1153,11 @@ const Transaction = memo(function Transaction({
   onDrop,
   index,
   amountColumnWidths,
+  showCurrencySymbols = false,
 }: TransactionProps) {
   const { t } = useTranslation();
+  const format = useFormat();
+  const mainCurrency = useMainCurrency();
 
   const dispatch = useDispatch();
   const dispatchSelected = useSelectedDispatch();
@@ -1403,6 +1415,20 @@ const Transaction = memo(function Transaction({
   const payee =
     (payees && payeeId && getPayeesById(payees)[payeeId]) || undefined;
   const account = accounts && accountId && getAccountsById(accounts)[accountId];
+  const formatAmountCell = (value: string) => {
+    if (!value) {
+      return '';
+    }
+    // reformat value so since we might have kept decimals
+    const amount = currencyToAmount(value) || 0;
+    return showCurrencySymbols
+      ? format(
+          amountToInteger(amount),
+          'financial',
+          getForeignCurrency(account || undefined, mainCurrency) ?? undefined,
+        )
+      : amountToCurrency(amount);
+  };
 
   const isChild = transaction.is_child;
   const transferAcct =
@@ -2034,10 +2060,7 @@ const Transaction = memo(function Transaction({
             exposed={focusedField === 'debit'}
             focused={focusedField === 'debit'}
             value={debit === '' && credit === '' ? amountToCurrency(0) : debit}
-            formatter={value =>
-              // reformat value so since we might have kept decimals
-              value ? amountToCurrency(currencyToAmount(value) || 0) : ''
-            }
+            formatter={formatAmountCell}
             valueStyle={valueStyle}
             textAlign="right"
             title={debit}
@@ -2069,10 +2092,7 @@ const Transaction = memo(function Transaction({
             exposed={focusedField === 'credit'}
             focused={focusedField === 'credit'}
             value={credit}
-            formatter={value =>
-              // reformat value so since we might have kept decimals
-              value ? amountToCurrency(currencyToAmount(value) || 0) : ''
-            }
+            formatter={formatAmountCell}
             valueStyle={valueStyle}
             textAlign="right"
             title={credit}
@@ -2660,6 +2680,8 @@ function NewTransaction({
 }
 
 type TransactionTableInnerProps = {
+  showAccount?: boolean;
+  showConverted?: boolean;
   tableRef: Ref<TableHandleRef<TransactionEntity>>;
   listContainerRef: RefObject<HTMLDivElement>;
   tableNavigator: TableNavigator<TransactionEntity>;
@@ -2813,9 +2835,11 @@ function TransactionTableInner({
     [props.transactions, props.showReconciled],
   );
 
+  const showCurrencySymbols = !!props.showAccount && !!props.showConverted;
   const amountColumnWidths = useAmountColumnWidths(
     transactionsToRender,
     props.balances,
+    showCurrencySymbols,
   );
 
   const renderRow: TableProps<TransactionEntity>['renderItem'] = ({
@@ -2917,6 +2941,7 @@ function TransactionTableInner({
         showZeroInDeposit={isChildDeposit}
         balance={balances?.[trans.id] ?? 0}
         amountColumnWidths={amountColumnWidths}
+        showCurrencySymbols={showCurrencySymbols}
         focusedField={editing ? tableNavigator.focusedField : undefined}
         accounts={accounts}
         categoryGroups={categoryGroups}

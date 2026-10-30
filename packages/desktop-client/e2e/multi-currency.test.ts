@@ -200,6 +200,26 @@ test.describe('Multiple currencies', () => {
     await expectConverted([1350], [1800]);
   });
 
+  test('all accounts page shows the currency of each amount', async () => {
+    await page.goto('/accounts');
+    const table = page.getByTestId('transaction-table');
+    const usRow = table.getByTestId('row').filter({ hasText: 'US' }).first();
+    const mainRow = table
+      .getByTestId('row')
+      .filter({ hasText: 'Main' })
+      .first();
+
+    await expect(usRow.getByTestId('debit')).toHaveText(/\$\D?100[.,]00/);
+    await expect(mainRow.getByTestId('debit')).toHaveText(/100[.,]00\D?€/);
+
+    // Editing still works with a plain number
+    await usRow.getByTestId('debit').click();
+    await expect(usRow.getByTestId('debit').getByRole('textbox')).toHaveValue(
+      /^100[.,]00$/,
+    );
+    await page.keyboard.press('Escape');
+  });
+
   test('envelope budget', async () => {
     await page.goto('/budget');
     await expectConverted([1500, 150], [2000, 200]);
