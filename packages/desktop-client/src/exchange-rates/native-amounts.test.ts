@@ -39,10 +39,6 @@ const ALLOWED_NATIVE_SUMS: Record<string, { count: number; reason: string }> = {
       count: 1,
       reason: 'Budgeted amounts, which are already in the main currency',
     },
-  'packages/desktop-client/src/hooks/useFormulaExecution.ts': {
-    count: 1,
-    reason: 'KNOWN GAP: formula balances stay in the account currency',
-  },
   'packages/desktop-client/src/spreadsheet/bindings.ts': {
     count: 4,
     reason:

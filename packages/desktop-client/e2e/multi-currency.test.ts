@@ -172,6 +172,29 @@ test.describe('Multiple currencies', () => {
     expect(await bodyText()).toMatch(/In EUR:\s?450[.,]00/);
   });
 
+  test('reconciling shows the currency of the account', async () => {
+    await navigation.goToAccountPage('US');
+    await page
+      .getByRole('button', { name: /reconcil/i })
+      .first()
+      .click();
+    const balance = page.getByRole('dialog').getByRole('textbox');
+    await expect(balance).toHaveValue(/\$/);
+    await balance.fill('950');
+    await page.keyboard.press('Enter');
+    await expect.poll(bodyText, { timeout: 20000 }).toMatch(/\$\s?950[.,]00/);
+    expect(await bodyText()).not.toMatch(/950[.,]00\s?€/);
+    await page.getByRole('button', { name: 'Exit reconciliation' }).click();
+  });
+
+  test('command bar shows the currency of the account', async () => {
+    await page.keyboard.press('ControlOrMeta+k');
+    await expect
+      .poll(bodyText, { timeout: 20000 })
+      .toMatch(/US \$\s?900[.,]00/);
+    await page.keyboard.press('Escape');
+  });
+
   test('all accounts page', async () => {
     await page.goto('/accounts');
     await expectConverted([1350], [1800]);

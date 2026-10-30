@@ -11,6 +11,7 @@ import type { AccountEntity } from '@actual-app/core/types/models';
 import type { TransObjectLiteral } from '@actual-app/core/types/util';
 
 import { useFormat } from '#hooks/useFormat';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useSheetValue } from '#hooks/useSheetValue';
 import * as bindings from '#spreadsheet/bindings';
 
@@ -28,6 +29,8 @@ export function ReconcilingBanner({
   onCreateTransaction,
 }: ReconcilingBannerProps) {
   const format = useFormat();
+  const mainCurrency = useMainCurrency();
+  const currency = getForeignCurrency(account, mainCurrency) ?? undefined;
   const cleared = useSheetValue<'account', 'balanceCleared'>(
     bindings.accountBalanceCleared(account.id),
   );
@@ -48,10 +51,10 @@ export function ReconcilingBanner({
 
   const targetDiff = targetBalance - cleared;
 
-  const clearedBalance = format(cleared, 'financial');
-  const bankBalance = format(targetBalance, 'financial');
+  const clearedBalance = format(cleared, 'financial', currency);
+  const bankBalance = format(targetBalance, 'financial', currency);
   const difference =
-    (targetDiff > 0 ? '+' : '') + format(targetDiff, 'financial');
+    (targetDiff > 0 ? '+' : '') + format(targetDiff, 'financial', currency);
 
   const isBalanced = targetDiff === 0;
 

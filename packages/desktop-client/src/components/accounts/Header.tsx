@@ -184,6 +184,7 @@ export function AccountHeader({
   onMergeTransactions,
 }: AccountHeaderProps) {
   const { t } = useTranslation();
+  const mainCurrency = useMainCurrency();
 
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -581,6 +582,7 @@ export function AccountHeader({
         <ReconcilingMessage
           targetBalance={reconcileAmount}
           balanceQuery={balanceQuery}
+          currency={getForeignCurrency(account, mainCurrency) ?? undefined}
           onDone={onDoneReconciling}
           onCreateTransaction={onCreateReconciliationTransaction}
         />

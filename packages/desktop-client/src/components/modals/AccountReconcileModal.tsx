@@ -22,6 +22,7 @@ import { useDateFormat } from '#hooks/useDateFormat';
 import { useFeatureFlag } from '#hooks/useFeatureFlag';
 import { useFormat } from '#hooks/useFormat';
 import { useLocale } from '#hooks/useLocale';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useSheetValue } from '#hooks/useSheetValue';
 import type { Modal as ModalType } from '#modals/modalsSlice';
 import * as bindings from '#spreadsheet/bindings';
@@ -42,6 +43,7 @@ export function AccountReconcileModal({
     bindings.accountBalanceCleared(accountId),
   );
   const format = useFormat();
+  const mainCurrency = useMainCurrency();
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
   const locale = useLocale();
 
@@ -55,6 +57,7 @@ export function AccountReconcileModal({
   }, [amount, clearedBalance]);
 
   const lastSyncedBalance = account?.balance_current;
+  const currency = getForeignCurrency(account, mainCurrency) ?? undefined;
 
   if (!account) {
     return null;
@@ -114,7 +117,7 @@ export function AccountReconcileModal({
               <Text>
                 <Trans>Last Balance from Bank: </Trans>
                 <FinancialText>
-                  {format(lastSyncedBalance, 'financial')}
+                  {format(lastSyncedBalance, 'financial', currency)}
                 </FinancialText>
               </Text>
               <Button

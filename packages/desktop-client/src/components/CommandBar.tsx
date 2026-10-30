@@ -19,6 +19,7 @@ import { getSidebarMenuItemPath } from '#components/sidebar/sidebarMenu';
 import { useSidebarMenuItemDetails } from '#components/sidebar/useSidebarMenuItemDetails';
 import { useAccounts } from '#hooks/useAccounts';
 import { useDashboardPages } from '#hooks/useDashboardPages';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useMetadataPref } from '#hooks/useMetadataPref';
 import { useModalState } from '#hooks/useModalState';
 import { useNavigate } from '#hooks/useNavigate';
@@ -63,9 +64,11 @@ function BalanceRow<
 >({
   label,
   binding,
+  currency,
 }: {
   label: string;
   binding: Binding<SheetName, FieldName>;
+  currency?: string;
 }) {
   return (
     <View
@@ -81,6 +84,7 @@ function BalanceRow<
         {props => (
           <CellValueText
             {...props}
+            currency={currency}
             style={{ ...styles.tnum, whiteSpace: 'nowrap', opacity: 0.9 }}
           />
         )}
@@ -132,6 +136,7 @@ export function CommandBar() {
   }, [open]);
 
   const { data: allAccounts = [] } = useAccounts();
+  const mainCurrency = useMainCurrency();
   const { data: customReports = [] } = useReports();
   const { data: dashboardPages = [] } = useDashboardPages();
 
@@ -204,6 +209,7 @@ export function CommandBar() {
             <BalanceRow<'account', 'balance'>
               label={account.name}
               binding={accountBalance(account.id)}
+              currency={getForeignCurrency(account, mainCurrency) ?? undefined}
             />
           ),
           Icon: SvgPiggyBank,
