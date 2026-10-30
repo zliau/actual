@@ -170,6 +170,8 @@ test.describe('Multiple currencies', () => {
     await navigation.goToAccountPage('US');
     await expectConverted([50, 500]);
     expect(await bodyText()).toMatch(/In EUR:\s?450[.,]00/);
+    // The Converted column shows the main currency
+    expect(await bodyText()).toMatch(/50[.,]00\s?€/);
   });
 
   test('reconciling shows the currency of the account', async () => {

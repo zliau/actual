@@ -220,8 +220,10 @@ export function useAmountColumnWidths(
   const balanceValues = balances
     ? Object.values(balances).map(balance => integerToCurrency(balance))
     : [];
-  const convertedValues = transactions.map(t =>
-    integerToCurrency(t.converted_amount ?? t.amount ?? 0),
+  const convertedValues = transactions.map(
+    t =>
+      integerToCurrency(t.converted_amount ?? t.amount ?? 0) +
+      ' '.repeat(AMOUNT_COLUMN_SYMBOL_CHARS),
   );
 
   return {
