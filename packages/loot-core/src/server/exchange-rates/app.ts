@@ -141,13 +141,20 @@ async function storeExchangeRate({
     return existing.id;
   }
 
-  return db.insertWithUUID('exchange_rates', {
+  // The id comes from the pair and day so devices storing the same rate while
+  // they can't sync end up with one row. Clearing the tombstone brings back a
+  // rate that was deleted.
+  const id = `${from_currency}-${to_currency}-${date}`;
+  await db.insert('exchange_rates', {
+    id,
     date: db.toDateRepr(date),
     from_currency,
     to_currency,
     rate,
     source,
+    tombstone: 0,
   });
+  return id;
 }
 
 async function deleteExchangeRate({
