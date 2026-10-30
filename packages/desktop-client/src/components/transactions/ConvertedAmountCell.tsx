@@ -7,7 +7,6 @@ import { styles } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { Tooltip } from '@actual-app/components/tooltip';
-import { integerToCurrency } from '@actual-app/core/shared/util';
 import type {
   AccountEntity,
   TransactionEntity,
@@ -15,6 +14,7 @@ import type {
 
 import { Cell } from '#components/table';
 import { useConvertedAmount } from '#hooks/useConvertedAmount';
+import { useFormat } from '#hooks/useFormat';
 import { pushModal } from '#modals/modalsSlice';
 import { useDispatch } from '#redux';
 
@@ -38,6 +38,7 @@ export function ConvertedAmountCell({
 }: ConvertedAmountCellProps) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
+  const format = useFormat();
   const { currency, mainCurrency, value, isMissingRate } = useConvertedAmount(
     transaction,
     account,
@@ -98,7 +99,7 @@ export function ConvertedAmountCell({
       name="converted"
       width={width}
       textAlign="right"
-      value={value == null ? '' : integerToCurrency(value)}
+      value={value == null ? '' : format(value, 'financial')}
       valueStyle={{
         color: value != null && value < 0 ? theme.numberNegative : undefined,
       }}
