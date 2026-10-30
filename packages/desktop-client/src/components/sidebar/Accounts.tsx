@@ -7,6 +7,7 @@ import type { AccountEntity } from '@actual-app/core/types/models';
 
 import { useMoveAccountMutation } from '#accounts';
 import { isAccountFailedSync } from '#accounts/syncStatus';
+import { MissingExchangeRates } from '#components/accounts/MissingExchangeRates';
 import { useAccounts } from '#hooks/useAccounts';
 import { useClosedAccounts } from '#hooks/useClosedAccounts';
 import { useLocalPref } from '#hooks/useLocalPref';
@@ -90,6 +91,10 @@ export function Accounts() {
       />
 
       <View style={{ overflow: 'auto' }}>
+        <MissingExchangeRates
+          style={{ margin: '10px 7px -5px' }}
+          textStyle={{ color: theme.sidebarItemText, fontSize: 12 }}
+        />
         <Account
           name={t('All accounts')}
           to="/accounts"

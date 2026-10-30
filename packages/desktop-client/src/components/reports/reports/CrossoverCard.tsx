@@ -26,6 +26,7 @@ import { useReport } from '#components/reports/useReport';
 import { useCategories } from '#hooks/useCategories';
 import { useFormat } from '#hooks/useFormat';
 import { useLocale } from '#hooks/useLocale';
+import { useMainCurrency } from '#hooks/useMainCurrency';
 
 type CrossoverCardProps = {
   widgetId: string;
@@ -54,6 +55,7 @@ export function CrossoverCard({
   const [end, setEnd] = useState<string>('');
 
   const format = useFormat();
+  const mainCurrency = useMainCurrency();
 
   useEffect(() => {
     let isMounted = true;
@@ -167,6 +169,7 @@ export function CrossoverCard({
         expectedContribution,
         projectionType,
         expenseAdjustmentFactor,
+        mainCurrency,
       }),
     [
       start,
@@ -178,6 +181,7 @@ export function CrossoverCard({
       expectedContribution,
       projectionType,
       expenseAdjustmentFactor,
+      mainCurrency,
     ],
   );
 

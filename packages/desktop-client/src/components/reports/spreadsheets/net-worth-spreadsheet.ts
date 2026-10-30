@@ -3,7 +3,6 @@ import * as monthUtils from '@actual-app/core/shared/months';
 import { q } from '@actual-app/core/shared/query';
 import type {
   AccountEntity,
-  ExchangeRateEntity,
   RuleConditionEntity,
   TransactionEntity,
 } from '@actual-app/core/types/models';
@@ -12,7 +11,7 @@ import type { Locale } from 'date-fns';
 import { keyBy } from 'es-toolkit';
 
 import { getIntervalFormat } from '#components/reports/ReportOptions';
-import { findExchangeRate, loadExchangeRates } from '#exchange-rates';
+import { loadRatesToMainCurrency } from '#exchange-rates';
 import type { FormatType } from '#hooks/useFormat';
 import { getForeignCurrency } from '#hooks/useMainCurrency';
 import type { useSpreadsheet } from '#hooks/useSpreadsheet';
@@ -215,22 +214,13 @@ export function createSpreadsheet(
         };
       }),
     );
-    const foreignCurrencies = [
-      ...new Set(
-        accounts
-          .map(account => getForeignCurrency(account, mainCurrency))
-          .filter(currency => currency != null),
-      ),
-    ];
-    const ratesPromise =
-      mainCurrency && foreignCurrencies.length > 0
-        ? loadExchangeRates(foreignCurrencies, mainCurrency)
-        : Promise.resolve<ExchangeRateEntity[]>([]);
-
-    const [data, transferLegs, rates] = await Promise.all([
+    const [data, transferLegs, getRate] = await Promise.all([
       accountDataPromise,
       transferLegsPromise,
-      ratesPromise,
+      loadRatesToMainCurrency(
+        accounts.map(account => getForeignCurrency(account, mainCurrency)),
+        mainCurrency,
+      ),
     ]);
 
     const loadedTransferIds = new Set(transferLegs.map(leg => leg.id));
@@ -270,12 +260,8 @@ export function createSpreadsheet(
 
     // Accounts in another currency count at the rate on the last day of
     // each interval, so the latest point matches the balances elsewhere
-    const toMainCurrency = (account: AccountBalanceData, date: string) => {
-      if (!account.currency || !mainCurrency) {
-        return 1;
-      }
-      return findExchangeRate(rates, account.currency, mainCurrency, date) ?? 1;
-    };
+    const toMainCurrency = (account: AccountBalanceData, date: string) =>
+      getRate(account.currency, date);
 
     setData(
       recalculate(

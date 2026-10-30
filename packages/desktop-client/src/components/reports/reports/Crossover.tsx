@@ -43,6 +43,7 @@ import { useCategories } from '#hooks/useCategories';
 import { useDashboardWidget } from '#hooks/useDashboardWidget';
 import { useFormat } from '#hooks/useFormat';
 import { useLocale } from '#hooks/useLocale';
+import { useMainCurrency } from '#hooks/useMainCurrency';
 import { useNavigate } from '#hooks/useNavigate';
 import type { useSpreadsheet } from '#hooks/useSpreadsheet';
 import { addNotification } from '#notifications/notificationsSlice';
@@ -81,6 +82,7 @@ function CrossoverInner({ widget }: CrossoverInnerProps) {
     isPending: isCategoriesLoading,
   } = useCategories();
   const format = useFormat();
+  const mainCurrency = useMainCurrency();
 
   const expenseCategoryGroups = categories.grouped.filter(
     group => !group.is_income,
@@ -350,6 +352,7 @@ function CrossoverInner({ widget }: CrossoverInnerProps) {
           : null,
         projectionType,
         expenseAdjustmentFactor,
+        mainCurrency,
       });
       await crossoverSpreadsheet(spreadsheet, setData);
     },
@@ -364,6 +367,7 @@ function CrossoverInner({ widget }: CrossoverInnerProps) {
       expenseAdjustmentFactor,
       expenseCategoryIds,
       selectedIncomeAccountIds,
+      mainCurrency,
     ],
   );
 
