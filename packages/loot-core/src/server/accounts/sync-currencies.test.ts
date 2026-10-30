@@ -223,3 +223,31 @@ describe('fetching rates for imported history', () => {
     expect(updated.converted_amount).toBe(-7000);
   });
 });
+
+describe('closing an account in another currency', () => {
+  it('moves the balance to the other account at the exchange rate', async () => {
+    await setMainCurrency('EUR');
+    await setRate('2016-01-01', 0.5);
+    const usAccount = await handlers['account-create']({
+      name: 'US',
+      currency: 'USD',
+    });
+    const mainAccount = await handlers['account-create']({ name: 'Main' });
+    await reconcileTransactions(usAccount, [
+      { date: '2016-06-01', payee_name: 'salary', amount: 10000 },
+    ]);
+
+    await handlers['account-close']({
+      id: usAccount,
+      transferAccountId: mainAccount,
+    });
+
+    const [received] = await getRows(mainAccount);
+    expect(received.amount).toBe(5000);
+    const rows = await getRows(usAccount);
+    expect(rows.reduce((sum, row) => sum + (row.amount ?? 0), 0)).toBe(0);
+    expect(
+      rows.reduce((sum, row) => sum + (row.converted_amount ?? 0), 0),
+    ).toBe(0);
+  });
+});

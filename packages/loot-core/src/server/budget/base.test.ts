@@ -679,3 +679,69 @@ describe('Budget in several currencies', () => {
     expect(sheet.getCellValue(jan, `sum-amount-${catId}`)).toBe(-2500);
   });
 });
+
+describe.each(['envelope', 'tracking'])(
+  'A %s budget in several currencies',
+  budgetType => {
+    it('budgets in the main currency', async () => {
+      await db.run('INSERT INTO preferences (id, value) VALUES (?, ?)', [
+        'defaultCurrencyCode',
+        'EUR',
+      ]);
+      await db.run('INSERT INTO preferences (id, value) VALUES (?, ?)', [
+        'budgetType',
+        budgetType,
+      ]);
+      await sheet.loadSpreadsheet(db);
+      await db.insertCategoryGroup({ id: 'group1', name: 'Group' });
+      await db.insertCategoryGroup({
+        id: 'income',
+        name: 'Income',
+        is_income: 1,
+      });
+      const food = await db.insertCategory({
+        name: 'Food',
+        cat_group: 'group1',
+      });
+      const salary = await db.insertCategory({
+        name: 'Salary',
+        cat_group: 'income',
+        is_income: 1,
+      });
+      await createAllBudgets();
+
+      await db.insertAccount({ id: 'main', name: 'Main' });
+      await db.insertAccount({ id: 'us', name: 'US', currency: 'USD' });
+      await db.insertWithUUID('exchange_rates', {
+        date: 20170101,
+        from_currency: 'USD',
+        to_currency: 'EUR',
+        rate: 0.5,
+        source: 'manual',
+      });
+      for (const [account, category, amount] of [
+        ['main', salary, 100000],
+        ['us', salary, 100000],
+        ['main', food, -10000],
+        ['us', food, -10000],
+      ] as const) {
+        await db.insertTransaction({
+          account,
+          category,
+          amount,
+          date: '2017-01-15',
+        });
+      }
+      await sheet.waitOnSpreadsheet();
+
+      const sheetName = monthUtils.sheetForMonth('2017-01');
+      // Unconverted, these would be -20000 and 200000
+      expect(sheet.getCellValue(sheetName, `sum-amount-${food}`)).toBe(-15000);
+      expect(sheet.getCellValue(sheetName, 'total-spent')).toBe(-15000);
+      expect(sheet.getCellValue(sheetName, 'total-income')).toBe(150000);
+      if (budgetType === 'envelope') {
+        expect(sheet.getCellValue(sheetName, 'available-funds')).toBe(150000);
+      }
+    });
+  },
+);
