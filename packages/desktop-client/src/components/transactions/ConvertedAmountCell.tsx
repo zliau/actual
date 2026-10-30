@@ -19,6 +19,7 @@ import type {
 
 import { Cell } from '#components/table';
 import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
+import { useRatesToMainCurrency } from '#hooks/useRatesToMainCurrency';
 import { pushModal } from '#modals/modalsSlice';
 import { useDispatch } from '#redux';
 
@@ -44,8 +45,9 @@ export function ConvertedAmountCell({
   const dispatch = useDispatch();
   const mainCurrency = useMainCurrency();
   const currency = getForeignCurrency(account, mainCurrency);
+  const getRate = useRatesToMainCurrency();
 
-  // Scheduled and unsaved transactions are converted once they're saved
+  // Scheduled and unsaved transactions are only converted once they're saved
   const isSaved =
     !isPreviewId(transaction.id) && !isTemporaryId(transaction.id);
 
@@ -104,12 +106,19 @@ export function ConvertedAmountCell({
     );
   }
 
-  // Transactions in the main currency need no conversion
-  const value = !isSaved
-    ? null
-    : currency == null
-      ? transaction.amount
-      : transaction.converted_amount;
+  // Transactions in the main currency need no conversion, and scheduled ones
+  // are estimated until they're saved with the rate of their date
+  const previewRate = isPreviewId(transaction.id)
+    ? getRate(currency, transaction.date)
+    : 0;
+  const value =
+    previewRate > 0
+      ? Math.round((transaction.amount ?? 0) * previewRate)
+      : !isSaved
+        ? null
+        : currency == null
+          ? transaction.amount
+          : transaction.converted_amount;
 
   return (
     <Cell

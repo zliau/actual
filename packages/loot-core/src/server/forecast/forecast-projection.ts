@@ -168,7 +168,7 @@ function summarizePostedTransactions(
 
   for (const tx of accountTransactions) {
     if (tx.date < forecastStartDate) {
-      summary.startingBalance += tx.amount;
+      summary.startingBalance += tx.main_amount ?? tx.amount;
       continue;
     }
 
@@ -176,7 +176,8 @@ function summarizePostedTransactions(
       continue;
     }
 
-    summary.txsByDay[tx.date] = (summary.txsByDay[tx.date] || 0) + tx.amount;
+    summary.txsByDay[tx.date] =
+      (summary.txsByDay[tx.date] || 0) + (tx.main_amount ?? tx.amount);
   }
 
   return summary;

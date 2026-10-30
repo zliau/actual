@@ -132,7 +132,15 @@ export async function getAccounts(
         tombstone: false,
       })
       .groupBy('account')
-      .select(['account', { balance_current: { $sum: '$amount' } }])
+      .select([
+        'account',
+        {
+          // In the main currency, at each account's latest exchange rate
+          balance_current: {
+            $round: { $sum: { $mul: ['$amount', '$account.latest_rate'] } },
+          },
+        },
+      ])
       .serialize(),
   );
 

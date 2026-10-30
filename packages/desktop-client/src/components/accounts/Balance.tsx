@@ -20,9 +20,11 @@ import { FinancialText } from '#components/FinancialText';
 import { PrivacyFilter } from '#components/PrivacyFilter';
 import { CellValue, CellValueText } from '#components/spreadsheet/CellValue';
 import { exchangeRateQueries } from '#exchange-rates';
+import { useAccounts } from '#hooks/useAccounts';
 import { useCachedSchedules } from '#hooks/useCachedSchedules';
 import { useFormat } from '#hooks/useFormat';
 import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
+import { useRatesToMainCurrency } from '#hooks/useRatesToMainCurrency';
 import { useSelectedItems } from '#hooks/useSelected';
 import { useSheetValue } from '#hooks/useSheetValue';
 import { pushModal } from '#modals/modalsSlice';
@@ -103,6 +105,8 @@ export function SelectedBalance({
   let scheduleBalance = 0;
 
   const { isLoading, schedules = [] } = useCachedSchedules();
+  const { data: accounts = [] } = useAccounts();
+  const getRate = useRatesToMainCurrency();
 
   if (isLoading) {
     return null;
@@ -120,7 +124,17 @@ export function SelectedBalance({
         isExactBalance = false;
       }
 
-      if (!account || account.id === schedule._account) {
+      if (!account) {
+        // Across accounts, add up the amounts converted to the main currency
+        const scheduleCurrency = getForeignCurrency(
+          accounts.find(({ id }) => id === schedule._account),
+          mainCurrency,
+        );
+        scheduleBalance += Math.round(
+          getScheduledAmount(schedule._amount) *
+            getRate(scheduleCurrency, id.slice(8).split('/')[1]),
+        );
+      } else if (account.id === schedule._account) {
         scheduleBalance += getScheduledAmount(schedule._amount);
       } else {
         scheduleBalance -= getScheduledAmount(schedule._amount);

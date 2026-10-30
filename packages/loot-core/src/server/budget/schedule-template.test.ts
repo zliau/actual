@@ -25,6 +25,7 @@ type RuleSpec = {
   amount: number;
   frequency: 'monthly' | 'yearly' | 'weekly' | 'daily';
   interval?: number;
+  account?: string;
 };
 
 function makeRule({
@@ -33,6 +34,7 @@ function makeRule({
   amount,
   frequency,
   interval = 1,
+  account,
 }: RuleSpec): Rule {
   return new Rule({
     id,
@@ -56,6 +58,9 @@ function makeRule({
         type: 'date',
       },
       { op: 'is', field: 'amount', value: amount, type: 'number' },
+      ...(account
+        ? [{ op: 'is', field: 'account', value: account, type: 'id' } as const]
+        : []),
     ],
     actions: [],
   });
@@ -302,6 +307,66 @@ describe('runSchedule', () => {
     expect(result.to_budget).toBe(10000);
     expect(result.perScheduleMonthly.get(template_lines[0])).toBe(10000);
     expect(result.perScheduleMonthly.get(template_lines[1])).toBeUndefined();
+  });
+
+  describe('schedules in accounts in another currency', () => {
+    const template_lines = [
+      {
+        type: 'schedule',
+        name: 'Test Schedule',
+        priority: 0,
+        directive: 'template',
+      } as const,
+    ];
+    const run = () =>
+      runSchedule(
+        template_lines,
+        '2024-08-01',
+        0,
+        0,
+        0,
+        0,
+        [],
+        defaultCategory,
+      );
+
+    beforeEach(() => {
+      vi.mocked(db.getAccounts).mockResolvedValue([
+        { id: 'us', currency: 'USD' },
+      ] as Awaited<ReturnType<typeof db.getAccounts>>);
+      vi.mocked(db.getMainCurrency).mockResolvedValue('EUR');
+      mockSingleSchedule({
+        start: '2024-08-01',
+        amount: -10000,
+        frequency: 'monthly',
+        account: 'us',
+      });
+    });
+
+    it('budgets the amount in the main currency', async () => {
+      vi.mocked(db.getExchangeRate).mockResolvedValue(0.9);
+
+      const result = await run();
+
+      expect(db.getExchangeRate).toHaveBeenCalledWith(
+        'USD',
+        'EUR',
+        '2024-08-01',
+      );
+      expect(result.to_budget).toBe(9000);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('reports a schedule without an exchange rate', async () => {
+      vi.mocked(db.getExchangeRate).mockResolvedValue(null);
+
+      const result = await run();
+
+      expect(result.to_budget).toBe(0);
+      expect(result.errors).toEqual([
+        'Schedule Test Schedule has no exchange rate from USD to EUR.',
+      ]);
+    });
   });
 
   it('applies a percent adjustment to the schedule amount', async () => {

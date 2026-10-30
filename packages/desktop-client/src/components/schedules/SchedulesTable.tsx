@@ -24,6 +24,7 @@ import { useAccounts } from '#hooks/useAccounts';
 import { useContextMenu } from '#hooks/useContextMenu';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFormat } from '#hooks/useFormat';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { usePayees } from '#hooks/usePayees';
 
 import { StatusBadge } from './StatusBadge';
@@ -66,15 +67,18 @@ export const ROW_HEIGHT = 43;
 export function ScheduleAmountCell({
   amount,
   op,
+  currency,
 }: {
   amount: ScheduleEntity['_amount'];
   op: ScheduleEntity['_amountOp'];
+  // Set when the schedule's account is in another currency than the main one
+  currency?: string | undefined;
 }) {
   const { t } = useTranslation();
   const format = useFormat();
 
   const num = getScheduledAmount(amount);
-  const currencyAmount = format(Math.abs(num || 0), 'financial');
+  const currencyAmount = format(Math.abs(num || 0), 'financial', currency);
   const isApprox = op === 'isapprox';
   const isBetween = op === 'isbetween';
   let cellText = '';
@@ -84,8 +88,8 @@ export function ScheduleAmountCell({
     });
   } else if (isBetween && typeof amount != 'number') {
     cellText = t('{{currency1}} to {{currency2}}', {
-      currency1: format(Math.abs(amount.num1 || 0), 'financial'),
-      currency2: format(Math.abs(amount.num2 || 0), 'financial'),
+      currency1: format(Math.abs(amount.num1 || 0), 'financial', currency),
+      currency2: format(Math.abs(amount.num2 || 0), 'financial', currency),
     });
   } else {
     cellText = currencyAmount;
@@ -161,6 +165,8 @@ function ScheduleRow({
   'onSelect' | 'onAction' | 'minimal' | 'statuses'
 >) {
   const { t } = useTranslation();
+  const mainCurrency = useMainCurrency();
+  const { data: accounts = [] } = useAccounts();
 
   const rowRef = useRef(null);
   const buttonRef = useRef(null);
@@ -246,7 +252,16 @@ function ScheduleRow({
       <Field width={120} name="status" style={{ alignItems: 'flex-start' }}>
         <StatusBadge status={statuses.get(schedule.id)} />
       </Field>
-      <ScheduleAmountCell amount={schedule._amount} op={schedule._amountOp} />
+      <ScheduleAmountCell
+        amount={schedule._amount}
+        op={schedule._amountOp}
+        currency={
+          getForeignCurrency(
+            accounts.find(account => account.id === schedule._account),
+            mainCurrency,
+          ) ?? undefined
+        }
+      />
       {!minimal && (
         <Field width={80} style={{ textAlign: 'center' }}>
           {schedule._date &&

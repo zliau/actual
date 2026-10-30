@@ -307,6 +307,14 @@ export async function buildFutureScheduleOccurrences(
   const transactionsById = new Map(
     simulatedTransactions.map(transaction => [transaction.id, transaction]),
   );
+  const { data: accountRates } = await aqlQuery(
+    q('accounts').select(['id', 'latest_rate']),
+  );
+  const latestRateByAccount = new Map(
+    (accountRates as Array<{ id: string; latest_rate: number }>).map(
+      account => [account.id, account.latest_rate],
+    ),
+  );
 
   return occurrences.map(occurrence => {
     const filterObject = filterObjectsByTransactionId.get(
@@ -321,7 +329,11 @@ export async function buildFutureScheduleOccurrences(
     return {
       transaction,
       filterObject,
-      amount: occurrence.amount,
+      // Upcoming amounts are valued at the latest exchange rate
+      amount: Math.round(
+        occurrence.amount *
+          (latestRateByAccount.get(occurrence.accountId) ?? 1),
+      ),
       payee: filterObject.payee?.name ?? occurrence.scheduleName,
       scheduleId: occurrence.scheduleId,
       scheduleName: occurrence.scheduleName,
