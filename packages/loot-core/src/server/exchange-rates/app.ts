@@ -66,14 +66,13 @@ async function getExchangeRates({
   return rows.map(fromDbExchangeRate);
 }
 
-// Stores the rate for a currency pair on a day and updates the converted
-// amounts of the transactions it applies to
-async function setExchangeRate(
-  exchangeRate: Parameters<typeof storeExchangeRate>[0],
-): Promise<ExchangeRateEntity['id']> {
-  const { date, from_currency, to_currency } = exchangeRate;
-  // Days before the earliest rate of a pair fall back to it, so a new
-  // earliest rate also changes them
+// Whether the pair has a rate before a day. Days before the earliest rate of
+// a pair fall back to it, so a new earliest rate also changes them.
+async function hasEarlierRate(
+  date: string,
+  fromCurrency: string,
+  toCurrency: string,
+): Promise<boolean> {
   const earlier = await db.first<Pick<db.DbExchangeRate, 'id'>>(
     `SELECT id FROM exchange_rates
      WHERE tombstone = 0 AND date < ? AND (
@@ -81,19 +80,23 @@ async function setExchangeRate(
        (from_currency = ? AND to_currency = ?)
      )
      LIMIT 1`,
-    [
-      db.toDateRepr(date),
-      from_currency,
-      to_currency,
-      to_currency,
-      from_currency,
-    ],
+    [db.toDateRepr(date), fromCurrency, toCurrency, toCurrency, fromCurrency],
   );
+  return earlier != null;
+}
 
-  const id = await storeExchangeRate(exchangeRate);
+// Stores the rate for a currency pair on a day and updates the converted
+// amounts of the transactions it applies to
+async function setExchangeRate(
+  exchangeRate: Parameters<typeof storeExchangeRate>[0],
+): Promise<ExchangeRateEntity['id']> {
+  const { date, from_currency, to_currency } = exchangeRate;
+  const hasEarlier = await hasEarlierRate(date, from_currency, to_currency);
+
+  const { id } = await storeExchangeRate(exchangeRate);
   await db.updateConvertedAmounts({
     currencies: [from_currency, to_currency],
-    ...(earlier && { start: date }),
+    ...(hasEarlier && { start: date }),
   });
   return id;
 }
@@ -110,7 +113,11 @@ async function storeExchangeRate({
 }: Pick<
   ExchangeRateEntity,
   'date' | 'from_currency' | 'to_currency' | 'rate'
-> & { source?: ExchangeRateSource }): Promise<ExchangeRateEntity['id']> {
+> & { source?: ExchangeRateSource }): Promise<{
+  id: ExchangeRateEntity['id'];
+  // Whether the stored rate is different than before
+  changed: boolean;
+}> {
   validateCurrencyCode('exchangeRate', from_currency);
   validateCurrencyCode('exchangeRate', to_currency);
   if (from_currency === to_currency) {
@@ -125,8 +132,10 @@ async function storeExchangeRate({
     throw new ValidationError('exchangeRate must be a positive number');
   }
 
-  const existing = await db.first<Pick<db.DbExchangeRate, 'id' | 'source'>>(
-    `SELECT id, source FROM exchange_rates
+  const existing = await db.first<
+    Pick<db.DbExchangeRate, 'id' | 'source' | 'rate'>
+  >(
+    `SELECT id, source, rate FROM exchange_rates
      WHERE tombstone = 0 AND date = ? AND from_currency = ? AND to_currency = ?
      ORDER BY CASE source WHEN 'manual' THEN 0 ELSE 1 END, id
      LIMIT 1`,
@@ -135,10 +144,13 @@ async function storeExchangeRate({
 
   if (existing) {
     if (source === 'api' && existing.source === 'manual') {
-      return existing.id;
+      return { id: existing.id, changed: false };
+    }
+    if (existing.rate === rate && existing.source === source) {
+      return { id: existing.id, changed: false };
     }
     await db.update('exchange_rates', { id: existing.id, rate, source });
-    return existing.id;
+    return { id: existing.id, changed: true };
   }
 
   // The id comes from the pair and day so devices storing the same rate while
@@ -154,7 +166,7 @@ async function storeExchangeRate({
     source,
     tombstone: 0,
   });
-  return id;
+  return { id, changed: true };
 }
 
 async function deleteExchangeRate({
@@ -187,6 +199,18 @@ async function getForeignCurrencies(mainCurrency: string): Promise<string[]> {
   return rows.map(row => row.currency);
 }
 
+// The last day each budget had all its converted amounts recalculated in this
+// session, by id
+const lastFullPassDays = new Map<string, string>();
+
+// Recalculates the converted amounts of all transactions in foreign accounts
+async function updateAllConvertedAmounts(
+  mainCurrency: string,
+): Promise<number> {
+  const currencies = await getForeignCurrencies(mainCurrency);
+  return currencies.length > 0 ? db.updateConvertedAmounts({ currencies }) : 0;
+}
+
 type FetchExchangeRatesResult =
   | { error: 'unauthorized' | 'no-server' | 'no-main-currency' }
   | { count: number; unavailable: string[] };
@@ -200,8 +224,11 @@ type DateRange = { start: string; end?: string | undefined };
 // for every day of the ranges `getRanges` gives it, and stores them.
 // Currencies the provider does not cover are listed in `unavailable` so the
 // user can enter those rates by hand.
+// With `fullPass`, the converted amounts of all foreign transactions are
+// recalculated afterwards, otherwise only those the changed rates apply to.
 async function fetchRates(
   getRanges: (currency: string, mainCurrency: string) => Promise<DateRange[]>,
+  { fullPass = false }: { fullPass?: boolean } = {},
 ): Promise<FetchExchangeRatesResult> {
   const userToken = await asyncStorage.getItem('user-token');
   if (!userToken) {
@@ -225,7 +252,9 @@ async function fetchRates(
   };
 
   let count = 0;
-  const fetched: string[] = [];
+  let changedCount = 0;
+  // The earliest day with a changed rate of each currency
+  const earliestChanged = new Map<string, string>();
   const unavailable: string[] = [];
 
   currencies: for (const currency of await getForeignCurrencies(mainCurrency)) {
@@ -256,7 +285,7 @@ async function fetchRates(
           if (rate == null) {
             continue;
           }
-          await storeExchangeRate({
+          const { changed } = await storeExchangeRate({
             date,
             from_currency: currency,
             to_currency: mainCurrency,
@@ -264,29 +293,41 @@ async function fetchRates(
             source: 'api',
           });
           count++;
+          if (changed) {
+            changedCount++;
+            const earliest = earliestChanged.get(currency);
+            if (earliest == null || date < earliest) {
+              earliestChanged.set(currency, date);
+            }
+          }
         }
       });
     }
-    if (ranges.length > 0) {
-      fetched.push(currency);
-    }
   }
 
-  // A fetched rate can also be the fallback for days before `start`
-  const convertedCount =
-    fetched.length > 0
-      ? await db.updateConvertedAmounts({ currencies: fetched })
-      : 0;
+  let convertedCount = 0;
+  if (fullPass) {
+    convertedCount = await updateAllConvertedAmounts(mainCurrency);
+  } else {
+    for (const [currency, date] of earliestChanged) {
+      // A changed rate can also be the fallback for days before it
+      const hasEarlier = await hasEarlierRate(date, currency, mainCurrency);
+      convertedCount += await db.updateConvertedAmounts({
+        currencies: [currency],
+        ...(hasEarlier && { start: date }),
+      });
+    }
+  }
 
   // Rates are fetched in the background, so tell open screens what changed
   // the way a sync from another device would; transaction lists only
   // refresh on those
-  if (count > 0) {
+  if (changedCount > 0 || convertedCount > 0) {
     connection.send('sync-event', {
       type: 'success',
       tables:
         convertedCount > 0
-          ? ['exchange_rates', 'transactions']
+          ? [...(changedCount > 0 ? ['exchange_rates'] : []), 'transactions']
           : ['exchange_rates'],
     });
   }
@@ -306,39 +347,79 @@ async function fetchExchangeRates({
   return fetchRates(async () => [{ start, end }]);
 }
 
+// Splits a range of days into the ranges the sync server returns at once
+function splitDateRange(start: string, end: string): DateRange[] {
+  const ranges: DateRange[] = [];
+  while (start <= end) {
+    const rangeEnd = monthUtils.addDays(start, MAX_FETCH_DAYS);
+    ranges.push({ start, end: rangeEnd < end ? rangeEnd : end });
+    start = monthUtils.addDays(rangeEnd, 1);
+  }
+  return ranges;
+}
+
 // Fetches the rates each foreign account currency is missing: the days after
-// the latest fetched rate, or since the account's first transaction when no
-// rate was fetched yet, until today
+// the latest fetched rate until today, and the days before the earliest one
+// back to the account's first transaction, which can be older once history is
+// imported
 async function updateExchangeRates(): Promise<FetchExchangeRatesResult> {
   const today = monthUtils.currentDay();
 
-  return fetchRates(async (currency, mainCurrency) => {
-    const latest = await db.first<{ date: number | null }>(
-      `SELECT MAX(date) AS date FROM exchange_rates
+  // Transactions converted on another device can have stale rates, so the
+  // first update of a day also recalculates every foreign transaction
+  const budgetId = getPrefs()?.id ?? '';
+  const fullPass = lastFullPassDays.get(budgetId) !== today;
+
+  const result = await fetchRates(
+    async (currency, mainCurrency) => {
+      const fetched = await db.first<{
+        earliest: number | null;
+        latest: number | null;
+      }>(
+        `SELECT MIN(date) AS earliest, MAX(date) AS latest FROM exchange_rates
        WHERE tombstone = 0 AND source = 'api'
          AND from_currency = ? AND to_currency = ?`,
-      [currency, mainCurrency],
-    );
-    let start: string;
-    if (latest?.date != null) {
-      start = monthUtils.addDays(db.fromDateRepr(latest.date), 1);
-    } else {
+        [currency, mainCurrency],
+      );
       const first = await db.first<{ date: number | null }>(
         `SELECT MIN(t.date) AS date FROM transactions t
-         JOIN accounts a ON a.id = t.acct
-         WHERE t.tombstone = 0 AND a.tombstone = 0 AND a.currency = ?`,
+       JOIN accounts a ON a.id = t.acct
+       WHERE t.tombstone = 0 AND a.tombstone = 0 AND a.currency = ?`,
         [currency],
       );
-      start = first?.date != null ? db.fromDateRepr(first.date) : today;
-    }
+      const firstDate =
+        first?.date != null ? db.fromDateRepr(first.date) : today;
 
-    // The sync server returns a limited range of days at once
-    const ranges: DateRange[] = [];
-    while (start <= today) {
-      const end = monthUtils.addDays(start, MAX_FETCH_DAYS);
-      ranges.push({ start, end: end < today ? end : today });
-      start = monthUtils.addDays(end, 1);
+      if (fetched?.earliest == null || fetched.latest == null) {
+        return splitDateRange(firstDate, today);
+      }
+      return [
+        ...splitDateRange(
+          firstDate,
+          monthUtils.subDays(db.fromDateRepr(fetched.earliest), 1),
+        ),
+        ...splitDateRange(
+          monthUtils.addDays(db.fromDateRepr(fetched.latest), 1),
+          today,
+        ),
+      ];
+    },
+    { fullPass },
+  );
+
+  if (!fullPass || ('error' in result && result.error === 'no-main-currency')) {
+    return result;
+  }
+  if ('error' in result) {
+    // The fetch could not happen, but stale converted amounts can be repaired
+    const mainCurrency = await db.getMainCurrency();
+    if (mainCurrency && (await updateAllConvertedAmounts(mainCurrency)) > 0) {
+      connection.send('sync-event', {
+        type: 'success',
+        tables: ['transactions'],
+      });
     }
-    return ranges;
-  });
+  }
+  lastFullPassDays.set(budgetId, today);
+  return result;
 }

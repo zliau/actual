@@ -912,12 +912,14 @@ function convertAmount({
   date,
   transfer,
   mainCurrency,
+  getRate = getExchangeRateSync,
 }: {
   currency: DbAccount['currency'];
   amount: number;
   date: string;
   transfer: TransferSide | null;
   mainCurrency: string | null;
+  getRate?: typeof getExchangeRateSync;
 }): number | null {
   if (!currency || !mainCurrency || currency === mainCurrency) {
     return null;
@@ -927,7 +929,7 @@ function convertAmount({
     return -transfer.amount;
   }
 
-  const rate = getExchangeRateSync(currency, mainCurrency, date);
+  const rate = getRate(currency, mainCurrency, date);
   return rate == null ? null : Math.round(amount * rate);
 }
 
@@ -1049,6 +1051,16 @@ export async function updateConvertedAmounts({
   const mainCurrency = await getMainCurrency();
   let count = 0;
 
+  // Many transactions share a currency and day, so look each rate up once
+  const rates = new Map<string, number | null>();
+  const lookUpRate = (from: string, to: string, date: string) => {
+    const key = `${from}|${to}|${date}`;
+    if (!rates.has(key)) {
+      rates.set(key, getExchangeRateSync(from, to, date));
+    }
+    return rates.get(key) ?? null;
+  };
+
   await batchMessages(async () => {
     for (const transaction of transactions) {
       const convertedAmount = convertAmount({
@@ -1062,6 +1074,7 @@ export async function updateConvertedAmounts({
             }
           : null,
         mainCurrency,
+        getRate: lookUpRate,
       });
 
       if (convertedAmount !== (transaction.converted_amount ?? null)) {

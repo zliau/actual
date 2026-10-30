@@ -6,6 +6,7 @@ import { loadMappings } from '#server/db/mappings';
 import { PostError } from '#server/errors';
 import { app } from '#server/exchange-rates/app';
 import { handlers as mockServerHandlers } from '#server/tests/mockSyncServer';
+import * as monthUtils from '#shared/months';
 
 beforeEach(async () => {
   await global.emptyDatabase()();
@@ -505,6 +506,145 @@ describe('exchange rates app', () => {
 
       expect(result).toEqual({ count: 0, unavailable: [] });
       expect(requests).toEqual([]);
+    });
+  });
+
+  describe('recalculating converted amounts after a fetch', () => {
+    let rateByDay: (date: string) => number;
+    let account: string;
+    let budgetCount = 0;
+
+    beforeEach(async () => {
+      // Tests run on 2017-01-01
+      vi.mocked(asyncStorage.getItem).mockResolvedValue('token');
+      rateByDay = () => 0.9;
+      handlers['/exchange-rates'] = (data: {
+        base: string;
+        start: string;
+        end?: string;
+      }) => {
+        const rates: Record<string, Record<string, number>> = {};
+        for (
+          let day = data.start;
+          day <= (data.end ?? data.start);
+          day = monthUtils.addDays(day, 1)
+        ) {
+          rates[day] = { EUR: rateByDay(day) };
+        }
+        return { base: data.base, rates };
+      };
+
+      await setMainCurrency('EUR');
+      account = await accountsApp.handlers['account-create']({
+        name: 'US',
+        currency: 'USD',
+      });
+    });
+
+    afterEach(() => {
+      delete handlers['/exchange-rates'];
+      vi.mocked(asyncStorage.getItem).mockReset();
+    });
+
+    async function addTransaction(date: string) {
+      return db.insertTransaction({ account, date, amount: 1000 });
+    }
+
+    // Makes the stored converted amounts wrong, so what gets recalculated
+    // shows
+    async function makeStale() {
+      await db.run('UPDATE transactions SET converted_amount = 1');
+    }
+
+    async function getConverted(id: string) {
+      const row = await db.first<Pick<db.DbTransaction, 'converted_amount'>>(
+        'SELECT converted_amount FROM transactions WHERE id = ?',
+        [id],
+      );
+      return row?.converted_amount;
+    }
+
+    it('recalculates nothing when a refetch changes no rate', async () => {
+      const id = await addTransaction('2016-12-10');
+      await app.handlers['exchange-rates-fetch']({
+        start: '2016-12-01',
+        end: '2016-12-31',
+      });
+      expect(await getConverted(id)).toBe(900);
+      await makeStale();
+
+      const result = await app.handlers['exchange-rates-fetch']({
+        start: '2016-12-01',
+        end: '2016-12-31',
+      });
+
+      expect(result).toEqual({ count: 31, unavailable: [] });
+      expect(await getConverted(id)).toBe(1);
+    });
+
+    it('only recalculates from the day of a new latest rate', async () => {
+      const before = await addTransaction('2016-12-10');
+      const after = await addTransaction('2016-12-20');
+      await app.handlers['exchange-rates-fetch']({
+        start: '2016-12-01',
+        end: '2016-12-15',
+      });
+      await makeStale();
+
+      rateByDay = () => 0.8;
+      await app.handlers['exchange-rates-fetch']({
+        start: '2016-12-16',
+        end: '2016-12-31',
+      });
+
+      expect(await getConverted(before)).toBe(1);
+      expect(await getConverted(after)).toBe(800);
+    });
+
+    it('recalculates earlier days when the earliest rate is new', async () => {
+      const early = await addTransaction('2016-12-10');
+      const late = await addTransaction('2016-12-20');
+      await app.handlers['exchange-rates-fetch']({
+        start: '2016-12-15',
+        end: '2016-12-31',
+      });
+      // Before the earliest rate, days fall back to it
+      expect(await getConverted(early)).toBe(900);
+      await makeStale();
+
+      rateByDay = () => 0.8;
+      await app.handlers['exchange-rates-fetch']({
+        start: '2016-12-01',
+        end: '2016-12-05',
+      });
+
+      expect(await getConverted(early)).toBe(800);
+      expect(await getConverted(late)).toBe(900);
+    });
+
+    it('repairs stale converted amounts once a day on update', async () => {
+      budgetCount++;
+      const prefs = await import('#server/prefs');
+      vi.spyOn(prefs, 'getPrefs').mockReturnValue({
+        id: `full-pass-${budgetCount}`,
+      } as ReturnType<typeof prefs.getPrefs>);
+
+      const id = await addTransaction('2016-12-10');
+      await app.handlers['exchange-rates-fetch']({
+        start: '2016-12-10',
+        end: '2017-01-01',
+      });
+      await makeStale();
+
+      // Nothing new is fetched, but the first update of the day still repairs
+      await app.handlers['exchange-rates-update']();
+      expect(await getConverted(id)).toBe(900);
+
+      await makeStale();
+      await app.handlers['exchange-rates-update']();
+      expect(await getConverted(id)).toBe(1);
+
+      vi.restoreAllMocks();
     });
   });
 });
