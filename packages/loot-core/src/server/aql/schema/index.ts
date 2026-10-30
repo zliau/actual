@@ -31,6 +31,8 @@ function f(type: string, opts?: Record<string, unknown>) {
 // future, we can provide another option in the schema config to map a
 // table name the internal table that is updated.
 
+const MAIN_CURRENCY_SQL = `(SELECT value FROM preferences WHERE id = 'defaultCurrencyCode')`;
+
 export const schema = {
   transactions: {
     id: f('id'),
@@ -291,6 +293,11 @@ export const schemaConfig: SchemaConfig = {
     if (name === 'accounts') {
       return ['exchange_rates', 'preferences'];
     }
+    // Whether an amount counts towards totals depends on the account's
+    // currency and the main currency
+    if (name === 'transactions') {
+      return ['accounts', 'preferences'];
+    }
     return [];
   },
 
@@ -345,14 +352,15 @@ export const schemaConfig: SchemaConfig = {
   views: {
     accounts: {
       v_accounts: internalFields => {
-        const mainCurrency = `(SELECT value FROM preferences WHERE id = 'defaultCurrencyCode')`;
+        const mainCurrency = MAIN_CURRENCY_SQL;
         const fields = internalFields({
           // Prefer manual rates, then the direct pair, like getExchangeRate.
           // The ORDER BY must not refer to `_`: the SQLite of the browser
           // build fails on outer columns in a subquery's ORDER BY.
           latest_rate: `
             CASE
-              WHEN _.currency IS NULL OR _.currency = IFNULL(${mainCurrency}, '') THEN 1
+              WHEN _.currency IS NULL OR _.currency = ${mainCurrency}
+                OR NULLIF(${mainCurrency}, '') IS NULL THEN 1
               ELSE IFNULL((
                 SELECT CASE WHEN r.from_currency = _.currency THEN r.rate ELSE 1.0 / r.rate END
                 FROM exchange_rates r
@@ -363,7 +371,7 @@ export const schemaConfig: SchemaConfig = {
                 ORDER BY r.date DESC, CASE r.source WHEN 'manual' THEN 0 ELSE 1 END,
                   r.to_currency = ${mainCurrency} DESC, r.id
                 LIMIT 1
-              ), 1)
+              ), 0)
             END
           `,
         });
@@ -443,12 +451,31 @@ export const schemaConfig: SchemaConfig = {
       },
 
       v_transactions_internal: internalFields => {
+        // Each part of a split is rounded on its own, so a parent adds up its
+        // parts to always match them
+        const convertedAmount = `
+          CASE WHEN _.isParent = 1 THEN (
+            SELECT SUM(c.converted_amount) FROM transactions c
+            WHERE c.parent_id = _.id AND c.isChild = 1 AND c.tombstone = 0
+          ) ELSE _.converted_amount END
+        `;
+
         // Override some fields to make custom stuff
         const fields = internalFields({
           payee: 'pm.targetId',
           category: `CASE WHEN _.isParent = 1 THEN NULL ELSE cm.transferId END`,
           amount: `IFNULL(_.amount, 0)`,
-          main_amount: `COALESCE(_.converted_amount, _.amount, 0)`,
+          converted_amount: convertedAmount,
+          // Without an exchange rate an amount in another currency can't be
+          // valued in the main one, so it doesn't count towards totals
+          main_amount: `
+            COALESCE(
+              ${convertedAmount},
+              CASE WHEN a.currency != NULLIF(${MAIN_CURRENCY_SQL}, '') THEN 0 END,
+              _.amount,
+              0
+            )
+          `,
           parent_id: 'CASE WHEN _.isChild = 0 THEN NULL ELSE _.parent_id END',
         });
 
@@ -456,6 +483,7 @@ export const schemaConfig: SchemaConfig = {
           SELECT ${fields} FROM transactions _
           LEFT JOIN category_mapping cm ON cm.id = _.category
           LEFT JOIN payee_mapping pm ON pm.id = _.description
+          LEFT JOIN accounts a ON a.id = _.acct
           WHERE
            _.date IS NOT NULL AND
            _.acct IS NOT NULL AND

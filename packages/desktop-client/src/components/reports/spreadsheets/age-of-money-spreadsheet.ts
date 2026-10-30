@@ -511,9 +511,9 @@ export function createAgeOfMoneySpreadsheet({
           date: { $lte: fixedEnd },
           'account.offbudget': false,
           ...transferFilter,
-          amount: { $gt: 0 },
+          main_amount: { $gt: 0 },
         })
-        .select(['id', 'date', 'amount']);
+        .select(['id', 'date', { amount: 'main_amount' }]);
     }
 
     // Query for ALL expense transactions up to the end date
@@ -530,9 +530,9 @@ export function createAgeOfMoneySpreadsheet({
           date: { $lte: fixedEnd },
           'account.offbudget': false,
           ...transferFilter,
-          amount: { $lt: 0 },
+          main_amount: { $lt: 0 },
         })
-        .select(['id', 'date', 'amount']);
+        .select(['id', 'date', { amount: 'main_amount' }]);
     }
 
     return runAll([makeIncomeQuery(), makeExpenseQuery()], data => {

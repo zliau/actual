@@ -271,8 +271,8 @@ describe('latest rates', () => {
     expect((await getLatestRates())[usAccount]).toBeCloseTo(0.8);
   });
 
-  it('uses a rate of 1 when no rate is known', async () => {
-    expect((await getLatestRates())[usAccount]).toBe(1);
+  it('uses a rate of 0 when no rate is known', async () => {
+    expect((await getLatestRates())[usAccount]).toBe(0);
   });
 
   it('totals balances at the latest rate', async () => {
@@ -289,5 +289,114 @@ describe('latest rates', () => {
     expect(dependencies).toEqual(
       expect.arrayContaining(['transactions', 'accounts', 'exchange_rates']),
     );
+  });
+});
+
+describe('amounts in totals', () => {
+  let usAccount: string;
+  let mainAccount: string;
+
+  async function getMainAmount(id: string) {
+    const { data } = await aqlQuery(
+      q('transactions')
+        .filter({ id })
+        .options({ splits: 'all' })
+        .select(['main_amount', 'converted_amount']),
+    );
+    return (
+      data as Array<{ main_amount: number; converted_amount: number | null }>
+    )[0];
+  }
+
+  beforeEach(async () => {
+    await setMainCurrency('EUR');
+    usAccount = await handlers['account-create']({
+      name: 'US',
+      currency: 'USD',
+    });
+    mainAccount = await handlers['account-create']({ name: 'Main' });
+  });
+
+  it('leaves out amounts in another currency without a rate', async () => {
+    const id = await addTransaction(usAccount, '2026-01-05', -10000);
+
+    expect(await getMainAmount(id)).toMatchObject({
+      main_amount: 0,
+      converted_amount: null,
+    });
+  });
+
+  it('counts them again once a rate is known', async () => {
+    const id = await addTransaction(usAccount, '2026-01-05', -10000);
+
+    await setRate('2026-01-01', 0.9);
+
+    expect((await getMainAmount(id)).main_amount).toBe(-9000);
+  });
+
+  it('counts amounts in the main currency as they are', async () => {
+    const id = await addTransaction(mainAccount, '2026-01-05', -10000);
+
+    expect((await getMainAmount(id)).main_amount).toBe(-10000);
+  });
+
+  it('counts every amount as it is when there is no main currency', async () => {
+    const id = await addTransaction(usAccount, '2026-01-05', -10000);
+
+    await setMainCurrency('');
+
+    expect((await getMainAmount(id)).main_amount).toBe(-10000);
+  });
+
+  it('adds up the parts of a split for the parent', async () => {
+    await setRate('2026-01-01', 0.9);
+    const parent = await db.insertTransaction({
+      account: usAccount,
+      date: '2026-01-05',
+      amount: -188,
+      is_parent: true,
+    });
+    for (const [id, amount] of [
+      ['a', -63],
+      ['b', -63],
+      ['c', -62],
+    ] as const) {
+      await db.insertTransaction({
+        id: `${parent}/${id}`,
+        account: usAccount,
+        date: '2026-01-05',
+        amount,
+        is_child: true,
+        parent_id: parent,
+      });
+    }
+
+    // Each part rounds on its own: -57, -57 and -56 give -170, not -169
+    expect(await getMainAmount(parent)).toMatchObject({
+      main_amount: -170,
+      converted_amount: -170,
+    });
+  });
+
+  it('shows no conversion on a split without a rate', async () => {
+    const parent = await db.insertTransaction({
+      account: usAccount,
+      date: '2026-01-05',
+      amount: -100,
+      is_parent: true,
+    });
+    await db.insertTransaction({
+      id: `${parent}/a`,
+      account: usAccount,
+      date: '2026-01-05',
+      amount: -100,
+      is_child: true,
+      parent_id: parent,
+    });
+
+    expect(await getMainAmount(parent)).toMatchObject({
+      main_amount: 0,
+      converted_amount: null,
+    });
   });
 });
