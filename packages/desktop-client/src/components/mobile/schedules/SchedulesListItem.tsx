@@ -17,8 +17,10 @@ import type { WithRequired } from '@actual-app/core/types/util';
 import { ActionableGridListItem } from '#components/mobile/ActionableGridListItem';
 import { StatusBadge } from '#components/schedules/StatusBadge';
 import { DisplayId } from '#components/util/DisplayId';
+import { useAccounts } from '#hooks/useAccounts';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFormat } from '#hooks/useFormat';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 
 type SchedulesListItemProps = {
   onDelete: () => void;
@@ -34,6 +36,12 @@ export function SchedulesListItem({
 }: SchedulesListItemProps) {
   const { t } = useTranslation();
   const format = useFormat();
+  const mainCurrency = useMainCurrency();
+  const { data: accounts = [] } = useAccounts();
+  const currency = getForeignCurrency(
+    accounts.find(account => account.id === schedule._account),
+    mainCurrency,
+  );
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
 
   const amount = getScheduledAmount(schedule._amount);
@@ -42,7 +50,7 @@ export function SchedulesListItem({
       ? '~'
       : '') +
     (amount > 0 ? '+' : '') +
-    format(Math.abs(amount || 0), 'financial');
+    format(Math.abs(amount || 0), 'financial', currency ?? undefined);
 
   return (
     <ActionableGridListItem

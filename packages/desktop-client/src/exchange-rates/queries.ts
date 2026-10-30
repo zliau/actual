@@ -36,6 +36,26 @@ export const exchangeRateQueries = {
       // Manually invalidated when exchange rates change
       staleTime: Infinity,
     }),
+  // All rates between the currencies and the main currency
+  toMainCurrency: ({
+    currencies,
+    mainCurrency,
+  }: {
+    currencies: string[];
+    mainCurrency: string;
+  }) =>
+    queryOptions<ExchangeRateEntity[]>({
+      queryKey: [
+        ...exchangeRateQueries.lists(),
+        'to-main-currency',
+        currencies,
+        mainCurrency,
+      ],
+      queryFn: () => loadExchangeRates(currencies, mainCurrency),
+      placeholderData: [],
+      // Manually invalidated when exchange rates change
+      staleTime: Infinity,
+    }),
   // The currencies that have no rate to the main currency at all
   missing: ({
     currencies,

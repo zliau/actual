@@ -55,8 +55,11 @@ async function createScheduleList(
     );
     const rule = await getRuleForSchedule(sid);
     const conditions = rule.serialize().conditions;
-    const { date: dateConditions, amount: amountCondition } =
-      extractScheduleConds(conditions);
+    const {
+      date: dateConditions,
+      amount: amountCondition,
+      account: accountCondition,
+    } = extractScheduleConds(conditions);
     let scheduleAmount =
       amountCondition.op === 'isbetween'
         ? Math.round(amountCondition.value.num1 + amountCondition.value.num2) /
@@ -122,7 +125,7 @@ async function createScheduleList(
 
     // Unless the current category is relevant to the schedule, target the post-rule amount.
     const sign = category.is_income ? 1 : -1;
-    const target =
+    let target =
       sign *
       (categorySubtransactions?.length
         ? categorySubtransactions.reduce((acc, t) => acc + t.amount, 0)
@@ -140,6 +143,23 @@ async function createScheduleList(
       current_month,
     );
     const displayName = scheduleName ?? template.name ?? '';
+
+    // Schedules are in the currency of their account, budgets in the main one
+    const currency = accountsMap.get(accountCondition?.value)?.currency;
+    const mainCurrency = currency ? await db.getMainCurrency() : null;
+    if (currency && mainCurrency && !completed) {
+      const rate = await db.getExchangeRate(
+        currency,
+        mainCurrency,
+        next_date_string,
+      );
+      if (rate == null) {
+        errors.push(
+          `Schedule ${displayName} has no exchange rate from ${currency} to ${mainCurrency}.`,
+        );
+      }
+      target = Math.round(target * (rate ?? 0));
+    }
     if (num_months < 0) {
       //non-repeating schedules could be negative
       errors.push(`Schedule ${displayName} is in the Past.`);

@@ -80,7 +80,8 @@ export async function getTransactions(
   let query = q('transactions')
     .filter({ tombstone: false })
     .select('*')
-    .options({ splits: 'inline' });
+    // Posted amounts are added to schedules in the base currency
+    .options({ splits: 'inline', currency: 'base' });
 
   if (accountIds !== undefined) {
     if (accountIds.length === 0) {
