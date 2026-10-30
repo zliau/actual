@@ -36,6 +36,16 @@ export function accountBalance(accountId: AccountEntity['id']) {
   } satisfies Binding<'account', 'balance'>;
 }
 
+export function accountBalanceInMainCurrency(accountId: AccountEntity['id']) {
+  return {
+    name: accountParametrizedField('balanceInMainCurrency')(accountId),
+    query: q('transactions')
+      .filter({ account: accountId })
+      .options({ splits: 'none' })
+      .calculate(sumInMainCurrency),
+  } satisfies Binding<'account', 'balanceInMainCurrency'>;
+}
+
 export function accountBalanceCleared(accountId: AccountEntity['id']) {
   return {
     name: accountParametrizedField('balanceCleared')(accountId),
