@@ -1,11 +1,12 @@
 import { useLayoutEffect, useState } from 'react';
 
-import { accountBalance } from '#spreadsheet/bindings';
+import { accountBalanceInMainCurrency } from '#spreadsheet/bindings';
 
 import { useSpreadsheet } from './useSpreadsheet';
 
 /**
- * Live balances for a set of accounts, keyed by account id. Values are
+ * Live balances for a set of accounts in the main currency, keyed by account
+ * id. Values are
  * null until the spreadsheet reports them. Unlike useSheetValue this
  * accepts a variable-length list, binding one account-balance query per id.
  */
@@ -26,17 +27,21 @@ export function useAccountBalances(
 
     let isMounted = true;
     const unbinds = bindingKey.split(',').map(accountId =>
-      spreadsheet.bind('__global', accountBalance(accountId), result => {
-        if (!isMounted) {
-          return;
-        }
-        const value = typeof result.value === 'number' ? result.value : null;
-        setBalances(previous =>
-          previous[accountId] === value
-            ? previous
-            : { ...previous, [accountId]: value },
-        );
-      }),
+      spreadsheet.bind(
+        '__global',
+        accountBalanceInMainCurrency(accountId),
+        result => {
+          if (!isMounted) {
+            return;
+          }
+          const value = typeof result.value === 'number' ? result.value : null;
+          setBalances(previous =>
+            previous[accountId] === value
+              ? previous
+              : { ...previous, [accountId]: value },
+          );
+        },
+      ),
     );
 
     return () => {

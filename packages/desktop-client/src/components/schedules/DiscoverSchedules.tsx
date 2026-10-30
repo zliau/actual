@@ -15,8 +15,10 @@ import type { DiscoverScheduleEntity } from '@actual-app/core/types/models';
 import { Modal, ModalCloseButton, ModalHeader } from '#components/common/Modal';
 import { Field, Row, SelectCell, Table, TableHeader } from '#components/table';
 import { DisplayId } from '#components/util/DisplayId';
+import { useAccounts } from '#hooks/useAccounts';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useLocale } from '#hooks/useLocale';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import {
   SelectedProvider,
   useSelected,
@@ -44,6 +46,8 @@ function DiscoverSchedulesTable({
   const dispatchSelected = useSelectedDispatch();
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
   const locale = useLocale();
+  const mainCurrency = useMainCurrency();
+  const { data: accounts = [] } = useAccounts();
 
   function renderItem({ item }: { item: DiscoverScheduleEntity }) {
     const selected = selectedItems.has(item.id);
@@ -101,7 +105,16 @@ function DiscoverSchedulesTable({
         <Field width="auto" title={recurDescription} style={{ flex: 1.5 }}>
           {recurDescription}
         </Field>
-        <ScheduleAmountCell amount={item.amount} op={amountOp} />
+        <ScheduleAmountCell
+          amount={item.amount}
+          op={amountOp}
+          currency={
+            getForeignCurrency(
+              accounts.find(account => account.id === item.account),
+              mainCurrency,
+            ) ?? undefined
+          }
+        />
       </Row>
     );
   }

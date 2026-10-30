@@ -25,6 +25,7 @@ import {
   asMonthSlidingTimeFrame,
   calculateTimeRange,
 } from '#components/reports/reportRanges';
+import { sumInMainCurrency } from '#spreadsheet/bindings';
 import { bootstrapHyperFormula } from '#util/bootstrapHyperFormula';
 
 import { useGlobalPref } from './useGlobalPref';
@@ -349,7 +350,7 @@ async function fetchAccountBalance(accountId: string): Promise<number> {
   try {
     const balanceQuery = q('transactions')
       .filter({ account: accountId })
-      .calculate({ $sum: '$amount' });
+      .calculate(sumInMainCurrency);
     const { data } = await send('query', balanceQuery.serialize());
     return integerToAmount(data || 0, 2);
   } catch (err) {

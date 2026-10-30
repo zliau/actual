@@ -61,10 +61,8 @@ const ALLOWED_SUMS: Record<
   'packages/desktop-client/src/components/reports/spreadsheets/summary-spreadsheet.ts':
     { base: 2, reason: 'Summary card totals across accounts' },
   'packages/desktop-client/src/hooks/useFormulaExecution.ts': {
-    native: 1,
     base: 1,
-    reason:
-      'Formula query totals across accounts; KNOWN GAP: formula balances stay in the account currency',
+    reason: 'Formula query totals across accounts',
   },
   'packages/desktop-client/src/spreadsheet/bindings.ts': {
     native: 4,
