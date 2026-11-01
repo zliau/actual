@@ -12,6 +12,8 @@ export type AccountEntity = {
   account_group_id: AccountGroupEntity['id'] | null;
   // null means the account uses the budget's main currency
   currency: string | null;
+  // Holds securities, and is always off budget
+  investment: 0 | 1;
 
   // Sync fields
   account_id: string | null;

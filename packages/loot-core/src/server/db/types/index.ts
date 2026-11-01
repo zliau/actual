@@ -39,6 +39,7 @@ export type DbAccount = {
     | null;
   account_group_id?: DbAccountGroup['id'] | null;
   currency?: string | null;
+  investment?: 1 | 0 | null;
 };
 
 export type DbAccountGroup = {
@@ -55,6 +56,37 @@ export type DbExchangeRate = {
   to_currency: string;
   rate: number;
   source: 'api' | 'manual';
+  tombstone: 1 | 0;
+};
+
+export type DbSecurity = {
+  id: string;
+  symbol: string;
+  exchange: 'US' | 'TSX';
+  name?: string | null;
+  currency: string;
+  tombstone: 1 | 0;
+};
+
+export type DbSecurityPrice = {
+  id: string;
+  security: DbSecurity['id'];
+  date: number;
+  close: number;
+  source: 'api' | 'manual';
+  tombstone: 1 | 0;
+};
+
+export type DbTrade = {
+  id: string;
+  account: DbAccount['id'];
+  security: DbSecurity['id'];
+  date: number;
+  type: 'buy' | 'sell';
+  quantity: number;
+  price: number;
+  fee: number;
+  transaction_id?: string | null;
   tombstone: 1 | 0;
 };
 

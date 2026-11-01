@@ -35,6 +35,7 @@ function makeLocalAccount(
     bank_sync_status: null,
     account_group_id: null,
     currency: null,
+    investment: 0,
     ...overrides,
   };
 }

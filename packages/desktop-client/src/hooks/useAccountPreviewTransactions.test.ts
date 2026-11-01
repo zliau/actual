@@ -34,6 +34,7 @@ function makeAccount(id: string): AccountEntity {
     bank_sync_status: null,
     account_group_id: null,
     currency: null,
+    investment: 0,
   };
 }
 

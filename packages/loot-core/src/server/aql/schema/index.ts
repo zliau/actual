@@ -87,6 +87,7 @@ export const schema = {
     bank_sync_status: f('string'),
     account_group_id: f('id', { ref: 'account_groups' }),
     currency: f('string'),
+    investment: f('boolean'),
     // Only in the views: the latest exchange rate from the account's currency
     // to the main currency: 1 when they match, and 0 when no rate is known,
     // since that balance can't be valued and doesn't count towards totals.
@@ -106,6 +107,34 @@ export const schema = {
     to_currency: f('string', { required: true }),
     rate: f('float', { required: true }),
     source: f('string'),
+    tombstone: f('boolean'),
+  },
+  securities: {
+    id: f('id'),
+    symbol: f('string', { required: true }),
+    exchange: f('string', { required: true }),
+    name: f('string'),
+    currency: f('string', { required: true }),
+    tombstone: f('boolean'),
+  },
+  security_prices: {
+    id: f('id'),
+    security: f('id', { ref: 'securities', required: true }),
+    date: f('date', { required: true }),
+    close: f('float', { required: true }),
+    source: f('string'),
+    tombstone: f('boolean'),
+  },
+  trades: {
+    id: f('id'),
+    account: f('id', { ref: 'accounts', required: true }),
+    security: f('id', { ref: 'securities', required: true }),
+    date: f('date', { required: true }),
+    type: f('string', { required: true }),
+    quantity: f('float', { required: true }),
+    price: f('float', { required: true }),
+    fee: f('integer', { default: 0 }),
+    transaction_id: f('id', { ref: 'transactions' }),
     tombstone: f('boolean'),
   },
   categories: {

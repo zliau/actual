@@ -25,6 +25,7 @@ import { app as exchangeRatesApp } from './exchange-rates/app';
 import { app as filtersApp } from './filters/app';
 import { app as forecastApp } from './forecast/app';
 import { app as formulasApp } from './formulas/app';
+import { app as investmentsApp } from './investments/app';
 import { app } from './main-app';
 import { mutator, runHandler } from './mutators';
 import { app as notesApp } from './notes/app';
@@ -148,6 +149,7 @@ app.combine(
   accountsApp,
   accountGroupsApp,
   exchangeRatesApp,
+  investmentsApp,
   payeesApp,
   spreadsheetApp,
   syncApp,

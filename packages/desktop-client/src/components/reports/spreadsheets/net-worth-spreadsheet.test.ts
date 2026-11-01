@@ -46,6 +46,7 @@ function createAccount(id: string, name: string): AccountEntity {
     tombstone: 0,
     account_group_id: null,
     currency: null,
+    investment: 0,
     account_id: null,
     bank: null,
     bankName: null,

@@ -11,6 +11,7 @@ import {
   BankSyncError,
   PostError,
   TransactionError,
+  ValidationError,
 } from '#server/errors';
 import { app as mainApp } from '#server/main-app';
 import { validateCurrencyCode } from '#server/models';
@@ -21,6 +22,7 @@ import { getServer } from '#server/server-config';
 import { batchMessages } from '#server/sync';
 import { undoable, withUndo } from '#server/undo';
 import { isNonProductionEnvironment } from '#shared/environment';
+import { isInvestmentCurrency } from '#shared/investments';
 import { dayFromDate } from '#shared/months';
 import * as monthUtils from '#shared/months';
 import { amountToInteger } from '#shared/util';
@@ -107,6 +109,17 @@ async function updateAccount({
     >
   >) {
   validateCurrencyCode('account', currency);
+  if (currency !== undefined) {
+    const account = await db.first<
+      Pick<db.DbAccount, 'investment' | 'currency'>
+    >('SELECT investment, currency FROM accounts WHERE id = ?', [id]);
+    // An investment account's currency must match the securities it holds
+    if (account?.investment && currency !== account.currency) {
+      throw new ValidationError(
+        "An investment account's currency can't be changed",
+      );
+    }
+  }
   await db.update('accounts', {
     id,
     ...(name !== undefined && { name }),
@@ -146,6 +159,7 @@ async function getAccounts(): Promise<AccountEntity[]> {
         bank_sync_status: dbAccount.bank_sync_status ?? null,
         account_group_id: dbAccount.account_group_id ?? null,
         currency: dbAccount.currency ?? null,
+        investment: dbAccount.investment ?? 0,
       }) satisfies AccountEntity,
   );
 }
@@ -576,18 +590,31 @@ async function createAccount({
   offBudget = false,
   closed = false,
   currency = null,
+  investment = false,
 }: {
   name: string;
   balance?: number | undefined;
   offBudget?: boolean | undefined;
   closed?: boolean | undefined;
   currency?: AccountEntity['currency'] | undefined;
+  investment?: boolean | undefined;
 }) {
+  if (investment && (currency === null || !isInvestmentCurrency(currency))) {
+    throw new ValidationError(
+      'An investment account needs a currency that securities are traded in',
+    );
+  }
+  // Market value changes aren't spending, so investments stay off budget
+  if (investment) {
+    offBudget = true;
+  }
+
   const id: AccountEntity['id'] = await db.insertAccount({
     name,
     offbudget: offBudget ? 1 : 0,
     closed: closed ? 1 : 0,
     currency,
+    investment: investment ? 1 : 0,
   });
 
   await db.insertPayee({

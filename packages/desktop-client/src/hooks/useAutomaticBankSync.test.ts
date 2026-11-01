@@ -14,6 +14,7 @@ function account(overrides: Partial<AccountEntity> = {}): AccountEntity {
     id: 'account-1',
     account_group_id: null,
     currency: null,
+    investment: 0,
     name: 'Checking',
     offbudget: 0,
     closed: 0,
