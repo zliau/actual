@@ -1,12 +1,17 @@
 import { app as accountsApp } from '#server/accounts/app';
+import { aqlQuery } from '#server/aql';
 import * as db from '#server/db';
 import { loadMappings } from '#server/db/mappings';
 import { app } from '#server/investments/app';
+import { batchUpdateTransactions } from '#server/transactions';
 import {
   calculateHolding,
+  getMarketValueChanges,
   getTradeCashAmount,
+  NOT_INVESTMENT_ACTIVITY,
   sellsMoreThanHeld,
 } from '#shared/investments';
+import { q } from '#shared/query';
 
 beforeEach(async () => {
   await global.emptyDatabase()();
@@ -79,6 +84,39 @@ describe('investments app', () => {
       );
       expect(account?.currency).toBe('CAD');
       expect(account?.investment).toBe(0);
+    });
+
+    it("can't be closed while they hold shares", async () => {
+      const account = await createInvestmentAccount();
+      const security = await createAapl();
+      const trade = {
+        account,
+        security,
+        quantity: 10,
+        price: 100,
+        fee: 0,
+      };
+      await app.handlers['trade-create']({
+        ...trade,
+        date: '2026-01-02',
+        type: 'buy',
+      });
+      await expect(
+        accountsApp.handlers['account-close']({ id: account }),
+      ).rejects.toThrow('still holds shares');
+
+      // Selling at the price paid leaves no cash to move out
+      await app.handlers['trade-create']({
+        ...trade,
+        date: '2026-02-02',
+        type: 'sell',
+      });
+      await accountsApp.handlers['account-close']({ id: account });
+      const closed = await db.first<db.DbAccount>(
+        'SELECT * FROM accounts WHERE id = ?',
+        [account],
+      );
+      expect(closed?.closed).toBe(1);
     });
   });
 
@@ -580,6 +618,454 @@ describe('holdings-get', () => {
       holdings: [],
       cash: 0,
     });
+  });
+});
+
+// The clock in tests is fixed at 2017-01-01
+describe('market value', () => {
+  async function marketValueTransactions(account: string) {
+    const transactions = await db.getTransactions(account);
+    return transactions
+      .filter(transaction => transaction.investment_type === 'market-value')
+      .map(({ date, amount }) => ({ date, amount }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async function setUp() {
+    const account = await createInvestmentAccount();
+    const security = await createAapl();
+    const id = await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-10-15',
+      type: 'buy',
+      quantity: 10,
+      price: 100,
+      fee: 500,
+    });
+    return { account, security, id };
+  }
+
+  it('adds the value of a buy, leaving only the fee off the balance', async () => {
+    const { account } = await setUp();
+
+    expect(await marketValueTransactions(account)).toEqual([
+      { date: '2016-10-31', amount: 100000 },
+    ]);
+    expect(await getBalance(account)).toBe(-500);
+  });
+
+  it('records each month by what the value changed', async () => {
+    const { account, security } = await setUp();
+    const set = app.handlers['security-price-set'];
+    await set({ security, date: '2016-11-10', close: 110 });
+    await set({ security, date: '2016-12-20', close: 90 });
+
+    expect(await marketValueTransactions(account)).toEqual([
+      { date: '2016-10-31', amount: 100000 },
+      { date: '2016-11-30', amount: 10000 },
+      { date: '2016-12-31', amount: -20000 },
+    ]);
+    // Cash of -1,005 and 10 shares at 90
+    expect(await getBalance(account)).toBe(-100500 + 90000);
+  });
+
+  it('keeps each security apart, with notes saying which it is', async () => {
+    const { account, security } = await setUp();
+    const msft = await app.handlers['security-create']({
+      symbol: 'MSFT',
+      exchange: 'US',
+    });
+    await app.handlers['trade-create']({
+      account,
+      security: msft,
+      date: '2016-11-15',
+      type: 'buy',
+      quantity: 2.5,
+      price: 60,
+    });
+    await app.handlers['security-price-set']({
+      security,
+      date: '2016-11-10',
+      close: 110.123456,
+    });
+    await app.handlers['trade-create']({
+      account,
+      security: msft,
+      date: '2016-12-15',
+      type: 'sell',
+      quantity: 2.5,
+      price: 62,
+    });
+
+    const transactions = await db.getTransactions(account);
+    expect(
+      transactions
+        .filter(transaction => transaction.investment_type === 'market-value')
+        .map(({ date, amount, notes }) => ({ date, amount, notes }))
+        .sort((a, b) => a.notes.localeCompare(b.notes)),
+    ).toEqual([
+      {
+        date: '2016-10-31',
+        amount: 100000,
+        notes: 'Market value 10 AAPL @ 100',
+      },
+      {
+        date: '2016-11-30',
+        amount: 10123,
+        notes: 'Market value 10 AAPL @ 110.1235',
+      },
+      {
+        date: '2016-11-30',
+        amount: 15000,
+        notes: 'Market value 2.5 MSFT @ 60',
+      },
+      { date: '2016-12-31', amount: -15000, notes: 'Market value MSFT, sold' },
+    ]);
+  });
+
+  it('replaces a transaction for all securities at once', async () => {
+    const { account, security } = await setUp();
+    await db.insertTransaction({
+      id: `market-value-${account}-2016-10`,
+      account,
+      amount: 100000,
+      date: '2016-10-31',
+      notes: 'Market value',
+      cleared: true,
+      investment_type: 'market-value',
+    });
+
+    await app.handlers['security-price-set']({
+      security,
+      date: '2016-10-31',
+      close: 100,
+    });
+
+    expect(await marketValueTransactions(account)).toEqual([
+      { date: '2016-10-31', amount: 100000 },
+    ]);
+  });
+
+  it('matches the value and cash of the holdings', async () => {
+    const { account, security } = await setUp();
+    await app.handlers['security-price-set']({
+      security,
+      date: '2016-12-20',
+      close: 120,
+    });
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-12-21',
+      type: 'sell',
+      quantity: 4,
+      price: 120,
+    });
+
+    const { holdings, cash } = await app.handlers['holdings-get']({ account });
+    expect(cash).toBe(-100500 + 48000);
+    expect(await getBalance(account)).toBe(cash + holdings[0].marketValue);
+  });
+
+  it('follows price changes and removals', async () => {
+    const { account, security } = await setUp();
+    const id = await app.handlers['security-price-set']({
+      security,
+      date: '2016-11-10',
+      close: 110,
+    });
+    await app.handlers['security-price-set']({
+      security,
+      date: '2016-11-10',
+      close: 120,
+    });
+    expect(await getBalance(account)).toBe(-100500 + 120000);
+
+    await app.handlers['security-price-delete']({ id });
+
+    expect(await marketValueTransactions(account)).toEqual([
+      { date: '2016-10-31', amount: 100000 },
+    ]);
+  });
+
+  it('follows backdated trades', async () => {
+    const { account, id } = await setUp();
+    await app.handlers['trade-update']({ id, date: '2016-09-15', quantity: 5 });
+
+    expect(await marketValueTransactions(account)).toEqual([
+      { date: '2016-09-30', amount: 50000 },
+    ]);
+  });
+
+  it('removes the value with the last trade, and restores it', async () => {
+    const { account, security, id } = await setUp();
+    await app.handlers['trade-delete']({ id });
+
+    expect(await marketValueTransactions(account)).toEqual([]);
+    expect(await getBalance(account)).toBe(0);
+
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-10-15',
+      type: 'buy',
+      quantity: 2,
+      price: 100,
+    });
+    expect(await marketValueTransactions(account)).toEqual([
+      { date: '2016-10-31', amount: 20000 },
+    ]);
+  });
+
+  it('values every account holding the security', async () => {
+    const { account, security } = await setUp();
+    const other = await accountsApp.handlers['account-create']({
+      name: 'Other',
+      currency: 'USD',
+      investment: true,
+    });
+    await app.handlers['trade-create']({
+      account: other,
+      security,
+      date: '2016-10-15',
+      type: 'buy',
+      quantity: 1,
+      price: 100,
+    });
+    await app.handlers['security-price-set']({
+      security,
+      date: '2016-11-01',
+      close: 200,
+    });
+
+    expect(await getBalance(account)).toBe(-100500 + 200000);
+    expect(await getBalance(other)).toBe(-10000 + 20000);
+  });
+
+  it('leaves closed accounts alone', async () => {
+    const { account, security } = await setUp();
+    await db.update('accounts', { id: account, closed: 1 });
+    await app.handlers['security-price-set']({
+      security,
+      date: '2016-11-01',
+      close: 200,
+    });
+
+    expect(await marketValueTransactions(account)).toEqual([
+      { date: '2016-10-31', amount: 100000 },
+    ]);
+  });
+
+  it('converts to the main currency at the rate of the day', async () => {
+    await db.run(
+      'INSERT OR REPLACE INTO preferences (id, value) VALUES (?, ?)',
+      ['defaultCurrencyCode', 'CAD'],
+    );
+    await db.insert('exchange_rates', {
+      id: 'USD-CAD-2016-01-01',
+      date: 20160101,
+      from_currency: 'USD',
+      to_currency: 'CAD',
+      rate: 1.5,
+      source: 'manual',
+      tombstone: 0,
+    });
+    const { account } = await setUp();
+
+    const transactions = await db.getTransactions(account);
+    expect(
+      transactions.find(t => t.investment_type === 'market-value'),
+    ).toMatchObject({ amount: 100000, converted_amount: 150000 });
+  });
+
+  it('protects its transactions from ordinary edits', async () => {
+    const { account } = await setUp();
+    const transactions = await db.getTransactions(account);
+    expect(transactions).toHaveLength(2);
+    const before = await getBalance(account);
+
+    await batchUpdateTransactions({
+      updated: transactions.map(({ id }) => ({ id, amount: 1 })),
+    });
+    await batchUpdateTransactions({
+      deleted: transactions.map(({ id }) => ({ id })),
+    });
+
+    expect(await db.getTransactions(account)).toHaveLength(2);
+    expect(await getBalance(account)).toBe(before);
+  });
+
+  it('still applies ordinary edits in the same batch', async () => {
+    const { account } = await setUp();
+    const deposit = await db.insertTransaction({
+      account,
+      amount: 5000,
+      date: '2016-10-01',
+    });
+    const [locked] = await db.getTransactions(account);
+
+    await batchUpdateTransactions({
+      updated: [
+        { id: deposit, amount: 7000 },
+        { id: locked.id, amount: 1 },
+      ],
+    });
+
+    const after = await db.getTransactions(account);
+    expect(after.find(t => t.id === deposit)?.amount).toBe(7000);
+    expect(after.find(t => t.id === locked.id)?.amount).not.toBe(1);
+  });
+
+  it('is left out of income and spending but not of balances', async () => {
+    const { account } = await setUp();
+    const deposit = await db.insertTransaction({
+      account,
+      amount: 5000,
+      date: '2016-10-01',
+    });
+
+    const activity = await aqlQuery(
+      q('transactions')
+        .filter({ account })
+        .filter(NOT_INVESTMENT_ACTIVITY)
+        .select('id'),
+    );
+    expect(activity.data).toEqual([{ id: deposit }]);
+
+    const balance = await aqlQuery(
+      q('transactions').filter({ account }).calculate({ $sum: '$amount' }),
+    );
+    expect(balance.data).toBe(5000 - 100500 + 100000);
+  });
+
+  it("doesn't count market value as cash", async () => {
+    const { account } = await setUp();
+    const { cash } = await app.handlers['holdings-get']({ account });
+    expect(cash).toBe(-100500);
+  });
+});
+
+describe('getMarketValueChanges', () => {
+  const securities = [
+    { id: 'US-A', symbol: 'A', name: null, currency: 'USD' },
+    { id: 'US-B', symbol: 'B', name: null, currency: 'USD' },
+  ];
+  const buy = (
+    security: string,
+    date: string,
+    quantity: number,
+    price: number,
+  ) => ({
+    security,
+    date,
+    type: 'buy' as const,
+    quantity,
+    price,
+    fee: 0,
+  });
+
+  it('has nothing without trades or before the first one', () => {
+    expect(
+      getMarketValueChanges({
+        securities,
+        trades: [],
+        prices: [],
+        today: '2026-01-15',
+      }),
+    ).toEqual([]);
+    expect(
+      getMarketValueChanges({
+        securities,
+        trades: [buy('US-A', '2026-02-01', 1, 100)],
+        prices: [],
+        today: '2026-01-15',
+      }),
+    ).toEqual([]);
+  });
+
+  it('dates the current month today and skips months without a change', () => {
+    expect(
+      getMarketValueChanges({
+        securities,
+        trades: [buy('US-A', '2025-11-05', 1, 100)],
+        prices: [{ security: 'US-A', date: '2026-01-10', close: 150 }],
+        today: '2026-01-15',
+      }),
+    ).toEqual([
+      {
+        security: 'US-A',
+        month: '2025-11',
+        date: '2025-11-30',
+        amount: 10000,
+        quantity: 1,
+        price: 100,
+      },
+      {
+        security: 'US-A',
+        month: '2026-01',
+        date: '2026-01-15',
+        amount: 5000,
+        quantity: 1,
+        price: 150,
+      },
+    ]);
+  });
+
+  it('keeps securities apart, using the price known at each month end', () => {
+    expect(
+      getMarketValueChanges({
+        securities,
+        trades: [
+          buy('US-A', '2025-11-05', 1, 100),
+          buy('US-B', '2025-12-05', 2, 50),
+        ],
+        prices: [
+          { security: 'US-A', date: '2025-11-20', close: 110 },
+          { security: 'US-A', date: '2025-12-20', close: 120 },
+          { security: 'US-A', date: '2026-02-01', close: 999 },
+        ],
+        today: '2026-01-15',
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        security: 'US-A',
+        month: '2025-11',
+        amount: 11000,
+      }),
+      expect.objectContaining({
+        security: 'US-A',
+        month: '2025-12',
+        amount: 1000,
+        price: 120,
+      }),
+      expect.objectContaining({
+        security: 'US-B',
+        month: '2025-12',
+        amount: 10000,
+        quantity: 2,
+      }),
+    ]);
+  });
+
+  it('adds up to the current value through a sale', () => {
+    const changes = getMarketValueChanges({
+      securities,
+      trades: [
+        buy('US-A', '2025-11-05', 3, 100),
+        {
+          security: 'US-A',
+          date: '2025-12-05',
+          type: 'sell' as const,
+          quantity: 3,
+          price: 120,
+          fee: 0,
+        },
+      ],
+      prices: [],
+      today: '2026-01-15',
+    });
+    expect(changes.reduce((sum, change) => sum + change.amount, 0)).toBe(0);
   });
 });
 

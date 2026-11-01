@@ -292,7 +292,11 @@ export function useTransactionBatchActions() {
           .options({ splits: 'grouped' }),
       );
 
-      const transactions = data as TransactionEntity[];
+      // What investment accounts write comes from their trades, and a copy
+      // would throw off the balance
+      const transactions = (data as TransactionEntity[]).filter(
+        transaction => !transaction.investment_type,
+      );
 
       const changes = {
         added: transactions.reduce(

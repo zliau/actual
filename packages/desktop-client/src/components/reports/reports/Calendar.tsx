@@ -16,6 +16,7 @@ import { styles } from '@actual-app/components/styles';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import { send } from '@actual-app/core/platform/client/connection';
+import { NOT_INVESTMENT_ACTIVITY } from '@actual-app/core/shared/investments';
 import * as monthUtils from '@actual-app/core/shared/months';
 import { q } from '@actual-app/core/shared/query';
 import type { Query } from '@actual-app/core/shared/query';
@@ -204,6 +205,7 @@ function CalendarInner({ widget, parameters }: CalendarInnerProps) {
           .filter({
             [conditionsOpKey]: data.filters,
           })
+          .filter(NOT_INVESTMENT_ACTIVITY)
           .filter({
             $and: [
               { date: { $gte: monthUtils.firstDayOfMonth(start) } },

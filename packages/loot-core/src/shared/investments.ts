@@ -6,11 +6,16 @@ import type {
   TradeEntity,
 } from '#types/models';
 
+import * as monthUtils from './months';
 import { amountToInteger } from './util';
 
 // Below this a position counts as fully sold, so rounding in fractional shares
 // can't leave a tiny remainder or block selling everything.
 export const SHARE_EPSILON = 0.000001;
+
+// Filters out what investment accounts write themselves, for reports of income
+// and spending: a price change or a trade is neither
+export const NOT_INVESTMENT_ACTIVITY = { investment_type: null };
 
 const EXCHANGE_CURRENCIES: Record<SecurityExchange, string> = {
   US: 'USD',
@@ -151,4 +156,82 @@ export function calculateHolding(
     unrealizedGainRatio: costBasis > 0 ? unrealizedGain / costBasis : 0,
     realizedGain,
   };
+}
+
+export type MarketValueChange = {
+  security: SecurityEntity['id'];
+  month: string;
+  date: string;
+  // The change in value over the month, in cents
+  amount: number;
+  // What was held at the end of the month, and the price it was valued at
+  quantity: number;
+  price: number;
+};
+
+// What the account's market value transactions should be: for each security
+// and each month from its first trade, the change in its value over that month.
+// Together they add up to the current value. Months without a change have none.
+export function getMarketValueChanges({
+  securities,
+  trades,
+  prices,
+  today,
+}: {
+  securities: Array<
+    Pick<SecurityEntity, 'id' | 'symbol' | 'name' | 'currency'>
+  >;
+  trades: Array<
+    Pick<
+      TradeEntity,
+      'security' | 'date' | 'type' | 'quantity' | 'price' | 'fee'
+    >
+  >;
+  prices: Array<Pick<SecurityPriceEntity, 'security' | 'date' | 'close'>>;
+  today: string;
+}): MarketValueChange[] {
+  return securities.flatMap(security => {
+    const securityTrades = trades.filter(
+      trade => trade.security === security.id,
+    );
+    const firstDate = securityTrades.map(trade => trade.date).sort()[0];
+    if (firstDate == null || firstDate > today) {
+      return [];
+    }
+    const securityPrices = prices.filter(
+      price => price.security === security.id,
+    );
+
+    const holdingOn = (day: string) => {
+      const latestPrice = securityPrices
+        .filter(price => price.date <= day)
+        .reduce<(typeof prices)[number] | undefined>(
+          (latest, price) =>
+            latest == null || price.date > latest.date ? price : latest,
+          undefined,
+        );
+      return calculateHolding(
+        security,
+        securityTrades.filter(trade => trade.date <= day),
+        latestPrice,
+      );
+    };
+
+    let previousValue = 0;
+    return monthUtils
+      .rangeInclusive(
+        monthUtils.monthFromDate(firstDate),
+        monthUtils.monthFromDate(today),
+      )
+      .flatMap(month => {
+        const lastDay = monthUtils.lastDayOfMonth(month);
+        const date = lastDay < today ? lastDay : today;
+        const { marketValue, quantity, price } = holdingOn(date);
+        const amount = marketValue - previousValue;
+        previousValue = marketValue;
+        return amount === 0
+          ? []
+          : [{ security: security.id, month, date, amount, quantity, price }];
+      });
+  });
 }

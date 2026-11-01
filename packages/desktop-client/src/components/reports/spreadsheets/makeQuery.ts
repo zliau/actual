@@ -1,3 +1,4 @@
+import { NOT_INVESTMENT_ACTIVITY } from '@actual-app/core/shared/investments';
 import { q } from '@actual-app/core/shared/query';
 import type { ObjectExpression } from '@actual-app/core/shared/query';
 
@@ -28,6 +29,7 @@ export function makeQuery(
     .filter({
       [conditionsOpKey]: filters,
     })
+    .filter(NOT_INVESTMENT_ACTIVITY)
     //Apply month range filters
     .filter({
       $and: [

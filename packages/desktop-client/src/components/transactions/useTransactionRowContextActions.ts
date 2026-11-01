@@ -270,8 +270,24 @@ export function useTransactionRowContextActions({
     },
   ];
 
+  // Written by the account from its trades and prices, and changed there
+  const investmentActions: ContextMenuItem[] = [
+    {
+      name: 'investment-locked',
+      text: t('Change this in Holdings'),
+      tooltip: t(
+        'Actual writes this from your trades and prices. To change it, edit them in Holdings.',
+      ),
+      disabled: true,
+    },
+  ];
+
   useContextMenu({
     triggerRef: rowRef,
-    items: types.trans ? transactionActions : scheduleActions,
+    items: transaction.investment_type
+      ? investmentActions
+      : types.trans
+        ? transactionActions
+        : scheduleActions,
   });
 }

@@ -64,6 +64,6 @@ export type Holding = {
 
 export type AccountHoldings = {
   holdings: Holding[];
-  // The account's transactions added up, in cents
+  // The account's transactions added up without its market value, in cents
   cash: number;
 };

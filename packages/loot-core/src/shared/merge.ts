@@ -14,6 +14,9 @@ export function validForMergeExplanation(
   if (!transactionA || !transactionB) {
     return 'One of the provided transactions does not exist';
   }
+  if (transactionA.investment_type || transactionB.investment_type) {
+    return 'Cannot merge transactions written by an investment account';
+  }
   if (transactionA.account !== transactionB.account) {
     return 'Cannot merge transactions from different accounts';
   }

@@ -24,6 +24,8 @@ import type {
   TradeEntity,
 } from '#types/models';
 
+import { updateMarketValue, updateMarketValueOfHolders } from './market-value';
+
 export type InvestmentsHandlers = {
   'securities-get': typeof getSecurities;
   'security-create': typeof createSecurity;
@@ -194,6 +196,7 @@ async function setSecurityPrice({
       return id;
     }
     await db.update('security_prices', { id, close, source, tombstone: 0 });
+    await updateMarketValueOfHolders(security);
     return id;
   }
 
@@ -205,13 +208,21 @@ async function setSecurityPrice({
     source,
     tombstone: 0,
   });
+  await updateMarketValueOfHolders(security);
   return id;
 }
 
 async function deleteSecurityPrice({
   id,
 }: Pick<SecurityPriceEntity, 'id'>): Promise<void> {
+  const price = await db.first<Pick<db.DbSecurityPrice, 'security'>>(
+    'SELECT security FROM security_prices WHERE id = ?',
+    [id],
+  );
   await db.delete_('security_prices', id);
+  if (price) {
+    await updateMarketValueOfHolders(price.security);
+  }
 }
 
 // Trades of deleted accounts are left out, since their transactions are gone
@@ -289,6 +300,7 @@ async function createTrade({
       tombstone: 0,
     });
   });
+  await updateMarketValue(account);
   return id;
 }
 
@@ -335,6 +347,7 @@ async function updateTrade({
       transaction_id: transactionId,
     });
   });
+  await updateMarketValue(trade.account);
 }
 
 async function deleteTrade({ id }: Pick<TradeEntity, 'id'>): Promise<void> {
@@ -353,6 +366,7 @@ async function deleteTrade({ id }: Pick<TradeEntity, 'id'>): Promise<void> {
     }
     await db.delete_('trades', id);
   });
+  await updateMarketValue(trade.account);
 }
 
 // Every security the account has traded, sold out ones included since their
@@ -374,7 +388,8 @@ async function getHoldings({
     ),
     db.first<{ cash: number | null }>(
       `SELECT SUM(amount) AS cash FROM transactions
-       WHERE acct = ? AND isParent = 0 AND tombstone = 0`,
+       WHERE acct = ? AND isParent = 0 AND tombstone = 0
+         AND IFNULL(investment_type, '') != 'market-value'`,
       [account],
     ),
   ]);
@@ -451,6 +466,7 @@ function getTransactionFields(
     date: fields.date,
     notes: `${label} ${fields.quantity} ${security.symbol} @ ${fields.price}`,
     cleared: true,
+    investment_type: 'trade',
   };
 }
 

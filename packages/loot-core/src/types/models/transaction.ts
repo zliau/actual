@@ -28,6 +28,8 @@ export type TransactionEntity = {
   sort_order?: number;
   cleared?: boolean;
   reconciled?: boolean;
+  // Written by an investment account, and changed through its holdings
+  investment_type?: 'trade' | 'market-value' | null;
   tombstone?: boolean;
   forceUpcoming?: boolean;
   schedule?: ScheduleEntity['id'];

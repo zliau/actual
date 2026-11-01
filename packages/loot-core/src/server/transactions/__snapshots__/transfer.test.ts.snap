@@ -13,6 +13,7 @@ exports[`Transfer > split transfers are retained on child transactions 1`] = `
     "id": "id5",
     "imported_id": null,
     "imported_payee": null,
+    "investment_type": null,
     "is_child": 0,
     "is_parent": 0,
     "main_amount": 5000,
@@ -39,6 +40,7 @@ exports[`Transfer > split transfers are retained on child transactions 1`] = `
     "id": "id6",
     "imported_id": null,
     "imported_payee": null,
+    "investment_type": null,
     "is_child": 0,
     "is_parent": 0,
     "main_amount": -5000,
@@ -61,11 +63,11 @@ exports[`Transfer > split transfers are retained on child transactions 2`] = `
 "- First value
 + Second value
 
-@@ -9,11 +9,11 @@
-      "error": null,
+@@ -10,11 +10,11 @@
       "id": "id5",
       "imported_id": null,
       "imported_payee": null,
+      "investment_type": null,
       "is_child": 0,
 -     "is_parent": 0,
 +     "is_parent": 1,
@@ -80,7 +82,7 @@ exports[`Transfer > split transfers are retained on child transactions 3`] = `
 "- First value
 + Second value
 
-@@ -24,10 +24,62 @@
+@@ -25,10 +25,64 @@
       "starting_balance_flag": 0,
       "tombstone": 0,
       "transfer_id": "id6",
@@ -96,6 +98,7 @@ exports[`Transfer > split transfers are retained on child transactions 3`] = `
 +     "id": "id7",
 +     "imported_id": null,
 +     "imported_payee": null,
++     "investment_type": null,
 +     "is_child": 1,
 +     "is_parent": 0,
 +     "main_amount": 2000,
@@ -122,6 +125,7 @@ exports[`Transfer > split transfers are retained on child transactions 3`] = `
 +     "id": "id8",
 +     "imported_id": null,
 +     "imported_payee": null,
++     "investment_type": null,
 +     "is_child": 0,
 +     "is_parent": 0,
 +     "main_amount": -2000,
@@ -158,6 +162,7 @@ exports[`Transfer > transfers are properly de-categorized 1`] = `
     "id": "id6",
     "imported_id": null,
     "imported_payee": null,
+    "investment_type": null,
     "is_child": 0,
     "is_parent": 0,
     "main_amount": 5000,
@@ -180,26 +185,23 @@ exports[`Transfer > transfers are properly de-categorized 2`] = `
 "- First value
 + Second value
 
-@@ -11,18 +11,44 @@
-      "imported_id": null,
+@@ -12,18 +12,45 @@
       "imported_payee": null,
+      "investment_type": null,
       "is_child": 0,
       "is_parent": 0,
       "main_amount": 5000,
 -     "notes": null,
 +     "notes": "hi",
-      "parent_id": null,
--     "payee": "id5",
--     "payee_name": "Non-transfer",
++     "parent_id": null,
 +     "payee": "id4",
 +     "payee_name": "",
-      "raw_synced_data": null,
-      "reconciled": 0,
-      "schedule": null,
-      "sort_order": 123456789,
-      "starting_balance_flag": 0,
-      "tombstone": 0,
--     "transfer_id": null,
++     "raw_synced_data": null,
++     "reconciled": 0,
++     "schedule": null,
++     "sort_order": 123456789,
++     "starting_balance_flag": 0,
++     "tombstone": 0,
 +     "transfer_id": "id7",
 +   },
 +   Object {
@@ -213,19 +215,23 @@ exports[`Transfer > transfers are properly de-categorized 2`] = `
 +     "id": "id7",
 +     "imported_id": null,
 +     "imported_payee": null,
++     "investment_type": null,
 +     "is_child": 0,
 +     "is_parent": 0,
 +     "main_amount": -5000,
 +     "notes": "hi",
-+     "parent_id": null,
+      "parent_id": null,
+-     "payee": "id5",
+-     "payee_name": "Non-transfer",
 +     "payee": "id2",
 +     "payee_name": "",
-+     "raw_synced_data": null,
-+     "reconciled": 0,
-+     "schedule": null,
-+     "sort_order": 123456789,
-+     "starting_balance_flag": 0,
-+     "tombstone": 0,
+      "raw_synced_data": null,
+      "reconciled": 0,
+      "schedule": null,
+      "sort_order": 123456789,
+      "starting_balance_flag": 0,
+      "tombstone": 0,
+-     "transfer_id": null,
 +     "transfer_id": "id6",
     },
   ]"
@@ -247,7 +253,7 @@ exports[`Transfer > transfers are properly de-categorized 3`] = `
       "date": 20170101,
       "error": null,
       "id": "id6",
-@@ -13,22 +13,22 @@
+@@ -14,22 +14,22 @@
       "is_child": 0,
       "is_parent": 0,
       "main_amount": 5000,
@@ -287,6 +293,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 1`] = `
     "id": "id6",
     "imported_id": null,
     "imported_payee": null,
+    "investment_type": null,
     "is_child": 0,
     "is_parent": 0,
     "main_amount": 5000,
@@ -309,7 +316,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 2`] = `
 "- First value
 + Second value
 
-@@ -23,6 +23,58 @@
+@@ -24,6 +24,60 @@
       "sort_order": 123456789,
       "starting_balance_flag": 0,
       "tombstone": 0,
@@ -326,6 +333,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 2`] = `
 +     "id": "id7",
 +     "imported_id": null,
 +     "imported_payee": null,
++     "investment_type": null,
 +     "is_child": 0,
 +     "is_parent": 0,
 +     "main_amount": 5000,
@@ -352,6 +360,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 2`] = `
 +     "id": "id8",
 +     "imported_id": null,
 +     "imported_payee": null,
++     "investment_type": null,
 +     "is_child": 0,
 +     "is_parent": 0,
 +     "main_amount": -5000,
@@ -374,7 +383,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 3`] = `
 "- First value
 + Second value
 
-@@ -3,55 +3,55 @@
+@@ -3,57 +3,57 @@
       "account": "one",
       "amount": 5000,
       "category": null,
@@ -387,6 +396,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 3`] = `
 +     "id": "id7",
       "imported_id": null,
       "imported_payee": null,
+      "investment_type": null,
       "is_child": 0,
       "is_parent": 0,
       "main_amount": 5000,
@@ -418,6 +428,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 3`] = `
 +     "id": "id6",
       "imported_id": null,
       "imported_payee": null,
+      "investment_type": null,
       "is_child": 0,
       "is_parent": 0,
       "main_amount": 5000,
@@ -440,9 +451,9 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 3`] = `
       "account": "two",
       "amount": -5000,
       "category": null,
-@@ -63,11 +63,11 @@
-      "imported_id": null,
+@@ -66,11 +66,11 @@
       "imported_payee": null,
+      "investment_type": null,
       "is_child": 0,
       "is_parent": 0,
       "main_amount": -5000,
@@ -459,7 +470,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 4`] = `
 "- First value
 + Second value
 
-@@ -13,11 +13,11 @@
+@@ -14,11 +14,11 @@
       "is_child": 0,
       "is_parent": 0,
       "main_amount": 5000,
@@ -472,7 +483,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 4`] = `
       "reconciled": 0,
       "schedule": null,
       "sort_order": 123456789,
-@@ -50,11 +50,11 @@
+@@ -52,11 +52,11 @@
       "starting_balance_flag": 0,
       "tombstone": 0,
       "transfer_id": null,
@@ -491,7 +502,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 5`] = `
 "- First value
 + Second value
 
-@@ -13,19 +13,19 @@
+@@ -14,19 +14,19 @@
       "is_child": 0,
       "is_parent": 0,
       "main_amount": 5000,
@@ -514,7 +525,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 5`] = `
       "account": "one",
       "amount": 5000,
       "category": null,
-@@ -48,33 +48,7 @@
+@@ -50,34 +50,7 @@
       "schedule": null,
       "sort_order": 123456789,
       "starting_balance_flag": 0,
@@ -532,6 +543,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 5`] = `
 -     "id": "id8",
 -     "imported_id": null,
 -     "imported_payee": null,
+-     "investment_type": null,
 -     "is_child": 0,
 -     "is_parent": 0,
 -     "main_amount": -5000,
@@ -554,7 +566,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 6`] = `
 "- First value
 + Second value
 
-@@ -13,19 +13,45 @@
+@@ -14,19 +14,46 @@
       "is_child": 0,
       "is_parent": 0,
       "main_amount": 5000,
@@ -564,13 +576,12 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 6`] = `
 -     "payee_name": "Not transferred anymore",
 +     "payee": "id3",
 +     "payee_name": "",
-      "raw_synced_data": null,
-      "reconciled": 0,
-      "schedule": null,
-      "sort_order": 123456789,
-      "starting_balance_flag": 0,
-      "tombstone": 0,
--     "transfer_id": null,
++     "raw_synced_data": null,
++     "reconciled": 0,
++     "schedule": null,
++     "sort_order": 123456789,
++     "starting_balance_flag": 0,
++     "tombstone": 0,
 +     "transfer_id": "id10",
 +   },
 +   Object {
@@ -584,6 +595,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 6`] = `
 +     "id": "id10",
 +     "imported_id": null,
 +     "imported_payee": null,
++     "investment_type": null,
 +     "is_child": 0,
 +     "is_parent": 0,
 +     "main_amount": -5000,
@@ -591,12 +603,13 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 6`] = `
 +     "parent_id": null,
 +     "payee": "id2",
 +     "payee_name": "",
-+     "raw_synced_data": null,
-+     "reconciled": 0,
-+     "schedule": null,
-+     "sort_order": 123456789,
-+     "starting_balance_flag": 0,
-+     "tombstone": 0,
+      "raw_synced_data": null,
+      "reconciled": 0,
+      "schedule": null,
+      "sort_order": 123456789,
+      "starting_balance_flag": 0,
+      "tombstone": 0,
+-     "transfer_id": null,
 +     "transfer_id": "id7",
     },
     Object {
@@ -609,7 +622,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 7`] = `
 "- First value
 + Second value
 
-@@ -3,62 +3,10 @@
+@@ -3,64 +3,10 @@
       "account": "one",
       "amount": 5000,
       "category": null,
@@ -620,6 +633,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 7`] = `
 -     "id": "id7",
 -     "imported_id": null,
 -     "imported_payee": null,
+-     "investment_type": null,
 -     "is_child": 0,
 -     "is_parent": 0,
 -     "main_amount": 5000,
@@ -646,6 +660,7 @@ exports[`Transfer > transfers are properly inserted/updated/deleted 7`] = `
 -     "id": "id10",
 -     "imported_id": null,
 -     "imported_payee": null,
+-     "investment_type": null,
 -     "is_child": 0,
 -     "is_parent": 0,
 -     "main_amount": -5000,

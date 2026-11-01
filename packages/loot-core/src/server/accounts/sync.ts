@@ -933,7 +933,9 @@ export async function matchTransactions(
             -- If both ids are set, and we didn't match earlier then skip dedup
             (imported_id IS NULL OR ? IS NULL)
             AND date >= ? AND date <= ? AND amount = ?
-            AND account = ?`,
+            AND account = ?
+            -- A change in market value isn't money that comes in or goes out
+            AND investment_type IS NOT 'market-value'`,
           [
             trans.imported_id || null,
             sevenDaysBefore,
@@ -962,7 +964,8 @@ export async function matchTransactions(
         >(
           `SELECT id, is_parent, parent_id, date, imported_id, payee, imported_payee, category, notes, reconciled, cleared, amount
           FROM v_transactions
-          WHERE date >= ? AND date <= ? AND amount = ? AND account = ?`,
+          WHERE date >= ? AND date <= ? AND amount = ? AND account = ?
+            AND investment_type IS NOT 'market-value'`,
           [sevenDaysBefore, sevenDaysAfter, trans.amount || 0, acctId],
         );
       }

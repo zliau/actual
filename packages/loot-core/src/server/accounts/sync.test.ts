@@ -107,6 +107,34 @@ describe('Account sync', () => {
     );
   });
 
+  test.each([true, false])(
+    "reconcile doesn't match a market value change (strictIdChecking: %s)",
+    async strictIdChecking => {
+      const { id } = await prepareDatabase();
+      await db.insertTransaction({
+        id: 'market-value',
+        account: id,
+        amount: 50000,
+        date: '2020-01-31',
+        notes: 'Market value 10 AAPL @ 50',
+        cleared: true,
+        investment_type: 'market-value',
+      });
+
+      await reconcileTransactions(
+        id,
+        [{ date: '2020-01-30', payee_name: 'Deposit', amount: 50000 }],
+        { strictIdChecking },
+      );
+
+      const transactions = await getAllTransactions();
+      expect(transactions.map(t => t.notes ?? t.payee_name).sort()).toEqual([
+        'Deposit',
+        'Market value 10 AAPL @ 50',
+      ]);
+    },
+  );
+
   test('reconcile title-cases the payee name by default', async () => {
     const { id } = await prepareDatabase();
 

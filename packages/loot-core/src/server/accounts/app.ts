@@ -13,6 +13,7 @@ import {
   TransactionError,
   ValidationError,
 } from '#server/errors';
+import { app as investmentsApp } from '#server/investments/app';
 import { app as mainApp } from '#server/main-app';
 import { validateCurrencyCode } from '#server/models';
 import { mutator } from '#server/mutators';
@@ -713,6 +714,19 @@ async function closeAccount({
         void db.deleteTransferPayee({ id: transferPayee.id });
       });
     } else {
+      // The balance includes the value of shares, which closing would move
+      // out as cash without selling them
+      if (account.investment) {
+        const { holdings } = await investmentsApp.handlers['holdings-get']({
+          account: id,
+        });
+        if (holdings.some(holding => holding.quantity > 0)) {
+          throw APIError(
+            'account still holds shares: sell them before closing it',
+          );
+        }
+      }
+
       if (balance !== 0 && transferAccountId == null) {
         throw APIError('balance is non-zero: transferAccountId is required');
       }

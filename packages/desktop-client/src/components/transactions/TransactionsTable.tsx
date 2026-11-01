@@ -1127,7 +1127,7 @@ const Transaction = memo(function Transaction({
   dateFormat = 'MM/dd/yyyy',
   hideFraction,
   onSave,
-  onEdit,
+  onEdit: onEditProp,
   onDelete,
   onBatchDelete,
   onBatchDuplicate,
@@ -1178,6 +1178,13 @@ const Transaction = memo(function Transaction({
     serializeTransaction(originalTransaction, showZeroInDeposit),
   );
   const isPreview = isPreviewId(transaction.id);
+  // Written by the account from its trades and prices, and changed there
+  const isInvestmentTransaction = !!originalTransaction.investment_type;
+  const onEdit: typeof onEditProp = (...args) => {
+    if (!isInvestmentTransaction) {
+      onEditProp(...args);
+    }
+  };
 
   if (
     originalTransaction !== prevTransaction ||
@@ -1200,6 +1207,10 @@ const Transaction = memo(function Transaction({
   const transferDateSyncSeq = useRef(0);
 
   const onUpdate: TransactionUpdateFunction = async (name, value) => {
+    if (isInvestmentTransaction) {
+      return;
+    }
+
     // Had some issues with this is called twice which is a problem now that we are showing a warning
     // modal if the transaction is locked. I added a boolean to guard against showing the modal twice.
     // I'm still not completely happy with how the cells update pre/post modal. Sometimes you have to
@@ -1653,7 +1664,7 @@ const Transaction = memo(function Transaction({
     ) : (
       <Cell width={20} />
     )
-  ) : (isPreview && isChild) || !showSelection ? (
+  ) : (isPreview && isChild) || !showSelection || isInvestmentTransaction ? (
     <Cell width={20} />
   ) : (
     <SelectCell
@@ -2201,6 +2212,13 @@ const Transaction = memo(function Transaction({
         ref={rowRef}
         {...dragProps}
         {...(pulse && { 'data-pulse': true })}
+        title={
+          isInvestmentTransaction
+            ? t(
+                'Actual writes this from your trades and prices. To change it, edit them in Holdings.',
+              )
+            : undefined
+        }
         style={{
           backgroundColor: selected
             ? theme.tableRowBackgroundHighlight
@@ -3692,7 +3710,7 @@ export const TransactionTable = forwardRef(
           ]
         : fields;
 
-      if (item?.id && isPreviewId(item.id)) {
+      if ((item?.id && isPreviewId(item.id)) || item?.investment_type) {
         fields = ['select'];
       }
       if (item?.id && isTemporaryId(item.id)) {

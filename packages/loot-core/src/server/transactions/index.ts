@@ -37,6 +37,24 @@ async function getTransactionsByIds(
   );
 }
 
+async function withoutInvestmentTransactions<T extends { id?: string }>(
+  transactions: T[] | undefined,
+): Promise<T[] | undefined> {
+  if (!transactions?.length) {
+    return transactions;
+  }
+  const ids = transactions.flatMap(({ id }) => (id ? [id] : []));
+  const locked = await db.all<Pick<db.DbTransaction, 'id'>>(
+    `SELECT id FROM transactions
+     WHERE ${whereIn(ids, 'id')} AND investment_type IS NOT NULL`,
+  );
+  if (locked.length === 0) {
+    return transactions;
+  }
+  const lockedIds = new Set(locked.map(row => row.id));
+  return transactions.filter(({ id }) => !id || !lockedIds.has(id));
+}
+
 export async function batchUpdateTransactions({
   added,
   deleted,
@@ -49,6 +67,10 @@ export async function batchUpdateTransactions({
   detectOrphanPayees?: boolean;
   runTransfers?: boolean;
 }) {
+  // What investment accounts write is only changed through their trades
+  updated = await withoutInvestmentTransactions(updated);
+  deleted = await withoutInvestmentTransactions(deleted);
+
   // Track the ids of each type of transaction change (see below for why)
   let addedIds = [];
   const updatedIds = updated ? updated.map(u => u.id) : [];
@@ -92,7 +114,8 @@ export async function batchUpdateTransactions({
           if (t.is_parent || account?.offbudget === 1) {
             t.category = null;
           }
-          return db.insertTransaction(t);
+          // A copy of a trade's transaction isn't tied to any trade
+          return db.insertTransaction({ ...t, investment_type: null });
         }),
       );
     }

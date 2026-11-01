@@ -1,4 +1,5 @@
 import { send } from '@actual-app/core/platform/client/connection';
+import { NOT_INVESTMENT_ACTIVITY } from '@actual-app/core/shared/investments';
 import * as monthUtils from '@actual-app/core/shared/months';
 import { q } from '@actual-app/core/shared/query';
 import type {
@@ -102,6 +103,7 @@ export function summarySpreadsheet(
         .filter({
           [conditionsOpKey]: filters,
         })
+        .filter(NOT_INVESTMENT_ACTIVITY)
         .select([
           'date',
           { amount: { $sum: '$main_amount' } },
@@ -293,6 +295,7 @@ async function calculatePercentage(
       .filter({
         [conditionsOpKey]: filters,
       })
+      .filter(NOT_INVESTMENT_ACTIVITY)
       .select([{ amount: { $sum: '$main_amount' } }]);
 
   let query = makeDivisorQuery();

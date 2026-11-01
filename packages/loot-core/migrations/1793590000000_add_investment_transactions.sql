@@ -1,0 +1,5 @@
+BEGIN TRANSACTION;
+
+ALTER TABLE transactions ADD COLUMN investment_type TEXT DEFAULT NULL;
+
+COMMIT;

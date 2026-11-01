@@ -1,4 +1,5 @@
 import { send } from '@actual-app/core/platform/client/connection';
+import { NOT_INVESTMENT_ACTIVITY } from '@actual-app/core/shared/investments';
 import * as monthUtils from '@actual-app/core/shared/months';
 import { q } from '@actual-app/core/shared/query';
 import type { RuleConditionEntity } from '@actual-app/core/types/models';
@@ -85,6 +86,7 @@ export function calendarSpreadsheet(
         .filter({
           [conditionsOpKey]: filters,
         })
+        .filter(NOT_INVESTMENT_ACTIVITY)
         .groupBy(['date'])
         .select(['date', { amount: { $sum: '$main_amount' } }]);
 

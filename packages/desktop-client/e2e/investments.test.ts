@@ -10,12 +10,15 @@ import { ConfigurationPage } from './page-models/configuration-page';
 //   Close of 120                                 value 1,200, gain +195
 //   Sell 4 AAPL @ 150 with no fee      +600.00   realized 600 - 402 = +198
 //   Left: 6 shares                               value 720, cost 603, gain +117
+//
+// The account's balance is its cash plus the value of what it holds.
 test.describe('Investment accounts', () => {
   test.describe.configure({ mode: 'serial', timeout: 120000 });
 
   let page: Page;
 
   const holdingRow = () => page.getByRole('button', { name: 'Open AAPL' });
+  const balance = () => page.getByTestId('account-balance');
 
   async function fillTrade(fields: {
     symbol?: string;
@@ -73,6 +76,8 @@ test.describe('Investment accounts', () => {
     await expect(holdingRow()).toContainText('1,000.00');
     await expect(page.getByText(/Cash.*3,995\.00/)).toBeVisible();
     await expect(page.getByText('Buy 10 AAPL @ 100')).toBeVisible();
+    await expect(page.getByText('Market value')).toBeVisible();
+    await expect(balance()).toContainText('4,995.00');
   });
 
   test('values the holding at an entered price', async () => {
@@ -86,6 +91,7 @@ test.describe('Investment accounts', () => {
     await expect(holdingRow()).toContainText('1,200.00');
     await expect(holdingRow()).toContainText('195.00');
     await expect(holdingRow()).toContainText('+19.4%');
+    await expect(balance()).toContainText('5,195.00');
   });
 
   test('refuses to sell more than is held', async () => {
@@ -109,6 +115,17 @@ test.describe('Investment accounts', () => {
     await expect(holdingRow()).toContainText('117.00');
     await expect(holdingRow()).toContainText('198.00');
     await expect(page.getByText(/Cash.*4,595\.00/)).toBeVisible();
+    await expect(balance()).toContainText('5,315.00');
+  });
+
+  test("doesn't let the register change what trades write", async () => {
+    const row = page
+      .getByTestId('row')
+      .filter({ hasText: 'Market value' })
+      .first();
+    await row.getByTestId('notes').click();
+
+    await expect(row.getByTestId('notes').locator('input')).toHaveCount(0);
   });
 
   test('removes a trade and its cash', async () => {
@@ -122,5 +139,6 @@ test.describe('Investment accounts', () => {
 
     await expect(page.getByText(/Cash.*3,995\.00/)).toBeVisible();
     await expect(holdingRow()).toContainText('1,200.00');
+    await expect(balance()).toContainText('5,195.00');
   });
 });

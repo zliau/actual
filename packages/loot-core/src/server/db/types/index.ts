@@ -238,6 +238,7 @@ export type DbTransaction = {
   acct: DbAccount['id'];
   amount: number;
   converted_amount?: number | null;
+  investment_type?: 'trade' | 'market-value' | null;
   sort_order: number;
   parent_id?: DbTransaction['id'] | null;
   category?: DbCategory['id'] | null;

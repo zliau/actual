@@ -13,6 +13,7 @@ import { spacing } from '@actual-app/components/tokens';
 import { View } from '@actual-app/components/view';
 import type { AccountEntity } from '@actual-app/core/types/models';
 import type { TransObjectLiteral } from '@actual-app/core/types/util';
+import { useQuery } from '@tanstack/react-query';
 
 import { useCloseAccountMutation } from '#accounts';
 import { AccountAutocomplete } from '#components/autocomplete/AccountAutocomplete';
@@ -26,6 +27,7 @@ import { MobileSheetPickerField } from '#components/mobile/MobileSheetPickerFiel
 import { useAccountAmountFormat } from '#hooks/useAccountAmountFormat';
 import { useAccounts } from '#hooks/useAccounts';
 import { useCategories } from '#hooks/useCategories';
+import { investmentQueries } from '#investments';
 import { pushModal } from '#modals/modalsSlice';
 import type { Modal as ModalType } from '#modals/modalsSlice';
 import { useDispatch } from '#redux';
@@ -69,6 +71,16 @@ export function CloseAccountModal({
   const dispatch = useDispatch();
   const { isNarrowWidth } = useResponsive();
   const closeAccount = useCloseAccountMutation();
+  const { data: accountHoldings } = useQuery({
+    ...investmentQueries.holdings({ account: account.id }),
+    enabled: !!account.investment,
+  });
+  // Closing would move the value of these shares out as cash without selling
+  // them, so they have to be sold first
+  const heldSymbols = (accountHoldings?.holdings ?? [])
+    .filter(holding => holding.quantity > 0)
+    .map(holding => holding.symbol);
+  const hasShares = heldSymbols.length > 0;
 
   const onSelectAccount = (accountId: string | null) => {
     setTransferAccountId(accountId ?? '');
@@ -85,6 +97,9 @@ export function CloseAccountModal({
   };
 
   const submit = () => {
+    if (hasShares) {
+      return false;
+    }
     const transferMissing = balance !== 0 && !transferAccountId;
     const categoryMissing =
       needsCategory(account, transferAccountId, accounts) && !categoryId;
@@ -140,6 +155,18 @@ export function CloseAccountModal({
     </Paragraph>
   );
 
+  const sharesIntro = (
+    <Paragraph>
+      <Trans>
+        This account still holds{' '}
+        <strong>
+          {{ symbols: heldSymbols.join(', ') } as TransObjectLiteral}
+        </strong>
+        . Sell them before closing the account, so that only cash moves out.
+      </Trans>
+    </Paragraph>
+  );
+
   const categoryIntro = (
     <Paragraph>
       <Trans>
@@ -181,7 +208,8 @@ export function CloseAccountModal({
         {({ close }) => (
           <View style={{ padding: `0 ${spacing.lg}px` }}>
             {intro}
-            {balance !== 0 && (
+            {hasShares && sharesIntro}
+            {!hasShares && balance !== 0 && (
               <View>
                 {balanceIntro}
                 <View style={{ marginBottom: spacing.lg }}>
@@ -265,7 +293,8 @@ export function CloseAccountModal({
           <View>
             {intro}
             <Form onSubmit={event => onSubmit(event, () => state.close())}>
-              {balance !== 0 && (
+              {hasShares && sharesIntro}
+              {!hasShares && balance !== 0 && (
                 <View>
                   {balanceIntro}
                   <View style={{ marginBottom: spacing.lg }}>
@@ -313,7 +342,7 @@ export function CloseAccountModal({
                 >
                   <Trans>Cancel</Trans>
                 </Button>
-                <Button type="submit" variant="primary">
+                <Button type="submit" variant="primary" isDisabled={hasShares}>
                   <Trans>Close Account</Trans>
                 </Button>
               </View>

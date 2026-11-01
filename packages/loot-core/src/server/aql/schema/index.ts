@@ -61,6 +61,9 @@ export const schema = {
     tombstone: f('boolean'),
     schedule: f('id', { ref: 'schedules' }),
     raw_synced_data: f('string'),
+    // Set on the transactions investment accounts write themselves: 'trade' or
+    // 'market-value'
+    investment_type: f('string'),
     // subtransactions is a special field added if the table has the
     // `splits: grouped` option
   },
