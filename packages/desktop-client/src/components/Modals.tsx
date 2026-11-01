@@ -41,6 +41,8 @@ import { EditUserAccess } from './modals/EditAccess';
 import { EditExchangeRateModal } from './modals/EditExchangeRateModal';
 import { EditFieldModal } from './modals/EditFieldModal';
 import { EditRuleModal } from './modals/EditRuleModal';
+import { EditSecurityPriceModal } from './modals/EditSecurityPriceModal';
+import { EditTradeModal } from './modals/EditTradeModal';
 import { EditUserFinanceApp } from './modals/EditUser';
 import { EnableBankingExternalMsgModal } from './modals/EnableBankingExternalMsgModal';
 import { EnableBankingInitialiseModal } from './modals/EnableBankingInitialiseModal';
@@ -55,6 +57,7 @@ import { GoalTemplateModal } from './modals/GoalTemplateModal';
 import { GoCardlessExternalMsgModal } from './modals/GoCardlessExternalMsgModal';
 import { GoCardlessInitialiseModal } from './modals/GoCardlessInitialiseModal';
 import { HoldBufferModal } from './modals/HoldBufferModal';
+import { HoldingDetailsModal } from './modals/HoldingDetailsModal';
 import { ImportTransactionsModal } from './modals/ImportTransactionsModal';
 import { KeyboardShortcutModal } from './modals/KeyboardShortcutModal';
 import { LoadBackupModal } from './modals/LoadBackupModal';
@@ -147,6 +150,15 @@ export function Modals() {
 
         case 'account-currency':
           return <AccountCurrencyModal key={key} {...modal.options} />;
+
+        case 'holding-details':
+          return <HoldingDetailsModal key={key} {...modal.options} />;
+
+        case 'edit-trade':
+          return <EditTradeModal key={key} {...modal.options} />;
+
+        case 'edit-security-price':
+          return <EditSecurityPriceModal key={key} {...modal.options} />;
 
         case 'exchange-rates':
           return <ExchangeRatesModal key={key} {...modal.options} />;

@@ -5,13 +5,18 @@ import { mutator } from '#server/mutators';
 import { batchMessages } from '#server/sync';
 import { undoable } from '#server/undo';
 import {
+  calculateHolding,
   getExchangeCurrency,
+  getSecurityId,
   getTradeCashAmount,
   isSecurityExchange,
+  isValidSymbol,
+  normalizeSymbol,
   sellsMoreThanHeld,
 } from '#shared/investments';
-import { isValidYearMonthDay } from '#shared/months';
+import { currentDay, isValidYearMonthDay } from '#shared/months';
 import type {
+  AccountHoldings,
   SecurityEntity,
   SecurityExchange,
   SecurityPriceEntity,
@@ -29,6 +34,7 @@ export type InvestmentsHandlers = {
   'trade-create': typeof createTrade;
   'trade-update': typeof updateTrade;
   'trade-delete': typeof deleteTrade;
+  'holdings-get': typeof getHoldings;
 };
 
 export const app = createApp<InvestmentsHandlers>();
@@ -41,8 +47,7 @@ app.method('trades-get', getTrades);
 app.method('trade-create', mutator(undoable(createTrade)));
 app.method('trade-update', mutator(undoable(updateTrade)));
 app.method('trade-delete', mutator(undoable(deleteTrade)));
-
-const SYMBOL = /^[A-Z0-9][A-Z0-9.-]{0,14}$/;
+app.method('holdings-get', getHoldings);
 
 type TradeFields = Pick<
   TradeEntity,
@@ -90,9 +95,7 @@ async function getSecurities(): Promise<SecurityEntity[]> {
   return rows.map(fromDbSecurity);
 }
 
-// Adds a security, or updates the name of the one already stored. The id comes
-// from the exchange and symbol so devices adding the same security while they
-// can't sync end up with one row.
+// Adds a security, or updates the name of the one already stored
 async function createSecurity({
   symbol,
   exchange,
@@ -102,8 +105,8 @@ async function createSecurity({
   exchange: SecurityExchange;
   name?: string | null | undefined;
 }): Promise<SecurityEntity['id']> {
-  const normalizedSymbol = symbol.trim().toUpperCase();
-  if (!SYMBOL.test(normalizedSymbol)) {
+  const normalizedSymbol = normalizeSymbol(symbol);
+  if (!isValidSymbol(normalizedSymbol)) {
     throw new ValidationError(`security has invalid symbol '${symbol}'`);
   }
   if (!isSecurityExchange(exchange)) {
@@ -112,7 +115,7 @@ async function createSecurity({
     );
   }
 
-  const id = `${exchange}-${normalizedSymbol}`;
+  const id = getSecurityId(exchange, normalizedSymbol);
   const existing = await db.first<Pick<db.DbSecurity, 'id'>>(
     'SELECT id FROM securities WHERE id = ?',
     [id],
@@ -350,6 +353,57 @@ async function deleteTrade({ id }: Pick<TradeEntity, 'id'>): Promise<void> {
     }
     await db.delete_('trades', id);
   });
+}
+
+// Every security the account has traded, sold out ones included since their
+// realized gains still count
+async function getHoldings({
+  account,
+}: {
+  account: TradeEntity['account'];
+}): Promise<AccountHoldings> {
+  const [trades, securities, latestPrices, balance] = await Promise.all([
+    getTrades({ account }),
+    db.all<db.DbSecurity>('SELECT * FROM securities'),
+    // SQLite takes the other columns from the row with the latest date
+    db.all<Pick<db.DbSecurityPrice, 'security' | 'date' | 'close'>>(
+      `SELECT security, MAX(date) AS date, close FROM security_prices
+       WHERE tombstone = 0 AND date <= ?
+       GROUP BY security`,
+      [db.toDateRepr(currentDay())],
+    ),
+    db.first<{ cash: number | null }>(
+      `SELECT SUM(amount) AS cash FROM transactions
+       WHERE acct = ? AND isParent = 0 AND tombstone = 0`,
+      [account],
+    ),
+  ]);
+
+  const holdings = securities.flatMap(security => {
+    const securityTrades = trades.filter(
+      trade => trade.security === security.id,
+    );
+    if (securityTrades.length === 0) {
+      return [];
+    }
+    const latest = latestPrices.find(price => price.security === security.id);
+    return [
+      calculateHolding(
+        fromDbSecurity(security),
+        securityTrades,
+        latest && { date: db.fromDateRepr(latest.date), close: latest.close },
+      ),
+    ];
+  });
+
+  return {
+    holdings: holdings.sort(
+      (a, b) =>
+        Number(b.quantity > 0) - Number(a.quantity > 0) ||
+        a.symbol.localeCompare(b.symbol),
+    ),
+    cash: balance?.cash ?? 0,
+  };
 }
 
 async function getStoredTrade(id: TradeEntity['id']): Promise<TradeEntity> {

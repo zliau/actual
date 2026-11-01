@@ -19,6 +19,7 @@
     "#accounts": "./src/accounts/index.ts",
     "#budget": "./src/budget/index.ts",
     "#exchange-rates": "./src/exchange-rates/index.ts",
+    "#investments": "./src/investments/index.ts",
     "#payees": "./src/payees/index.ts",
     "#queries": "./src/queries/index.ts",
     "#redux": "./src/redux/index.ts",

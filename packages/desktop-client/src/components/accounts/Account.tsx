@@ -97,6 +97,7 @@ import { updateNewTransactions } from '#transactions/transactionsSlice';
 
 import { AccountEmptyMessage } from './AccountEmptyMessage';
 import { AccountHeader } from './Header';
+import { Holdings } from './Holdings';
 
 type ConditionEntity = Partial<RuleConditionEntity> | TransactionFilterEntity;
 
@@ -2013,6 +2014,8 @@ class AccountInternal extends PureComponent<
                 onMakeAsNonSplitTransactions={this.onMakeAsNonSplitTransactions}
                 onMergeTransactions={this.onMergeTransactions}
               />
+
+              {account?.investment === 1 && <Holdings account={account} />}
 
               <View style={{ flex: 1 }}>
                 <TransactionList

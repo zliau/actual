@@ -61,6 +61,7 @@ type CreateAccountPayload = {
   balance: number;
   offBudget: boolean;
   currency?: AccountEntity['currency'];
+  investment?: boolean;
 };
 
 export function useCreateAccountMutation() {
@@ -74,12 +75,14 @@ export function useCreateAccountMutation() {
       balance,
       offBudget,
       currency,
+      investment,
     }: CreateAccountPayload) => {
       const id = await send('account-create', {
         name,
         balance,
         offBudget,
         currency,
+        investment,
       });
       return id;
     },

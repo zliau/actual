@@ -2,7 +2,11 @@ import { app as accountsApp } from '#server/accounts/app';
 import * as db from '#server/db';
 import { loadMappings } from '#server/db/mappings';
 import { app } from '#server/investments/app';
-import { getTradeCashAmount, sellsMoreThanHeld } from '#shared/investments';
+import {
+  calculateHolding,
+  getTradeCashAmount,
+  sellsMoreThanHeld,
+} from '#shared/investments';
 
 beforeEach(async () => {
   await global.emptyDatabase()();
@@ -463,6 +467,198 @@ describe('investments app', () => {
       await db.deleteAccount({ id: account });
 
       expect(await app.handlers['trades-get']({ security })).toEqual([]);
+    });
+  });
+});
+
+// The clock in tests is fixed at 2017-01-01
+describe('holdings-get', () => {
+  it('values each holding and adds up the cash', async () => {
+    const account = await createInvestmentAccount();
+    const security = await createAapl();
+    const other = await app.handlers['security-create']({
+      symbol: 'MSFT',
+      exchange: 'US',
+    });
+    const create = app.handlers['trade-create'];
+    await create({
+      account,
+      security,
+      date: '2016-01-02',
+      type: 'buy',
+      quantity: 10,
+      price: 100,
+      fee: 500,
+    });
+    await create({
+      account,
+      security: other,
+      date: '2016-01-02',
+      type: 'buy',
+      quantity: 1,
+      price: 50,
+    });
+    await create({
+      account,
+      security: other,
+      date: '2016-01-03',
+      type: 'sell',
+      quantity: 1,
+      price: 60,
+    });
+    await app.handlers['security-price-set']({
+      security,
+      date: '2016-02-01',
+      close: 120,
+    });
+    await app.handlers['security-price-set']({
+      security,
+      date: '2016-01-15',
+      close: 110,
+    });
+
+    const { holdings, cash } = await app.handlers['holdings-get']({ account });
+
+    expect(cash).toBe(-100500 - 5000 + 6000);
+    expect(holdings).toEqual([
+      expect.objectContaining({
+        symbol: 'AAPL',
+        quantity: 10,
+        averageCost: 100.5,
+        costBasis: 100500,
+        price: 120,
+        priceDate: '2016-02-01',
+        marketValue: 120000,
+        unrealizedGain: 19500,
+        realizedGain: 0,
+      }),
+      expect.objectContaining({
+        symbol: 'MSFT',
+        quantity: 0,
+        marketValue: 0,
+        realizedGain: 1000,
+      }),
+    ]);
+  });
+
+  it('only uses trades and prices of the account and past days', async () => {
+    const account = await createInvestmentAccount();
+    const otherAccount = await accountsApp.handlers['account-create']({
+      name: 'Other',
+      currency: 'USD',
+      investment: true,
+    });
+    const security = await createAapl();
+    const trade = {
+      security,
+      date: '2016-01-02',
+      type: 'buy' as const,
+      quantity: 1,
+      price: 100,
+    };
+    await app.handlers['trade-create']({ ...trade, account });
+    await app.handlers['trade-create']({
+      ...trade,
+      account: otherAccount,
+      quantity: 5,
+    });
+    await app.handlers['security-price-set']({
+      security,
+      date: '2999-01-01',
+      close: 999,
+    });
+
+    const { holdings } = await app.handlers['holdings-get']({ account });
+    expect(holdings).toEqual([
+      expect.objectContaining({ quantity: 1, price: 100 }),
+    ]);
+  });
+
+  it('has nothing for an account without trades', async () => {
+    const account = await createInvestmentAccount();
+    expect(await app.handlers['holdings-get']({ account })).toEqual({
+      holdings: [],
+      cash: 0,
+    });
+  });
+});
+
+describe('calculateHolding', () => {
+  const security = {
+    id: 'US-AAPL',
+    symbol: 'AAPL',
+    name: null,
+    currency: 'USD',
+  };
+
+  it('keeps the average cost through a partial sell', () => {
+    const holding = calculateHolding(security, [
+      { date: '2026-01-01', type: 'buy', quantity: 10, price: 100, fee: 0 },
+      { date: '2026-01-02', type: 'buy', quantity: 10, price: 200, fee: 0 },
+      { date: '2026-01-03', type: 'sell', quantity: 5, price: 300, fee: 1000 },
+    ]);
+
+    expect(holding.quantity).toBe(15);
+    expect(holding.averageCost).toBe(150);
+    expect(holding.costBasis).toBe(225000);
+    // 5 x 300 less the fee and 5 x the average of 150
+    expect(holding.realizedGain).toBe(74000);
+  });
+
+  it('applies trades in date order, whatever order they come in', () => {
+    const holding = calculateHolding(security, [
+      { date: '2026-01-02', type: 'sell', quantity: 5, price: 200, fee: 0 },
+      { date: '2026-01-01', type: 'buy', quantity: 10, price: 100, fee: 0 },
+    ]);
+
+    expect(holding.quantity).toBe(5);
+    expect(holding.realizedGain).toBe(50000);
+  });
+
+  it('counts a position as closed despite share rounding', () => {
+    const holding = calculateHolding(security, [
+      { date: '2026-01-01', type: 'buy', quantity: 0.1, price: 100, fee: 0 },
+      { date: '2026-01-01', type: 'buy', quantity: 0.2, price: 100, fee: 0 },
+      { date: '2026-01-02', type: 'sell', quantity: 0.3, price: 200, fee: 0 },
+    ]);
+
+    expect(holding).toMatchObject({
+      quantity: 0,
+      costBasis: 0,
+      averageCost: 0,
+      marketValue: 0,
+      unrealizedGain: 0,
+      unrealizedGainRatio: 0,
+      realizedGain: 3000,
+    });
+  });
+
+  it('uses the latest trade price over an older close', () => {
+    const trades = [
+      {
+        date: '2026-01-10',
+        type: 'buy' as const,
+        quantity: 2,
+        price: 100,
+        fee: 0,
+      },
+    ];
+
+    expect(
+      calculateHolding(security, trades, { date: '2026-01-01', close: 90 }),
+    ).toMatchObject({
+      price: 100,
+      priceDate: '2026-01-10',
+      marketValue: 20000,
+    });
+    expect(
+      calculateHolding(security, trades, { date: '2026-01-10', close: 110 }),
+    ).toMatchObject({
+      price: 110,
+      priceDate: '2026-01-10',
+      marketValue: 22000,
+      unrealizedGain: 2000,
+      unrealizedGainRatio: 0.1,
     });
   });
 });

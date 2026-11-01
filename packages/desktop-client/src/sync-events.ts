@@ -12,6 +12,7 @@ import {
   uploadBudget,
 } from './budgetfiles/budgetfilesSlice';
 import { exchangeRateQueries } from './exchange-rates';
+import { investmentQueries } from './investments';
 import { pushModal } from './modals/modalsSlice';
 import { addNotification } from './notifications/notificationsSlice';
 import type { Notification } from './notifications/notificationsSlice';
@@ -158,6 +159,18 @@ export function listenForSyncEvent(store: AppStore, queryClient: QueryClient) {
       if (tables.includes('exchange_rates')) {
         void queryClient.invalidateQueries({
           queryKey: exchangeRateQueries.lists(),
+        });
+      }
+
+      // Holdings include the cash in the account's transactions
+      if (
+        tables.includes('trades') ||
+        tables.includes('security_prices') ||
+        tables.includes('securities') ||
+        tables.includes('transactions')
+      ) {
+        void queryClient.invalidateQueries({
+          queryKey: investmentQueries.lists(),
         });
       }
 

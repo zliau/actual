@@ -13,6 +13,7 @@ import { Select } from '@actual-app/components/select';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
+import { isInvestmentCurrency } from '@actual-app/core/shared/investments';
 import { toRelaxedNumber } from '@actual-app/core/shared/util';
 
 import { useCreateAccountMutation } from '#accounts';
@@ -47,6 +48,15 @@ export function CreateLocalAccountModal() {
   const [currency, setCurrency] = useState('');
   const mainCurrency = useMainCurrency();
   const currencyOptions = useAccountCurrencyOptions();
+  const [isInvestment, setIsInvestment] = useState(false);
+  // An investment account trades on the exchange of its currency, so only
+  // those currencies can be chosen for one
+  const chosenCurrency = currency || mainCurrency || '';
+  const investmentCurrency = isInvestmentCurrency(chosenCurrency)
+    ? chosenCurrency
+    : mainCurrency === 'CAD'
+      ? 'CAD'
+      : 'USD';
 
   const [nameError, setNameError] = useState(null);
   const [balanceError, setBalanceError] = useState(false);
@@ -78,8 +88,9 @@ export function CreateLocalAccountModal() {
         {
           name,
           balance: toRelaxedNumber(balance),
-          offBudget: offbudget,
-          currency: currency || null,
+          offBudget: offbudget || isInvestment,
+          currency: isInvestment ? investmentCurrency : currency || null,
+          investment: isInvestment,
         },
         {
           onSuccess: id => {
@@ -149,13 +160,22 @@ export function CreateLocalAccountModal() {
                 </FormError>
               )}
 
-              {mainCurrency && (
+              {(isInvestment || mainCurrency) && (
                 <InlineField label={t('Currency')} width="100%">
                   <Select
                     aria-label={t('Currency')}
-                    value={currency}
-                    onChange={setCurrency}
-                    options={currencyOptions}
+                    value={isInvestment ? investmentCurrency : currency}
+                    onChange={code =>
+                      setCurrency(code === mainCurrency ? '' : code)
+                    }
+                    options={
+                      isInvestment
+                        ? [
+                            ['USD', t('US Dollar (US stocks)')],
+                            ['CAD', t('Canadian Dollar (Toronto stocks)')],
+                          ]
+                        : currencyOptions
+                    }
                     style={{ flex: 1 }}
                   />
                 </InlineField>
@@ -173,12 +193,36 @@ export function CreateLocalAccountModal() {
                     style={{
                       flexDirection: 'row',
                       justifyContent: 'flex-end',
+                      marginBottom: 8,
+                    }}
+                  >
+                    <Checkbox
+                      id="investment"
+                      name="investment"
+                      checked={isInvestment}
+                      onChange={() => setIsInvestment(!isInvestment)}
+                    />
+                    <label
+                      htmlFor="investment"
+                      style={{
+                        userSelect: 'none',
+                        verticalAlign: 'center',
+                      }}
+                    >
+                      <Trans>Investment account</Trans>
+                    </label>
+                  </View>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'flex-end',
                     }}
                   >
                     <Checkbox
                       id="offbudget"
                       name="offbudget"
-                      checked={offbudget}
+                      checked={offbudget || isInvestment}
+                      disabled={isInvestment}
                       onChange={() => setOffbudget(!offbudget)}
                     />
                     <label
@@ -222,7 +266,10 @@ export function CreateLocalAccountModal() {
                 </View>
               </View>
 
-              <InlineField label={t('Balance')} width="100%">
+              <InlineField
+                label={isInvestment ? t('Starting cash') : t('Balance')}
+                width="100%"
+              >
                 <Input
                   name="balance"
                   inputMode="decimal"

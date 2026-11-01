@@ -13,7 +13,10 @@ import type {
   NoteEntity,
   RuleEntity,
   ScheduleEntity,
+  SecurityEntity,
+  SecurityPriceEntity,
   SyncServerEnableBankingAccount,
+  TradeEntity,
   TransactionEntity,
   UserAccessEntity,
   UserEntity,
@@ -77,6 +80,38 @@ export type Modal =
       options: {
         transactionId: TransactionEntity['id'];
         onSave?: () => void;
+      };
+    }
+  | {
+      name: 'holding-details';
+      options: {
+        account: AccountEntity['id'];
+        security: SecurityEntity['id'];
+        symbol: string;
+        currency: string;
+        // A closed account keeps its history but takes no new trades
+        isReadOnly: boolean;
+      };
+    }
+  | {
+      name: 'edit-trade';
+      options: {
+        account: AccountEntity['id'];
+        currency: string;
+        // The trade to change, otherwise a new trade is added
+        trade?: TradeEntity;
+        // The symbol of the trade, fixed once it is stored
+        symbol?: string;
+      };
+    }
+  | {
+      name: 'edit-security-price';
+      options: {
+        security: SecurityEntity['id'];
+        symbol: string;
+        currency: string;
+        // The price to change, otherwise a new price is added
+        price?: SecurityPriceEntity;
       };
     }
   | {

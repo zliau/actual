@@ -39,3 +39,31 @@ export type TradeEntity = {
   transaction_id: string | null;
   tombstone?: boolean;
 };
+
+export type Holding = {
+  security: SecurityEntity['id'];
+  symbol: string;
+  name: string | null;
+  currency: string;
+  // 0 once everything is sold, while the realized gain still counts
+  quantity: number;
+  // Per share, in whole units of the security's currency, including fees
+  averageCost: number;
+  // In cents, like the other amounts below
+  costBasis: number;
+  // Per share, in whole units of the security's currency
+  price: number;
+  // The day of the price: of a stored close or of the latest trade
+  priceDate: string;
+  marketValue: number;
+  unrealizedGain: number;
+  // Of the cost basis, so 0.1 is a 10% gain
+  unrealizedGainRatio: number;
+  realizedGain: number;
+};
+
+export type AccountHoldings = {
+  holdings: Holding[];
+  // The account's transactions added up, in cents
+  cash: number;
+};
