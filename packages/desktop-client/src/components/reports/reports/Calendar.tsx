@@ -56,6 +56,7 @@ import { DisplayPayeeProvider } from '#hooks/useDisplayPayee';
 import { useFormat } from '#hooks/useFormat';
 import type { FormatType } from '#hooks/useFormat';
 import { useLocale } from '#hooks/useLocale';
+import { useHasForeignAccounts } from '#hooks/useMainCurrency';
 import { useMergedRefs } from '#hooks/useMergedRefs';
 import { useNavigate } from '#hooks/useNavigate';
 import { usePayees } from '#hooks/usePayees';
@@ -118,6 +119,7 @@ function CalendarInner({ widget, parameters }: CalendarInnerProps) {
   );
 
   const { data: accounts = [] } = useAccounts();
+  const showConverted = useHasForeignAccounts();
   const { data: payees = [] } = usePayees();
   const { data: { grouped: categoryGroups } = { grouped: [] } } =
     useCategories();
@@ -660,6 +662,7 @@ function CalendarInner({ widget, parameters }: CalendarInnerProps) {
                     showReconciled
                     showCleared={false}
                     showAccount
+                    showConverted={showConverted}
                     isAdding={false}
                     isNew={() => false}
                     isMatched={() => false}
