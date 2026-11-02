@@ -50,6 +50,7 @@ describe('forecast filters', () => {
       closed: 0,
       offbudget: 0,
       balance_current: 100,
+      latest_rate: 1,
     };
 
     expect(

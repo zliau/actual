@@ -16,6 +16,7 @@ export type AccountWithComputedBalance = {
   closed: number;
   offbudget: number;
   balance_current: number;
+  latest_rate: number;
 };
 
 function getAccountName(account: AccountMatchable) {
@@ -152,12 +153,23 @@ export async function getAccounts(
     balanceByAccount.set(row.account, row.balance_current ?? 0);
   }
 
+  const { data: rateRows } = await aqlQuery(
+    q('accounts').select(['id', 'latest_rate']),
+  );
+  const rateByAccount = new Map(
+    (rateRows as Array<{ id: string; latest_rate: number }>).map(row => [
+      row.id,
+      row.latest_rate,
+    ]),
+  );
+
   return selectedAccounts.map(account => ({
     id: account.id,
     name: account.name,
     closed: account.closed,
     offbudget: account.offbudget,
     balance_current: balanceByAccount.get(account.id) ?? 0,
+    latest_rate: rateByAccount.get(account.id) ?? 1,
   }));
 }
 

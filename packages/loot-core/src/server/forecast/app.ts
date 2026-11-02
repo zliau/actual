@@ -38,6 +38,7 @@ function createUnassignedForecastAccount(): AccountWithComputedBalance {
     closed: 0,
     offbudget: 0,
     balance_current: 0,
+    latest_rate: 1,
   };
 }
 

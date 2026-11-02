@@ -677,7 +677,7 @@ function UncategorizedTransactionsBanner(props) {
   }
 
   const totalUncategorizedAmount = transactions.reduce(
-    (sum, t) => sum + (t.amount ?? 0),
+    (sum, t) => sum + (t.main_amount ?? 0),
     0,
   );
 

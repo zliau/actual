@@ -19,6 +19,7 @@ const accounts: AccountWithComputedBalance[] = [
     closed: 0,
     offbudget: 0,
     balance_current: 10000,
+    latest_rate: 1,
   },
   {
     id: 'investment',
@@ -26,6 +27,7 @@ const accounts: AccountWithComputedBalance[] = [
     closed: 0,
     offbudget: 1,
     balance_current: 90000,
+    latest_rate: 1,
   },
 ];
 
