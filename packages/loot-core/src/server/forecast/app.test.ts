@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAllBudgets } from '#server/budget/base';
 import * as db from '#server/db';
 import { loadMappings } from '#server/db/mappings';
+import { handlers } from '#server/main';
 import {
   createSchedule as createScheduleBase,
   getRuleForSchedule,
@@ -134,6 +135,49 @@ afterEach(() => {
 });
 
 describe('forecast app', () => {
+  it('values a foreign account at its latest rate, like its balance', async () => {
+    await db.run(
+      'INSERT OR REPLACE INTO preferences (id, value) VALUES (?, ?)',
+      ['defaultCurrencyCode', 'EUR'],
+    );
+    const accountId = await db.insertAccount({
+      id: 'us',
+      name: 'US',
+      currency: 'USD',
+    });
+    await handlers['exchange-rate-set']({
+      date: '2024-01-01',
+      from_currency: 'USD',
+      to_currency: 'EUR',
+      rate: 0.5,
+    });
+    await db.insertTransaction({
+      id: 'deposit',
+      account: accountId,
+      amount: 1000,
+      date: '2024-01-05',
+    });
+    await handlers['exchange-rate-set']({
+      date: '2024-02-01',
+      from_currency: 'USD',
+      to_currency: 'EUR',
+      rate: 0.8,
+    });
+
+    const result = await generateForecast({
+      accountIds: [accountId],
+      startDate: '2024-01-01',
+      endDate: '2024-02-29',
+    });
+
+    const balanceByDate = Object.fromEntries(
+      result.dataPoints.map(({ date, balance }) => [date, balance]),
+    );
+    expect(balanceByDate['2024-01-04']).toBe(0);
+    expect(balanceByDate['2024-01-05']).toBe(800);
+    expect(balanceByDate['2024-02-29']).toBe(800);
+  });
+
   it('shows the real running balance for historical months', async () => {
     const accountId = await db.insertAccount({ id: 'acct', name: 'Checking' });
 

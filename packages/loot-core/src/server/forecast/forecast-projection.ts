@@ -168,7 +168,7 @@ function summarizePostedTransactions(
 
   for (const tx of accountTransactions) {
     if (tx.date < forecastStartDate) {
-      summary.startingBalance += tx.main_amount ?? tx.amount;
+      summary.startingBalance += tx.amount;
       continue;
     }
 
@@ -176,8 +176,7 @@ function summarizePostedTransactions(
       continue;
     }
 
-    summary.txsByDay[tx.date] =
-      (summary.txsByDay[tx.date] || 0) + (tx.main_amount ?? tx.amount);
+    summary.txsByDay[tx.date] = (summary.txsByDay[tx.date] || 0) + tx.amount;
   }
 
   return summary;
@@ -189,17 +188,21 @@ function buildAccountForecastDataPoints(
   scheduleOccurrencesByDay: Record<string, ScheduleOccurrenceSummary[]>,
   forecastDays: string[],
 ): ForecastDataPoint[] {
-  let runningBalance = postedTransactions.startingBalance;
+  // Posted amounts are in the account's currency and valued together at its
+  // latest rate, like its current balance. Schedule amounts are already
+  // in the main currency.
+  let postedBalance = postedTransactions.startingBalance;
+  let scheduledBalance = 0;
 
   return forecastDays.map(day => {
-    const txDelta = postedTransactions.txsByDay[day] || 0;
     const scheduleTxns = scheduleOccurrencesByDay[day] || [];
-    const scheduleDelta = scheduleTxns.reduce((sum, tx) => sum + tx.amount, 0);
-    runningBalance += txDelta + scheduleDelta;
+    postedBalance += postedTransactions.txsByDay[day] || 0;
+    scheduledBalance += scheduleTxns.reduce((sum, tx) => sum + tx.amount, 0);
 
     return {
       date: day,
-      balance: runningBalance,
+      balance:
+        Math.round(postedBalance * account.latest_rate) + scheduledBalance,
       accountId: account.id,
       accountName: account.name,
       transactions: scheduleTxns.map(scheduleTxn => ({
