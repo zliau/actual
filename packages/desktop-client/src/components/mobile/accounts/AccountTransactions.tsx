@@ -23,6 +23,7 @@ import {
 } from '#accounts';
 import { markAccountRead } from '#accounts/accountsSlice';
 import * as reconciliation from '#accounts/reconciliation';
+import { MobileHoldings } from '#components/mobile/accounts/MobileHoldings';
 import { ReconcilingBanner } from '#components/mobile/accounts/ReconcilingBanner';
 import { TransactionListWithBalances } from '#components/mobile/transactions/TransactionListWithBalances';
 import { useAccountPreviewTransactions } from '#hooks/useAccountPreviewTransactions';
@@ -309,6 +310,7 @@ function TransactionListWithPreviews({
 
   return (
     <>
+      {account.investment === 1 && <MobileHoldings account={account} />}
       {isReconciling && (
         <ReconcilingBanner
           account={account}

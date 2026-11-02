@@ -26,9 +26,11 @@ export function TradeNumberField({
           aria-label={label}
           value={value}
           onChangeValue={onChange}
-          style={{ flex: 1, textAlign: 'right', ...styles.tnum }}
+          style={{ flex: 1, minWidth: 0, textAlign: 'right', ...styles.tnum }}
         />
-        {suffix && <Text style={{ marginLeft: 8 }}>{suffix}</Text>}
+        {suffix && (
+          <Text style={{ marginLeft: 8, flexShrink: 0 }}>{suffix}</Text>
+        )}
       </View>
     </InlineField>
   );

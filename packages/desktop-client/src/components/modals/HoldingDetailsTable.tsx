@@ -62,10 +62,12 @@ export function HoldingDetailsTable({
   );
 }
 
-// The first column holds the date, and the rest share the width evenly
+// The first column holds the date, which needs a bit more room, and the rest
+// share the width evenly. The widths ignore the content so rows line up.
 export function cellStyle(index: number) {
   return {
-    flex: 1,
+    flex: index === 0 ? '1.5 1 0' : '1 1 0',
+    minWidth: 0,
     textAlign: index === 0 ? ('left' as const) : ('right' as const),
     ...styles.tnum,
   };

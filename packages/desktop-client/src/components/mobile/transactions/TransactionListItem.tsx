@@ -148,6 +148,11 @@ export function TransactionListItem({
     ? schedules.find(s => s.id === scheduleId)
     : undefined;
   const displayedNotes = notes || (isPreview ? schedule?.name : undefined);
+  // What an investment account writes has no payee, and its notes say what it
+  // is, like `Market value 10 AAPL @ 120`, so they go in the payee's place
+  const investmentTitle =
+    transaction.investment_type && !displayPayee ? notes : null;
+  const title = displayPayee || investmentTitle;
 
   const previewStatus = forceUpcoming ? 'upcoming' : categoryId;
 
@@ -230,7 +235,7 @@ export function TransactionListItem({
                   style={{
                     ...textStyle,
                     fontWeight: isAdded ? '600' : '400',
-                    ...(!displayPayee && !isPreview
+                    ...(!title && !isPreview
                       ? {
                           color: theme.pageTextLight,
                           fontStyle: 'italic',
@@ -238,7 +243,7 @@ export function TransactionListItem({
                       : {}),
                   }}
                 >
-                  {displayPayee || t('(No payee)')}
+                  {title || t('(No payee)')}
                 </TextOneLine>
               </View>
               {isPreview ? (
@@ -301,7 +306,7 @@ export function TransactionListItem({
                   </TextOneLine>
                 </View>
               )}
-              {displayedNotes && (
+              {displayedNotes && !investmentTitle && (
                 <TextOneLine
                   style={{
                     fontSize: 11,

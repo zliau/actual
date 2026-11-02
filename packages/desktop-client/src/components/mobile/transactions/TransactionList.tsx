@@ -49,7 +49,10 @@ import { useScrollListener } from '#hooks/useScrollListener';
 import { useSelectedDispatch, useSelectedItems } from '#hooks/useSelected';
 import { useTransactionBatchActions } from '#hooks/useTransactionBatchActions';
 import { useUndo } from '#hooks/useUndo';
-import { setNotificationInset } from '#notifications/notificationsSlice';
+import {
+  addNotification,
+  setNotificationInset,
+} from '#notifications/notificationsSlice';
 import { useDispatch } from '#redux';
 
 import { ROW_HEIGHT, TransactionListItem } from './TransactionListItem';
@@ -106,6 +109,7 @@ export function TransactionList({
 }: TransactionListProps) {
   const locale = useLocale();
   const { t } = useTranslation();
+  const dispatch = useDispatch();
   const sections = useMemo(() => {
     // Group by date. We can assume transactions is ordered
     const sections: {
@@ -133,11 +137,33 @@ export function TransactionList({
   const dispatchSelected = useSelectedDispatch();
   const selectedTransactions = useSelectedItems();
 
+  const onToggleCleared = (transaction: TransactionEntity) => {
+    if (!transaction.investment_type) {
+      onToggleTransactionCleared?.(transaction);
+    }
+  };
+
   const onTransactionPress: (
     transaction: TransactionEntity,
     isLongPress?: boolean,
   ) => void = useCallback(
     (transaction, isLongPress = false) => {
+      // Written by the account from its trades and prices, and changed there
+      if (transaction.investment_type) {
+        dispatch(
+          addNotification({
+            notification: {
+              id: 'investment-transaction-locked',
+              type: 'message',
+              message: t(
+                'Actual writes this from your trades and prices. To change it, edit them in Holdings.',
+              ),
+            },
+          }),
+        );
+        return;
+      }
+
       const isPreview = isPreviewId(transaction.id);
       if (!isPreview && (isLongPress || selectedTransactions.size > 0)) {
         dispatchSelected({ type: 'select', id: transaction.id });
@@ -145,7 +171,7 @@ export function TransactionList({
         onOpenTransaction?.(transaction);
       }
     },
-    [dispatchSelected, onOpenTransaction, selectedTransactions],
+    [dispatch, dispatchSelected, onOpenTransaction, selectedTransactions, t],
   );
 
   useScrollListener(
@@ -244,7 +270,7 @@ export function TransactionList({
                           isReconciling={isReconciling}
                           onPress={trans => onTransactionPress(trans)}
                           onLongPress={trans => onTransactionPress(trans, true)}
-                          onToggleCleared={onToggleTransactionCleared}
+                          onToggleCleared={onToggleCleared}
                         />
                       )}
                     </ListBoxItem>
