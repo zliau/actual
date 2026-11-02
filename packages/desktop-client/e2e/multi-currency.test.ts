@@ -284,6 +284,27 @@ test.describe('Multiple currencies', () => {
     await expectConverted([1350], [1800]);
   });
 
+  test('calendar report shows converted amounts', async () => {
+    await addAndOpenCard('Calendar card', /^Calendar$/);
+    const table = page.getByTestId('transaction-table');
+    const usRow = table.getByTestId('row').filter({ hasText: 'US' }).first();
+    const mainRow = table
+      .getByTestId('row')
+      .filter({ hasText: 'Main' })
+      .first();
+
+    await expect(usRow.getByTestId('debit')).toHaveText(/US\$\D?100[.,]00/);
+    await expect(usRow.getByTestId('converted')).toHaveText(/50[.,]00\D?€/);
+    await expect(mainRow.getByTestId('debit')).toHaveText(/100[.,]00\D?€/);
+    await expect(mainRow.getByTestId('converted')).toHaveText(/100[.,]00\D?€/);
+
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.reload();
+    await expect.poll(bodyText, { timeout: 20000 }).toMatch(/US\$\D?100[.,]00/);
+    expect(await bodyText()).toMatch(money(50));
+    await page.setViewportSize({ width: 1280, height: 720 });
+  });
+
   test('age of money report', async () => {
     await page.goto('/reports/age-of-money');
     await expect.poll(bodyText, { timeout: 20000 }).toMatch(/\d+ days?/);
