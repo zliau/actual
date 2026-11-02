@@ -441,6 +441,124 @@ createAccount({
 let accounts = await getAccounts();
 ```
 
+## Investments
+
+These methods work with [investment accounts](../accounts/investments.md). To create one, pass `investment: true` and a `currency` of `USD` or `CAD` to [`createAccount`](#createaccount).
+
+Prices, quantities and split ratios are decimals. Fees and all the amounts in a [`Holding`](#holding) are [`amount`](#primitives) integers.
+
+#### Security
+
+<StructType fields={objects.security} />
+
+#### Trade
+
+<StructType fields={objects.trade} />
+
+#### SecurityPrice
+
+<StructType fields={objects.securityPrice} />
+
+#### SecuritySplit
+
+<StructType fields={objects.securitySplit} />
+
+#### Holding
+
+<StructType fields={objects.holding} />
+
+#### Methods
+
+#### `getSecurities`
+
+<Method name="getSecurities" args={[]} returns="Promise<Security[]>" />
+
+Get all securities.
+
+#### `createSecurity`
+
+<Method name="createSecurity" args={[{ name: 'security', type: 'Security' }]} returns="Promise<id>" />
+
+Add a security, or update the name of one that is already stored. Returns its `id`, which comes from the exchange and symbol.
+
+#### `getTrades`
+
+<Method name="getTrades" args={[{ name: 'filter', type: '{ account?: id, security?: id }' }]} returns="Promise<Trade[]>" />
+
+Get trades, newest first, optionally only those of one account or security.
+
+#### `addTrade`
+
+<Method name="addTrade" args={[{ name: 'trade', type: 'Trade' }]} returns="Promise<id>" />
+
+Add a buy or a sell, and write the transaction for its cash. Selling more shares than the account holds on that date is an error, as is a security in another currency than the account.
+
+#### `updateTrade`
+
+<Method name="updateTrade" args={[{ name: 'id', type: 'id' }, { name: 'fields', type: 'object' }]} />
+
+Update the `date`, `type`, `quantity`, `price` or `fee` of a trade, along with its transaction.
+
+#### `deleteTrade`
+
+<Method name="deleteTrade" args={[{ name: 'id', type: 'id' }]} />
+
+Delete a trade and its transaction.
+
+#### `getHoldings`
+
+<Method name="getHoldings" args={[{ name: 'account', type: 'id' }]} returns="Promise<{ holdings: Holding[], cash: amount, suggestedSplits: SecuritySplit[] }>" />
+
+Get what an account holds and has sold, its cash, and any reported splits waiting for an answer.
+
+#### `getSecurityPrices`
+
+<Method name="getSecurityPrices" args={[{ name: 'security', type: 'id' }]} returns="Promise<SecurityPrice[]>" />
+
+Get the stored closing prices of a security, newest first.
+
+#### `setSecurityPrice`
+
+<Method name="setSecurityPrice" args={[{ name: 'price', type: 'SecurityPrice' }]} returns="Promise<id>" />
+
+Store the closing price of a security for a day, replacing any price already stored for it. A price stored this way is not replaced by a fetched one.
+
+#### `deleteSecurityPrice`
+
+<Method name="deleteSecurityPrice" args={[{ name: 'id', type: 'id' }]} />
+
+Delete a stored price.
+
+#### `updateSecurityPrices`
+
+<Method name="updateSecurityPrices" args={[]} returns="Promise<object>" />
+
+Fetch the closing prices that held securities are missing through the sync server. Returns how many were stored as `count`, and any problems. This needs a connection to a server with [price updates set up](../accounts/investments.md#setting-up-price-updates).
+
+#### `getSecuritySplits`
+
+<Method name="getSecuritySplits" args={[{ name: 'security', type: 'id' }]} returns="Promise<SecuritySplit[]>" />
+
+Get the splits of a security that are confirmed or waiting for an answer, newest first.
+
+#### `setSecuritySplit`
+
+<Method name="setSecuritySplit" args={[{ name: 'split', type: 'SecuritySplit' }]} returns="Promise<id>" />
+
+Enter a split, or apply a suggested one. It is an error if this leaves a later sell with more shares than are held.
+
+#### `dismissSecuritySplit`
+
+<Method name="dismissSecuritySplit" args={[{ name: 'id', type: 'id' }]} />
+
+Ignore a suggested split, so it is not suggested again.
+
+#### `deleteSecuritySplit`
+
+<Method name="deleteSecuritySplit" args={[{ name: 'id', type: 'id' }]} />
+
+Delete a split. It is an error if this leaves a later sell with more shares than are held.
+
 ## Account Groups
 
 ### Account Group

@@ -18,6 +18,15 @@ import type {
 import type { BudgetFileHandlers } from '#server/budgetfiles/app';
 import type { batchUpdateTransactions } from '#server/transactions';
 import type { QueryState } from '#shared/query';
+import type {
+  AccountHoldings,
+  SecurityEntity,
+  SecurityExchange,
+  SecurityPriceEntity,
+  SecuritySplitEntity,
+  TradeEntity,
+  UpdateSecurityPricesResult,
+} from '#types/models';
 
 import type {
   AccountEntity,
@@ -148,6 +157,68 @@ export type ApiHandlers = {
   }) => Promise<SyncResponse>;
 
   'api/accounts-get': () => Promise<APIAccountEntity[]>;
+
+  'api/securities-get': () => Promise<SecurityEntity[]>;
+
+  'api/security-create': (arg: {
+    symbol: string;
+    exchange: SecurityExchange;
+    name?: string | null;
+  }) => Promise<SecurityEntity['id']>;
+
+  'api/security-prices-get': (arg: {
+    security: SecurityEntity['id'];
+  }) => Promise<SecurityPriceEntity[]>;
+
+  'api/security-price-set': (
+    arg: Pick<SecurityPriceEntity, 'security' | 'date' | 'close'>,
+  ) => Promise<SecurityPriceEntity['id']>;
+
+  'api/security-price-delete': (
+    arg: Pick<SecurityPriceEntity, 'id'>,
+  ) => Promise<void>;
+
+  'api/security-prices-update': () => Promise<UpdateSecurityPricesResult>;
+
+  'api/security-splits-get': (arg: {
+    security: SecurityEntity['id'];
+  }) => Promise<SecuritySplitEntity[]>;
+
+  'api/security-split-set': (
+    arg: Pick<SecuritySplitEntity, 'security' | 'date' | 'ratio'>,
+  ) => Promise<SecuritySplitEntity['id']>;
+
+  'api/security-split-dismiss': (
+    arg: Pick<SecuritySplitEntity, 'id'>,
+  ) => Promise<void>;
+
+  'api/security-split-delete': (
+    arg: Pick<SecuritySplitEntity, 'id'>,
+  ) => Promise<void>;
+
+  'api/trades-get': (
+    arg?: Partial<Pick<TradeEntity, 'account' | 'security'>>,
+  ) => Promise<TradeEntity[]>;
+
+  'api/trade-create': (
+    arg: Pick<
+      TradeEntity,
+      'account' | 'security' | 'date' | 'type' | 'quantity' | 'price'
+    > & { fee?: number },
+  ) => Promise<TradeEntity['id']>;
+
+  'api/trade-update': (arg: {
+    id: TradeEntity['id'];
+    fields: Partial<
+      Pick<TradeEntity, 'date' | 'type' | 'quantity' | 'price' | 'fee'>
+    >;
+  }) => Promise<void>;
+
+  'api/trade-delete': (arg: Pick<TradeEntity, 'id'>) => Promise<void>;
+
+  'api/holdings-get': (arg: {
+    account: APIAccountEntity['id'];
+  }) => Promise<AccountHoldings>;
 
   'api/account-create': (arg: {
     account: Omit<APIAccountEntity, 'id'>;

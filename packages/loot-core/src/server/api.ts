@@ -158,6 +158,9 @@ function validateScheduleDate(date: RecurConfig | string) {
   }
 }
 
+const SPLIT_SELLS_MORE_MESSAGE =
+  'This split would leave later sells with more shares than are held';
+
 function checkFileOpen() {
   if (!(prefs.getPrefs() || {}).id) {
     throw APIError('No budget file is open');
@@ -697,6 +700,8 @@ handlers['api/account-create'] = withMutation(async function ({
     name: account.name,
     offBudget: account.offbudget,
     closed: account.closed,
+    currency: account.currency,
+    investment: account.investment,
     // Current the API expects an amount but it really should expect
     // an integer
     balance: initialBalance != null ? integerToAmount(initialBalance) : null,
@@ -705,9 +710,93 @@ handlers['api/account-create'] = withMutation(async function ({
 
 handlers['api/account-update'] = withMutation(async function ({ id, fields }) {
   checkFileOpen();
+  // These are set when the account is created, and depend on what it holds
+  const { currency: _currency, investment: _investment, ...changes } = fields;
   // @ts-expect-error - fix me
-  return db.updateAccount({ id, ...accountModel.fromExternal(fields) });
+  return db.updateAccount({ id, ...accountModel.fromExternal(changes) });
 });
+
+handlers['api/securities-get'] = async function () {
+  checkFileOpen();
+  return handlers['securities-get']();
+};
+
+handlers['api/security-create'] = withMutation(async function (security) {
+  checkFileOpen();
+  return handlers['security-create'](security);
+});
+
+handlers['api/security-prices-get'] = async function ({ security }) {
+  checkFileOpen();
+  return handlers['security-prices-get']({ security });
+};
+
+handlers['api/security-price-set'] = withMutation(async function (price) {
+  checkFileOpen();
+  return handlers['security-price-set'](price);
+});
+
+handlers['api/security-price-delete'] = withMutation(async function ({ id }) {
+  checkFileOpen();
+  return handlers['security-price-delete']({ id });
+});
+
+handlers['api/security-prices-update'] = withMutation(async function () {
+  checkFileOpen();
+  return handlers['security-prices-update']();
+});
+
+handlers['api/security-splits-get'] = async function ({ security }) {
+  checkFileOpen();
+  return handlers['security-splits-get']({ security });
+};
+
+handlers['api/security-split-set'] = withMutation(async function (split) {
+  checkFileOpen();
+  const result = await handlers['security-split-set'](split);
+  if ('error' in result) {
+    throw APIError(SPLIT_SELLS_MORE_MESSAGE);
+  }
+  return result.id;
+});
+
+handlers['api/security-split-dismiss'] = withMutation(async function ({ id }) {
+  checkFileOpen();
+  return handlers['security-split-dismiss']({ id });
+});
+
+handlers['api/security-split-delete'] = withMutation(async function ({ id }) {
+  checkFileOpen();
+  const result = await handlers['security-split-delete']({ id });
+  if ('error' in result) {
+    throw APIError(SPLIT_SELLS_MORE_MESSAGE);
+  }
+});
+
+handlers['api/trades-get'] = async function (filter = {}) {
+  checkFileOpen();
+  return handlers['trades-get'](filter);
+};
+
+handlers['api/trade-create'] = withMutation(async function (trade) {
+  checkFileOpen();
+  return handlers['trade-create'](trade);
+});
+
+handlers['api/trade-update'] = withMutation(async function ({ id, fields }) {
+  checkFileOpen();
+  return handlers['trade-update']({ id, ...fields });
+});
+
+handlers['api/trade-delete'] = withMutation(async function ({ id }) {
+  checkFileOpen();
+  return handlers['trade-delete']({ id });
+});
+
+handlers['api/holdings-get'] = async function ({ account }) {
+  checkFileOpen();
+  return handlers['holdings-get']({ account });
+};
 
 handlers['api/account-close'] = withMutation(async function ({
   id,

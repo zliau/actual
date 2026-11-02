@@ -180,6 +180,176 @@ export const objects = {
         </span>
       ),
     },
+    {
+      name: 'currency',
+      type: 'string | null',
+      description: (
+        <span>
+          The currency code of the account, or <code>null</code> for the main
+          currency of the budget. Can only be set when creating the account.
+        </span>
+      ),
+    },
+    {
+      name: 'investment',
+      type: 'boolean',
+      description: (
+        <span>
+          Whether this is an <a href="#investments">investment account</a>. Can
+          only be set when creating the account, which then needs a{' '}
+          <code>currency</code> of <code>USD</code> or <code>CAD</code>, and is
+          always off budget.
+        </span>
+      ),
+    },
+  ],
+
+  security: [
+    { name: 'id', type: types.id, description: 'The exchange and symbol.' },
+    { name: 'symbol', type: 'string', required: true },
+    {
+      name: 'exchange',
+      type: 'string',
+      required: true,
+      description: (
+        <span>
+          <code>US</code> or <code>TSX</code>.
+        </span>
+      ),
+    },
+    { name: 'name', type: 'string | null' },
+    {
+      name: 'currency',
+      type: 'string',
+      description: 'Set by the exchange.',
+    },
+  ],
+
+  trade: [
+    { name: 'id', type: types.id },
+    { name: 'account', type: types.id, required: true },
+    { name: 'security', type: types.id, required: true },
+    { name: 'date', type: types.date, required: true },
+    {
+      name: 'type',
+      type: 'string',
+      required: true,
+      description: (
+        <span>
+          <code>buy</code> or <code>sell</code>.
+        </span>
+      ),
+    },
+    {
+      name: 'quantity',
+      type: 'number',
+      required: true,
+      description: 'The number of shares, which can be fractional.',
+    },
+    {
+      name: 'price',
+      type: 'number',
+      required: true,
+      description: (
+        <span>
+          The price per share as a decimal, so $12.50 is <code>12.5</code>.
+        </span>
+      ),
+    },
+    {
+      name: 'fee',
+      type: types.amount,
+      description: 'Optional; will default to 0.',
+    },
+    {
+      name: 'transaction_id',
+      type: 'id | null',
+      description: "The transaction that moves the trade's cash.",
+    },
+  ],
+
+  securityPrice: [
+    { name: 'id', type: types.id },
+    { name: 'security', type: types.id, required: true },
+    { name: 'date', type: types.date, required: true },
+    {
+      name: 'close',
+      type: 'number',
+      required: true,
+      description: 'The closing price per share as a decimal, as traded.',
+    },
+    {
+      name: 'source',
+      type: 'string',
+      description: (
+        <span>
+          <code>manual</code> or <code>api</code>.
+        </span>
+      ),
+    },
+  ],
+
+  securitySplit: [
+    { name: 'id', type: types.id },
+    { name: 'security', type: types.id, required: true },
+    { name: 'date', type: types.date, required: true },
+    {
+      name: 'ratio',
+      type: 'number',
+      required: true,
+      description: (
+        <span>
+          New shares for each old one: a 4-for-1 split is <code>4</code>, and a
+          1-for-10 split is <code>0.1</code>.
+        </span>
+      ),
+    },
+    {
+      name: 'status',
+      type: 'string',
+      description: (
+        <span>
+          <code>confirmed</code> or <code>suggested</code>. Only confirmed
+          splits change holdings.
+        </span>
+      ),
+    },
+  ],
+
+  holding: [
+    { name: 'security', type: types.id },
+    { name: 'symbol', type: 'string' },
+    { name: 'name', type: 'string | null' },
+    { name: 'currency', type: 'string' },
+    {
+      name: 'quantity',
+      type: 'number',
+      description: 'The shares held, which is 0 once everything is sold.',
+    },
+    {
+      name: 'averageCost',
+      type: 'number',
+      description: 'The cost per share as a decimal, including fees.',
+    },
+    { name: 'costBasis', type: types.amount },
+    {
+      name: 'price',
+      type: 'number',
+      description: 'The price per share used to value the holding.',
+    },
+    { name: 'priceDate', type: types.date },
+    { name: 'marketValue', type: types.amount },
+    { name: 'unrealizedGain', type: types.amount },
+    {
+      name: 'unrealizedGainRatio',
+      type: 'number',
+      description: (
+        <span>
+          The gain as a share of the cost, so a 10% gain is <code>0.1</code>.
+        </span>
+      ),
+    },
+    { name: 'realizedGain', type: types.amount },
   ],
 
   accountGroup: [

@@ -17,6 +17,11 @@ import type {
   ImportTransactionEntity,
   NoteEntity,
   RuleEntity,
+  SecurityEntity,
+  SecurityExchange,
+  SecurityPriceEntity,
+  SecuritySplitEntity,
+  TradeEntity,
   TransactionEntity,
 } from '@actual-app/core/types/models';
 import type { SyncedPrefs } from '@actual-app/core/types/prefs';
@@ -223,6 +228,86 @@ export function mergeTransactions(
   ids: [TransactionEntity['id'], TransactionEntity['id']],
 ) {
   return send('api/transactions-merge', { ids });
+}
+
+export function getSecurities() {
+  return send('api/securities-get');
+}
+
+export function createSecurity(security: {
+  symbol: string;
+  exchange: SecurityExchange;
+  name?: string | null;
+}) {
+  return send('api/security-create', security);
+}
+
+export function getSecurityPrices(security: SecurityEntity['id']) {
+  return send('api/security-prices-get', { security });
+}
+
+export function setSecurityPrice(
+  price: Pick<SecurityPriceEntity, 'security' | 'date' | 'close'>,
+) {
+  return send('api/security-price-set', price);
+}
+
+export function deleteSecurityPrice(id: SecurityPriceEntity['id']) {
+  return send('api/security-price-delete', { id });
+}
+
+export function updateSecurityPrices() {
+  return send('api/security-prices-update');
+}
+
+export function getSecuritySplits(security: SecurityEntity['id']) {
+  return send('api/security-splits-get', { security });
+}
+
+export function setSecuritySplit(
+  split: Pick<SecuritySplitEntity, 'security' | 'date' | 'ratio'>,
+) {
+  return send('api/security-split-set', split);
+}
+
+export function dismissSecuritySplit(id: SecuritySplitEntity['id']) {
+  return send('api/security-split-dismiss', { id });
+}
+
+export function deleteSecuritySplit(id: SecuritySplitEntity['id']) {
+  return send('api/security-split-delete', { id });
+}
+
+export function getTrades(
+  filter?: Partial<Pick<TradeEntity, 'account' | 'security'>>,
+) {
+  return send('api/trades-get', filter);
+}
+
+export function addTrade(
+  trade: Pick<
+    TradeEntity,
+    'account' | 'security' | 'date' | 'type' | 'quantity' | 'price'
+  > & { fee?: number },
+) {
+  return send('api/trade-create', trade);
+}
+
+export function updateTrade(
+  id: TradeEntity['id'],
+  fields: Partial<
+    Pick<TradeEntity, 'date' | 'type' | 'quantity' | 'price' | 'fee'>
+  >,
+) {
+  return send('api/trade-update', { id, fields });
+}
+
+export function deleteTrade(id: TradeEntity['id']) {
+  return send('api/trade-delete', { id });
+}
+
+export function getHoldings(account: APIAccountEntity['id']) {
+  return send('api/holdings-get', { account });
 }
 
 export function getAccounts() {

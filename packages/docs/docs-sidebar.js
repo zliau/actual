@@ -128,6 +128,7 @@ const sidebars = {
           },
           items: [
             'accounts/reconciliation',
+            'accounts/investments',
             {
               type: 'category',
               label: 'Importing Transactions',

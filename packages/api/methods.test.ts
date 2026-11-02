@@ -368,6 +368,72 @@ describe('API CRUD operations', () => {
   });
 
   //apis: createAccount, getAccounts, updateAccount, closeAccount, deleteAccount, reopenAccount, getAccountBalance
+  test('Investments: tracks trades, prices and splits', async () => {
+    const account = await api.createAccount(
+      { name: 'Brokerage', currency: 'USD', investment: true },
+      500000,
+    );
+    const security = await api.createSecurity({
+      symbol: 'aapl',
+      exchange: 'US',
+      name: 'Apple',
+    });
+    expect(await api.getSecurities()).toEqual([
+      expect.objectContaining({
+        id: security,
+        symbol: 'AAPL',
+        currency: 'USD',
+      }),
+    ]);
+
+    const trade = await api.addTrade({
+      account,
+      security,
+      date: '2016-10-15',
+      type: 'buy',
+      quantity: 10,
+      price: 100,
+      fee: 500,
+    });
+    await api.setSecurityPrice({ security, date: '2016-11-01', close: 120 });
+
+    const accounts = await api.getAccounts();
+    expect(accounts.find(({ id }) => id === account)).toMatchObject({
+      offbudget: true,
+      currency: 'USD',
+      investment: true,
+    });
+    // $5,000 of cash less $1,005, and 10 shares at $120
+    expect(await api.getAccountBalance(account)).toBe(399500 + 120000);
+    expect((await api.getHoldings(account)).holdings[0]).toMatchObject({
+      symbol: 'AAPL',
+      quantity: 10,
+      marketValue: 120000,
+      unrealizedGain: 19500,
+    });
+
+    const split = await api.setSecuritySplit({
+      security,
+      date: '2016-12-01',
+      ratio: 2,
+    });
+    expect((await api.getHoldings(account)).holdings[0]).toMatchObject({
+      quantity: 20,
+      price: 60,
+      marketValue: 120000,
+    });
+    await api.deleteSecuritySplit(split);
+
+    await api.updateTrade(trade, { quantity: 5 });
+    expect((await api.getTrades({ account }))[0].quantity).toBe(5);
+
+    await api.deleteTrade(trade);
+    expect(await api.getTrades({ account })).toEqual([]);
+    expect(await api.getAccountBalance(account)).toBe(500000);
+    expect(await api.getSecurityPrices(security)).toHaveLength(1);
+    expect(await api.getSecuritySplits(security)).toEqual([]);
+  });
+
   test('Accounts: successfully complete account operators', async () => {
     const accountId1 = await api.createAccount(
       { name: 'test-account1', offbudget: true },
