@@ -4,6 +4,7 @@ import { send } from '@actual-app/core/platform/client/connection';
 import type {
   SecurityExchange,
   SecurityPriceEntity,
+  SecuritySplitEntity,
   TradeEntity,
 } from '@actual-app/core/types/models';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -30,8 +31,8 @@ type SaveTradePayload =
   | ({ id: TradeEntity['id'] } & TradeFields);
 
 // Runs a change to investment data, refreshes what shows it and reports errors
-function useInvestmentMutation<Payload>(
-  mutationFn: (payload: Payload) => Promise<unknown>,
+function useInvestmentMutation<Payload, Result>(
+  mutationFn: (payload: Payload) => Promise<Result>,
   errorMessage: string,
 ) {
   const queryClient = useQueryClient();
@@ -115,5 +116,35 @@ export function useDeleteSecurityPriceMutation() {
     ({ id }: Pick<SecurityPriceEntity, 'id'>) =>
       send('security-price-delete', { id }),
     t('There was an error deleting the price. Please try again.'),
+  );
+}
+
+export function useSetSecuritySplitMutation() {
+  const { t } = useTranslation();
+
+  return useInvestmentMutation(
+    (split: Pick<SecuritySplitEntity, 'security' | 'date' | 'ratio'>) =>
+      send('security-split-set', split),
+    t('There was an error saving the split. Please try again.'),
+  );
+}
+
+export function useDismissSecuritySplitMutation() {
+  const { t } = useTranslation();
+
+  return useInvestmentMutation(
+    ({ id }: Pick<SecuritySplitEntity, 'id'>) =>
+      send('security-split-dismiss', { id }),
+    t('There was an error saving the split. Please try again.'),
+  );
+}
+
+export function useDeleteSecuritySplitMutation() {
+  const { t } = useTranslation();
+
+  return useInvestmentMutation(
+    ({ id }: Pick<SecuritySplitEntity, 'id'>) =>
+      send('security-split-delete', { id }),
+    t('There was an error deleting the split. Please try again.'),
   );
 }

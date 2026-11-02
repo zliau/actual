@@ -128,6 +128,14 @@ export const schema = {
     source: f('string'),
     tombstone: f('boolean'),
   },
+  security_splits: {
+    id: f('id'),
+    security: f('id', { ref: 'securities', required: true }),
+    date: f('date', { required: true }),
+    ratio: f('float', { required: true }),
+    status: f('string', { required: true }),
+    tombstone: f('boolean'),
+  },
   trades: {
     id: f('id'),
     account: f('id', { ref: 'accounts', required: true }),

@@ -104,6 +104,22 @@ describe('app-securities', () => {
       });
     });
 
+    it('reports a split on the day it happens', async () => {
+      vi.mocked(undici.fetch).mockResolvedValue(
+        jsonResponse(200, [
+          { date: '2026-01-02T00:00:00.000Z', close: 400, splitFactor: 1 },
+          { date: '2026-01-05T00:00:00.000Z', close: 100, splitFactor: 4 },
+        ]),
+      );
+
+      const res = await prices('US', 'AAPL');
+
+      expect(res.body.data.prices).toEqual([
+        { date: '2026-01-02', close: 400 },
+        { date: '2026-01-05', close: 100, splitFactor: 4 },
+      ]);
+    });
+
     it('writes share classes the way Tiingo does', async () => {
       vi.mocked(undici.fetch).mockResolvedValue(jsonResponse(200, []));
       await prices('US', 'BRK.B');
@@ -202,7 +218,7 @@ describe('app-securities', () => {
       },
     });
 
-    it('returns as-traded closes in the range', async () => {
+    it('returns as-traded closes and splits in the range', async () => {
       vi.mocked(undici.fetch).mockResolvedValue(jsonResponse(200, chart()));
 
       const res = await prices('TSX', 'SHOP');
@@ -210,7 +226,7 @@ describe('app-securities', () => {
       expect(res.body.data.prices).toEqual([
         { date: '2026-01-02', close: 800 },
         { date: '2026-01-05', close: 808 },
-        { date: '2026-01-06', close: 404 },
+        { date: '2026-01-06', close: 404, splitFactor: 2 },
       ]);
       expect(fetchedUrl()).toContain('/v8/finance/chart/SHOP.TO?');
       expect(fetchedUrl()).toContain('events=split');

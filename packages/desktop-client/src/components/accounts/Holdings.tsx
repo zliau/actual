@@ -26,6 +26,7 @@ import { useDispatch } from '#redux';
 import { HoldingsNumberCell as NumberCell } from './HoldingsNumberCell';
 import { HoldingsPriceUpdate } from './HoldingsPriceUpdate';
 import { HoldingsRow as Row } from './HoldingsRow';
+import { HoldingsSplitSuggestion } from './HoldingsSplitSuggestion';
 
 const COLUMNS = {
   shares: 90,
@@ -129,6 +130,10 @@ export function Holdings({ account }: HoldingsProps) {
           </Button>
         )}
       </View>
+
+      {data?.suggestedSplits.map(split => (
+        <HoldingsSplitSuggestion key={split.id} split={split} />
+      ))}
 
       <View
         style={{

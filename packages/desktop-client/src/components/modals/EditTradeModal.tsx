@@ -129,6 +129,11 @@ export function EditTradeModal({
   const otherTrades = trades.filter(
     other => other.security === security && other.id !== trade?.id,
   );
+  const { data: securitySplits = [] } = useQuery({
+    ...investmentQueries.splits({ security }),
+    enabled: security !== '',
+  });
+  const splits = securitySplits.filter(split => split.status === 'confirmed');
 
   const clearError = () => setError(null);
 
@@ -153,7 +158,7 @@ export function EditTradeModal({
     }
 
     const fields = { date, type, quantity, price, fee };
-    if (sellsMoreThanHeld([...otherTrades, fields])) {
+    if (sellsMoreThanHeld([...otherTrades, fields], splits)) {
       setError(
         t(
           "You can't sell more {{symbol}} shares than the account holds on that date.",
@@ -181,7 +186,7 @@ export function EditTradeModal({
     if (!trade) {
       return;
     }
-    if (sellsMoreThanHeld(otherTrades)) {
+    if (sellsMoreThanHeld(otherTrades, splits)) {
       setError(
         t(
           'Later sells need these {{symbol}} shares. Change or delete those sells first.',

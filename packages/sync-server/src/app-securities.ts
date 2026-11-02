@@ -32,7 +32,8 @@ const MAX_QUERY_LENGTH = 50;
 const MAX_SEARCH_RESULTS = 20;
 
 type Exchange = 'US' | 'TSX';
-type Price = { date: string; close: number };
+// `splitFactor` is only there on the day of a split
+type Price = { date: string; close: number; splitFactor?: number };
 type SearchResult = { symbol: string; name: string };
 type FailureReason =
   | 'not-configured'
@@ -75,7 +76,7 @@ app.post('/status', (_req, res) => {
 });
 
 // Returns the closes of a security from `start` to `end`, as traded. Days
-// without trading are missing.
+// without trading are missing. A split is on the first day at its new price.
 app.post('/prices', async (req, res) => {
   const { exchange, symbol, start, end } = req.body || {};
   if (
@@ -227,9 +228,13 @@ function getTiingoPrices(symbol: string, start: string, end: string) {
       if (!Array.isArray(body)) {
         throw new ProviderError('prices-unavailable');
       }
-      return (body as Array<{ date: string; close: number }>).map(row => ({
+      return (
+        body as Array<{ date: string; close: number; splitFactor?: number }>
+      ).map(row => ({
         date: row.date.slice(0, 10),
         close: row.close,
+        ...(row.splitFactor != null &&
+          row.splitFactor !== 1 && { splitFactor: row.splitFactor }),
       }));
     },
   );
@@ -335,7 +340,14 @@ async function loadYahooPrices(
     ) {
       return [];
     }
-    return [{ date, close: unadjust(date, close) }];
+    const split = splits.find(split => split.date === date);
+    return [
+      {
+        date,
+        close: unadjust(date, close),
+        ...(split && split.ratio !== 1 && { splitFactor: split.ratio }),
+      },
+    ];
   });
 }
 

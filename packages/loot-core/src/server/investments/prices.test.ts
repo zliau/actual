@@ -353,6 +353,261 @@ describe('security-close-get', () => {
   });
 });
 
+describe('splits', () => {
+  beforeEach(async () => {
+    await global.emptyDatabase()();
+    await loadMappings();
+    vi.mocked(asyncStorage.getItem).mockResolvedValue('token');
+  });
+
+  afterEach(() => {
+    delete handlers['/securities/prices'];
+    vi.mocked(asyncStorage.getItem).mockReset();
+  });
+
+  async function setUp(name = 'Brokerage') {
+    const account = await accountsApp.handlers['account-create']({
+      name,
+      currency: 'USD',
+      investment: true,
+    });
+    const security = await app.handlers['security-create']({
+      symbol: 'AAPL',
+      exchange: 'US',
+    });
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-10-15',
+      type: 'buy',
+      quantity: 10,
+      price: 100,
+    });
+    return { account, security };
+  }
+
+  const holding = async (account: string) =>
+    (await app.handlers['holdings-get']({ account })).holdings[0];
+  const balance = (account: string) =>
+    accountsApp.handlers['account-balance']({
+      id: account,
+      cutoff: new Date('2027-01-01'),
+    });
+
+  it('changes shares and average cost but not the total cost', async () => {
+    const { account, security } = await setUp();
+
+    await app.handlers['security-split-set']({
+      security,
+      date: '2016-11-01',
+      ratio: 4,
+    });
+
+    expect(await holding(account)).toMatchObject({
+      quantity: 40,
+      averageCost: 25,
+      costBasis: 100000,
+      // The last price was from before the split
+      price: 25,
+      marketValue: 100000,
+      unrealizedGain: 0,
+    });
+  });
+
+  it('keeps the value steady across a split in the price history', async () => {
+    const { account, security } = await setUp();
+    const set = app.handlers['security-price-set'];
+    await set({ security, date: '2016-10-31', close: 120 });
+    await set({ security, date: '2016-11-30', close: 30 });
+    expect((await holding(account)).marketValue).toBe(30000);
+
+    await app.handlers['security-split-set']({
+      security,
+      date: '2016-11-15',
+      ratio: 4,
+    });
+
+    expect((await holding(account)).marketValue).toBe(120000);
+    expect(await balance(account)).toBe(-100000 + 120000);
+    const transactions = await db.getTransactions(account);
+    expect(
+      transactions
+        .filter(t => t.investment_type === 'market-value')
+        .map(t => t.amount),
+    ).toEqual([120000]);
+  });
+
+  it('applies to every account holding the security', async () => {
+    const { account, security } = await setUp();
+    const other = await accountsApp.handlers['account-create']({
+      name: 'Other',
+      currency: 'USD',
+      investment: true,
+    });
+    await app.handlers['trade-create']({
+      account: other,
+      security,
+      date: '2016-10-15',
+      type: 'buy',
+      quantity: 1,
+      price: 100,
+    });
+
+    await app.handlers['security-split-set']({
+      security,
+      date: '2016-11-01',
+      ratio: 2,
+    });
+
+    expect((await holding(account)).quantity).toBe(20);
+    expect((await holding(other)).quantity).toBe(2);
+  });
+
+  it('allows selling the extra shares, and refuses to undo them', async () => {
+    const { account, security } = await setUp();
+    const split = await app.handlers['security-split-set']({
+      security,
+      date: '2016-11-01',
+      ratio: 2,
+    });
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-11-02',
+      type: 'sell',
+      quantity: 15,
+      price: 60,
+    });
+    expect(await holding(account)).toMatchObject({
+      quantity: 5,
+      // 15 x 60 less 15 x the average of 50
+      realizedGain: 15000,
+    });
+
+    if ('error' in split) {
+      throw new Error('The split should have been stored');
+    }
+    expect(await app.handlers['security-split-delete'](split)).toEqual({
+      error: 'sells-more-than-held',
+    });
+    expect(
+      await app.handlers['security-split-set']({
+        security,
+        date: '2016-11-01',
+        ratio: 1.2,
+      }),
+    ).toEqual({ error: 'sells-more-than-held' });
+    expect((await holding(account)).quantity).toBe(5);
+  });
+
+  it('only suggests a reported split until it is applied', async () => {
+    const { account, security } = await setUp();
+    handlers['/securities/prices'] = () => ({
+      prices: [
+        { date: '2016-10-31', close: 400 },
+        { date: '2016-11-15', close: 100, splitFactor: 4 },
+      ],
+    });
+
+    await app.handlers['security-prices-update']();
+
+    const before = await app.handlers['holdings-get']({ account });
+    expect(before.holdings[0].quantity).toBe(10);
+    expect(before.suggestedSplits).toEqual([
+      expect.objectContaining({
+        symbol: 'AAPL',
+        date: '2016-11-15',
+        ratio: 4,
+        status: 'suggested',
+      }),
+    ]);
+
+    await app.handlers['security-split-set']({
+      security,
+      date: '2016-11-15',
+      ratio: 4,
+    });
+
+    const after = await app.handlers['holdings-get']({ account });
+    expect(after.suggestedSplits).toEqual([]);
+    expect(after.holdings[0]).toMatchObject({
+      quantity: 40,
+      marketValue: 400000,
+    });
+  });
+
+  it('keeps an ignored split from coming back', async () => {
+    const { account } = await setUp();
+    handlers['/securities/prices'] = () => ({
+      prices: [{ date: '2016-11-15', close: 100, splitFactor: 4 }],
+    });
+    await app.handlers['security-prices-update']();
+    const { suggestedSplits } = await app.handlers['holdings-get']({ account });
+
+    await app.handlers['security-split-dismiss']({
+      id: suggestedSplits[0].id,
+    });
+    await db.run('DELETE FROM security_prices');
+    await app.handlers['security-prices-update']();
+
+    const after = await app.handlers['holdings-get']({ account });
+    expect(after.suggestedSplits).toEqual([]);
+    expect(after.holdings[0].quantity).toBe(10);
+  });
+
+  it('ignores a reported split on or before the first trade', async () => {
+    const { account } = await setUp();
+    handlers['/securities/prices'] = () => ({
+      prices: [{ date: '2016-10-15', close: 100, splitFactor: 4 }],
+    });
+
+    await app.handlers['security-prices-update']();
+
+    const { suggestedSplits } = await app.handlers['holdings-get']({ account });
+    expect(suggestedSplits).toEqual([]);
+  });
+
+  it('keeps fetching a security still held only thanks to a split', async () => {
+    const { account, security } = await setUp();
+    await app.handlers['security-split-set']({
+      security,
+      date: '2016-11-01',
+      ratio: 2,
+    });
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-11-02',
+      type: 'sell',
+      quantity: 15,
+      price: 60,
+    });
+    const requests: Array<{ end: string }> = [];
+    handlers['/securities/prices'] = data => {
+      requests.push(data);
+      return { prices: [] };
+    };
+
+    await app.handlers['security-prices-update']();
+
+    expect(requests[0].end).toBe('2017-01-01');
+  });
+
+  it('rejects invalid splits', async () => {
+    const { security } = await setUp();
+    const set = app.handlers['security-split-set'];
+    await expect(
+      set({ security, date: '2016-11-01', ratio: 1 }),
+    ).rejects.toThrow('ratio');
+    await expect(
+      set({ security, date: '2016-11-01', ratio: 0 }),
+    ).rejects.toThrow('ratio');
+    await expect(set({ security, date: 'soon', ratio: 2 })).rejects.toThrow(
+      'invalid date',
+    );
+  });
+});
+
 describe('getLatestClosingDay', () => {
   it.each([
     ['2026-11-03', '2026-11-02'], // Tuesday

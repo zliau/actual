@@ -1,6 +1,11 @@
 import { setNumberFormat } from '@actual-app/core/shared/util';
 
-import { formatGainRatio, formatSharePrice, formatShares } from './format';
+import {
+  formatGainRatio,
+  formatSharePrice,
+  formatShares,
+  formatSplitRatio,
+} from './format';
 
 describe('investment formats', () => {
   beforeEach(() => {
@@ -23,6 +28,12 @@ describe('investment formats', () => {
     setNumberFormat({ format: 'comma-dot', hideFraction: true });
     expect(formatShares(0.5)).toBe('0.5');
     expect(formatSharePrice(100.25)).toBe('100.25');
+  });
+
+  it('shows splits as ratios', () => {
+    expect(formatSplitRatio(4)).toBe('4 : 1');
+    expect(formatSplitRatio(1.5)).toBe('1.5 : 1');
+    expect(formatSplitRatio(0.1)).toBe('1 : 10');
   });
 
   it('signs gains and losses', () => {

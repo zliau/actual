@@ -20,6 +20,7 @@ import { useFormat } from '#hooks/useFormat';
 import {
   formatSharePrice,
   formatShares,
+  formatSplitRatio,
   investmentQueries,
 } from '#investments';
 import { pushModal } from '#modals/modalsSlice';
@@ -54,6 +55,10 @@ export function HoldingDetailsModal({
   const { data: prices = [] } = useQuery(
     investmentQueries.prices({ security }),
   );
+  const { data: allSplits = [] } = useQuery(
+    investmentQueries.splits({ security }),
+  );
+  const splits = allSplits.filter(split => split.status === 'confirmed');
   const trades = allTrades.filter(trade => trade.security === security);
 
   const showDate = (date: string) => formatDate(parseISO(date), dateFormat);
@@ -114,6 +119,52 @@ export function HoldingDetailsModal({
                       trade.fee > 0
                         ? format(trade.fee, 'financial', currency)
                         : '',
+                    ]}
+                  />
+                ))}
+              </ListTable>
+            </View>
+
+            <View style={{ gap: 8 }}>
+              <SectionHeader title={t('Splits')}>
+                <Button
+                  onPress={() =>
+                    dispatch(
+                      pushModal({
+                        modal: {
+                          name: 'edit-security-split',
+                          options: { security, symbol },
+                        },
+                      }),
+                    )
+                  }
+                >
+                  <Trans>Add split</Trans>
+                </Button>
+              </SectionHeader>
+              <ListTable
+                columns={[t('Date'), t('Ratio')]}
+                emptyMessage={t('No splits entered.')}
+              >
+                {splits.map(split => (
+                  <ListRow
+                    key={split.id}
+                    label={t('Edit split on {{date}}', {
+                      date: showDate(split.date),
+                    })}
+                    onPress={() =>
+                      dispatch(
+                        pushModal({
+                          modal: {
+                            name: 'edit-security-split',
+                            options: { security, symbol, split },
+                          },
+                        }),
+                      )
+                    }
+                    cells={[
+                      showDate(split.date),
+                      formatSplitRatio(split.ratio),
                     ]}
                   />
                 ))}

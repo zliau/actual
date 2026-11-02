@@ -24,6 +24,13 @@ export function formatSharePrice(price: number): string {
   return formatDecimal(price, 2);
 }
 
+// A split as people say it: a ratio of 4 is 4 for 1, and 0.1 is 1 for 10
+export function formatSplitRatio(ratio: number): string {
+  return ratio >= 1
+    ? `${formatDecimal(ratio, 0)} : 1`
+    : `1 : ${formatDecimal(Number((1 / ratio).toFixed(6)), 0)}`;
+}
+
 // A share of the cost as a signed percentage: 0.1 is +10.0%
 export function formatGainRatio(ratio: number): string {
   const percent = ratio * 100;

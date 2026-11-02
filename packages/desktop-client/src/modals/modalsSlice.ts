@@ -15,6 +15,7 @@ import type {
   ScheduleEntity,
   SecurityEntity,
   SecurityPriceEntity,
+  SecuritySplitEntity,
   SyncServerEnableBankingAccount,
   TradeEntity,
   TransactionEntity,
@@ -106,6 +107,15 @@ export type Modal =
         trade?: TradeEntity;
         // The symbol of the trade, fixed once it is stored
         symbol?: string;
+      };
+    }
+  | {
+      name: 'edit-security-split';
+      options: {
+        security: SecurityEntity['id'];
+        symbol: string;
+        // The split to change, otherwise a new split is added
+        split?: SecuritySplitEntity;
       };
     }
   | {

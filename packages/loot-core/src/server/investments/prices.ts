@@ -7,6 +7,7 @@ import { post } from '#server/post';
 import { getServer } from '#server/server-config';
 import { batchMessages } from '#server/sync';
 import {
+  calculateHolding,
   getPriceFetchRange,
   getSecurityId,
   isSecurityExchange,
@@ -25,6 +26,7 @@ import type {
 } from '#types/models';
 
 import { updateMarketValue } from './market-value';
+import { getConfirmedSplits, suggestSecuritySplit } from './splits';
 import { storeSecurityPrice } from './store-price';
 
 // How far back a trade's suggested price can come from, to get past weekends
@@ -77,7 +79,6 @@ type HeldSecurity = {
   exchange: SecurityExchange;
   first_trade: number;
   last_trade: number;
-  held: number;
   earliest_fetched: number | null;
   latest_fetched: number | null;
 };
@@ -229,7 +230,7 @@ export async function updateSecurityPrices(): Promise<UpdateSecurityPricesResult
   if ('count' in result && result.count > 0) {
     connection.send('sync-event', {
       type: 'success',
-      tables: ['security_prices', 'transactions'],
+      tables: ['security_prices', 'security_splits', 'transactions'],
     });
   }
 
@@ -245,7 +246,6 @@ async function fetchSecurityPrices({
     `SELECT s.id, s.symbol, s.exchange,
        MIN(t.date) AS first_trade,
        MAX(t.date) AS last_trade,
-       SUM(CASE t.type WHEN 'buy' THEN t.quantity ELSE -t.quantity END) AS held,
        (SELECT MIN(p.date) FROM security_prices p
         WHERE p.security = s.id AND p.source = 'api' AND p.tombstone = 0
        ) AS earliest_fetched,
@@ -272,6 +272,20 @@ async function fetchSecurityPrices({
       continue;
     }
 
+    // Across accounts, and with splits, since those change the shares held
+    const trades = await db.all<db.DbTrade>(
+      `SELECT t.* FROM trades t
+       JOIN accounts a ON a.id = t.account AND a.tombstone = 0 AND a.closed = 0
+       WHERE t.security = ? AND t.tombstone = 0`,
+      [security.id],
+    );
+    const { quantity } = calculateHolding(
+      { id: security.id, symbol: security.symbol, name: null, currency: '' },
+      trades.map(trade => ({ ...trade, date: db.fromDateRepr(trade.date) })),
+      undefined,
+      await getConfirmedSplits(security.id),
+    );
+
     const toDate = (date: number | null) =>
       date == null ? null : db.fromDateRepr(date);
     const range = getPriceFetchRange({
@@ -279,7 +293,7 @@ async function fetchSecurityPrices({
       lastTrade: db.fromDateRepr(security.last_trade),
       earliestFetched: toDate(security.earliest_fetched),
       latestFetched: toDate(security.latest_fetched),
-      isHeld: security.held > SHARE_EPSILON,
+      isHeld: quantity > SHARE_EPSILON,
       today,
     });
     if (!range) {
@@ -296,7 +310,7 @@ async function fetchSecurityPrices({
       continue;
     }
 
-    let prices: Array<{ date: string; close: number }>;
+    let prices: Array<{ date: string; close: number; splitFactor?: number }>;
     try {
       ({ prices } = await post(
         `${url}/prices`,
@@ -329,6 +343,17 @@ async function fetchSecurityPrices({
           source: 'api',
         });
         count++;
+      }
+      // A split on the day of the first trade is already in the trade's shares
+      const firstTrade = db.fromDateRepr(security.first_trade);
+      for (const { date, splitFactor } of prices) {
+        if (splitFactor != null && date > firstTrade) {
+          await suggestSecuritySplit({
+            security: security.id,
+            date,
+            ratio: splitFactor,
+          });
+        }
       }
     });
   }

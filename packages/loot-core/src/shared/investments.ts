@@ -3,6 +3,7 @@ import type {
   SecurityEntity,
   SecurityExchange,
   SecurityPriceEntity,
+  SecuritySplitEntity,
   TradeEntity,
 } from '#types/models';
 
@@ -74,25 +75,35 @@ export function getTradeCashAmount({
   return type === 'buy' ? -(value + fee) : value - fee;
 }
 
-// Oldest first, with buys on a day before sells on the same day
-function sortTrades<T extends Pick<TradeEntity, 'date' | 'type'>>(
+type Split = Pick<SecuritySplitEntity, 'date' | 'ratio'>;
+
+// Oldest first. A split takes effect before the market opens, so on its day it
+// comes before any trade, and buys come before sells.
+function sortEvents<T extends Pick<TradeEntity, 'date' | 'type'>>(
   trades: T[],
-): T[] {
-  return [...trades].sort(
-    (a, b) =>
-      a.date.localeCompare(b.date) ||
-      Number(a.type === 'sell') - Number(b.type === 'sell'),
-  );
+  splits: Split[],
+): Array<(T & { kind: 'trade' }) | (Split & { kind: 'split' })> {
+  const order = (event: { kind: string; type?: string }) =>
+    event.kind === 'split' ? 0 : event.type === 'buy' ? 1 : 2;
+  return [
+    ...trades.map(trade => ({ ...trade, kind: 'trade' as const })),
+    ...splits.map(split => ({ ...split, kind: 'split' as const })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || order(a) - order(b));
 }
 
 // Whether a security's trades ever sell more shares than are held at that
-// point. Buys on a day count before sells on the same day.
+// point, once its splits are counted.
 export function sellsMoreThanHeld(
   trades: Array<Pick<TradeEntity, 'date' | 'type' | 'quantity'>>,
+  splits: Split[] = [],
 ): boolean {
   let held = 0;
-  for (const trade of sortTrades(trades)) {
-    held += trade.type === 'buy' ? trade.quantity : -trade.quantity;
+  for (const event of sortEvents(trades, splits)) {
+    if (event.kind === 'split') {
+      held *= event.ratio;
+    } else {
+      held += event.type === 'buy' ? event.quantity : -event.quantity;
+    }
     if (held < -SHARE_EPSILON) {
       return true;
     }
@@ -102,43 +113,53 @@ export function sellsMoreThanHeld(
 
 // Works out a position from all of a security's trades, using average cost: a
 // buy adds its value and fee to the cost, and a sell takes out its share of the
-// cost at the average. The price is the latest close, or the latest trade's
-// price when that is newer.
+// cost at the average. A split changes the shares but not the cost. The price is
+// the latest close, or the latest trade's price when that is newer, adjusted for
+// any split since then.
 export function calculateHolding(
   security: Pick<SecurityEntity, 'id' | 'symbol' | 'name' | 'currency'>,
   trades: Array<
     Pick<TradeEntity, 'date' | 'type' | 'quantity' | 'price' | 'fee'>
   >,
   latestPrice?: Pick<SecurityPriceEntity, 'date' | 'close'>,
+  splits: Split[] = [],
 ): Holding {
-  const sorted = sortTrades(trades);
-
   let quantity = 0;
   let costBasis = 0;
   let realizedGain = 0;
-  for (const trade of sorted) {
-    const value = amountToInteger(trade.quantity * trade.price);
-    if (trade.type === 'buy') {
-      quantity += trade.quantity;
-      costBasis += value + trade.fee;
+  let lastTrade: (typeof trades)[number] | undefined;
+  for (const event of sortEvents(trades, splits)) {
+    if (event.kind === 'split') {
+      quantity *= event.ratio;
     } else {
-      const remaining = quantity - trade.quantity;
-      const isSoldOut = remaining < SHARE_EPSILON;
-      const costSold = isSoldOut
-        ? costBasis
-        : Math.round((costBasis * trade.quantity) / quantity);
-      realizedGain += value - trade.fee - costSold;
-      costBasis -= costSold;
-      quantity = isSoldOut ? 0 : remaining;
+      lastTrade = event;
+      const value = amountToInteger(event.quantity * event.price);
+      if (event.type === 'buy') {
+        quantity += event.quantity;
+        costBasis += value + event.fee;
+      } else {
+        const remaining = quantity - event.quantity;
+        const isSoldOut = remaining < SHARE_EPSILON;
+        const costSold = isSoldOut
+          ? costBasis
+          : Math.round((costBasis * event.quantity) / quantity);
+        realizedGain += value - event.fee - costSold;
+        costBasis -= costSold;
+        quantity = isSoldOut ? 0 : remaining;
+      }
     }
   }
 
-  const lastTrade = sorted[sorted.length - 1];
   const isCloseCurrent =
     latestPrice != null &&
     (lastTrade == null || latestPrice.date >= lastTrade.date);
-  const price = isCloseCurrent ? latestPrice.close : (lastTrade?.price ?? 0);
   const priceDate = isCloseCurrent ? latestPrice.date : (lastTrade?.date ?? '');
+  // A price from before a split is for shares that have since been divided
+  const laterSplits = splits.filter(split => split.date > priceDate);
+  const price = laterSplits.reduce(
+    (adjusted, split) => adjusted / split.ratio,
+    isCloseCurrent ? latestPrice.close : (lastTrade?.price ?? 0),
+  );
 
   const marketValue = amountToInteger(quantity * price);
   const unrealizedGain = marketValue - costBasis;
@@ -178,6 +199,7 @@ export function getMarketValueChanges({
   securities,
   trades,
   prices,
+  splits = [],
   today,
 }: {
   securities: Array<
@@ -190,6 +212,7 @@ export function getMarketValueChanges({
     >
   >;
   prices: Array<Pick<SecurityPriceEntity, 'security' | 'date' | 'close'>>;
+  splits?: Array<Pick<SecuritySplitEntity, 'security' | 'date' | 'ratio'>>;
   today: string;
 }): MarketValueChange[] {
   return securities.flatMap(security => {
@@ -216,6 +239,9 @@ export function getMarketValueChanges({
         security,
         securityTrades.filter(trade => trade.date <= day),
         latestPrice,
+        splits.filter(
+          split => split.security === security.id && split.date <= day,
+        ),
       );
     };
 

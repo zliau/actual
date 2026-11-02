@@ -166,6 +166,7 @@ export function listenForSyncEvent(store: AppStore, queryClient: QueryClient) {
       if (
         tables.includes('trades') ||
         tables.includes('security_prices') ||
+        tables.includes('security_splits') ||
         tables.includes('securities') ||
         tables.includes('transactions')
       ) {

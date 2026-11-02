@@ -128,6 +128,26 @@ test.describe('Investment accounts', () => {
     await expect(row.getByTestId('notes').locator('input')).toHaveCount(0);
   });
 
+  test('records and removes a split', async () => {
+    await holdingRow().click();
+    await page.getByRole('button', { name: 'Add split' }).click();
+    await page.getByRole('textbox', { name: 'New shares' }).fill('2');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText('2 : 1')).toBeVisible();
+    await page.getByRole('button', { name: 'Close' }).click();
+
+    // The trades were on the split's day, so they count as after it: the shares
+    // stay as entered
+    await expect(holdingRow()).toContainText('720.00');
+    await expect(balance()).toContainText('5,315.00');
+
+    await holdingRow().click();
+    await page.getByRole('button', { name: /Edit the split/ }).click();
+    await page.getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByText('2 : 1')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Close' }).click();
+  });
+
   test('removes a trade and its cash', async () => {
     await holdingRow().click();
     await page

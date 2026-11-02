@@ -31,6 +31,14 @@ import {
   searchSecurities,
   updateSecurityPrices,
 } from './prices';
+import {
+  deleteSecuritySplit,
+  dismissSecuritySplit,
+  fromDbSecuritySplit,
+  getConfirmedSplits,
+  getSecuritySplits,
+  setSecuritySplit,
+} from './splits';
 import { storeSecurityPrice } from './store-price';
 
 export type InvestmentsHandlers = {
@@ -39,6 +47,10 @@ export type InvestmentsHandlers = {
   'security-prices-get': typeof getSecurityPrices;
   'security-price-set': typeof setSecurityPrice;
   'security-price-delete': typeof deleteSecurityPrice;
+  'security-splits-get': typeof getSecuritySplits;
+  'security-split-set': typeof setSecuritySplit;
+  'security-split-dismiss': typeof dismissSecuritySplit;
+  'security-split-delete': typeof deleteSecuritySplit;
   'trades-get': typeof getTrades;
   'trade-create': typeof createTrade;
   'trade-update': typeof updateTrade;
@@ -56,6 +68,10 @@ app.method('security-create', mutator(undoable(createSecurity)));
 app.method('security-prices-get', getSecurityPrices);
 app.method('security-price-set', mutator(undoable(setSecurityPrice)));
 app.method('security-price-delete', mutator(undoable(deleteSecurityPrice)));
+app.method('security-splits-get', getSecuritySplits);
+app.method('security-split-set', mutator(undoable(setSecuritySplit)));
+app.method('security-split-dismiss', mutator(undoable(dismissSecuritySplit)));
+app.method('security-split-delete', mutator(undoable(deleteSecuritySplit)));
 app.method('trades-get', getTrades);
 app.method('trade-create', mutator(undoable(createTrade)));
 app.method('trade-update', mutator(undoable(updateTrade)));
@@ -263,7 +279,8 @@ async function createTrade({
   }
 
   const existing = await getTrades({ account, security });
-  if (sellsMoreThanHeld([...existing, fields])) {
+  const splits = await getConfirmedSplits(security);
+  if (sellsMoreThanHeld([...existing, fields], splits)) {
     throw new ValidationError('trade sells more shares than are held');
   }
 
@@ -303,7 +320,8 @@ async function updateTrade({
   validateTradeFields(fields);
 
   const others = await getOtherTrades(trade);
-  if (sellsMoreThanHeld([...others, fields])) {
+  const splits = await getConfirmedSplits(trade.security);
+  if (sellsMoreThanHeld([...others, fields], splits)) {
     throw new ValidationError('trade sells more shares than are held');
   }
 
@@ -338,7 +356,8 @@ async function deleteTrade({ id }: Pick<TradeEntity, 'id'>): Promise<void> {
   const trade = await getStoredTrade(id);
 
   const others = await getOtherTrades(trade);
-  if (sellsMoreThanHeld(others)) {
+  const splits = await getConfirmedSplits(trade.security);
+  if (sellsMoreThanHeld(others, splits)) {
     throw new ValidationError(
       'deleting this trade would leave later sells with more shares than are held',
     );
@@ -360,23 +379,32 @@ async function getHoldings({
 }: {
   account: TradeEntity['account'];
 }): Promise<AccountHoldings> {
-  const [trades, securities, latestPrices, balance] = await Promise.all([
-    getTrades({ account }),
-    db.all<db.DbSecurity>('SELECT * FROM securities'),
-    // SQLite takes the other columns from the row with the latest date
-    db.all<Pick<db.DbSecurityPrice, 'security' | 'date' | 'close'>>(
-      `SELECT security, MAX(date) AS date, close FROM security_prices
+  const [trades, securities, latestPrices, balance, splits] = await Promise.all(
+    [
+      getTrades({ account }),
+      db.all<db.DbSecurity>('SELECT * FROM securities'),
+      // SQLite takes the other columns from the row with the latest date
+      db.all<Pick<db.DbSecurityPrice, 'security' | 'date' | 'close'>>(
+        `SELECT security, MAX(date) AS date, close FROM security_prices
        WHERE tombstone = 0 AND date <= ?
        GROUP BY security`,
-      [db.toDateRepr(currentDay())],
-    ),
-    db.first<{ cash: number | null }>(
-      `SELECT SUM(amount) AS cash FROM transactions
+        [db.toDateRepr(currentDay())],
+      ),
+      db.first<{ cash: number | null }>(
+        `SELECT SUM(amount) AS cash FROM transactions
        WHERE acct = ? AND isParent = 0 AND tombstone = 0
          AND IFNULL(investment_type, '') != 'market-value'`,
-      [account],
-    ),
-  ]);
+        [account],
+      ),
+      db.all<db.DbSecuritySplit>(
+        `SELECT * FROM security_splits
+       WHERE tombstone = 0 AND status != 'dismissed' AND date <= ?
+       ORDER BY date`,
+        [db.toDateRepr(currentDay())],
+      ),
+    ],
+  );
+  const allSplits = splits.map(fromDbSecuritySplit);
 
   const holdings = securities.flatMap(security => {
     const securityTrades = trades.filter(
@@ -391,6 +419,10 @@ async function getHoldings({
         fromDbSecurity(security),
         securityTrades,
         latest && { date: db.fromDateRepr(latest.date), close: latest.close },
+        allSplits.filter(
+          split =>
+            split.security === security.id && split.status === 'confirmed',
+        ),
       ),
     ];
   });
@@ -402,6 +434,14 @@ async function getHoldings({
         a.symbol.localeCompare(b.symbol),
     ),
     cash: balance?.cash ?? 0,
+    suggestedSplits: allSplits.flatMap(split => {
+      const holding = holdings.find(
+        ({ security }) => security === split.security,
+      );
+      return split.status === 'suggested' && holding
+        ? [{ ...split, symbol: holding.symbol }]
+        : [];
+    }),
   };
 }
 

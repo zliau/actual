@@ -4,6 +4,7 @@ import type {
   SecurityCloseResult,
   SecurityExchange,
   SecurityPriceEntity,
+  SecuritySplitEntity,
   TradeEntity,
 } from '@actual-app/core/types/models';
 import { queryOptions } from '@tanstack/react-query';
@@ -50,6 +51,14 @@ export const investmentQueries = {
       queryFn: () => send('trades-get', { account }),
       placeholderData: [],
       // Manually invalidated when trades change
+      staleTime: Infinity,
+    }),
+  splits: ({ security }: { security: string }) =>
+    queryOptions<SecuritySplitEntity[]>({
+      queryKey: [...investmentQueries.lists(), 'splits', security],
+      queryFn: () => send('security-splits-get', { security }),
+      placeholderData: [],
+      // Manually invalidated when splits change
       staleTime: Infinity,
     }),
   prices: ({ security }: { security: string }) =>

@@ -16,7 +16,7 @@ export async function updateMarketValue(account: db.DbAccount['id']) {
     return;
   }
 
-  const [trades, securities, prices, existing] = await Promise.all([
+  const [trades, securities, prices, splits, existing] = await Promise.all([
     db.all<db.DbTrade>(
       'SELECT * FROM trades WHERE account = ? AND tombstone = 0',
       [account],
@@ -29,6 +29,13 @@ export async function updateMarketValue(account: db.DbAccount['id']) {
     ),
     db.all<db.DbSecurityPrice>(
       `SELECT * FROM security_prices WHERE tombstone = 0 AND security IN (
+         SELECT security FROM trades WHERE account = ? AND tombstone = 0
+       )`,
+      [account],
+    ),
+    db.all<db.DbSecuritySplit>(
+      `SELECT * FROM security_splits
+       WHERE tombstone = 0 AND status = 'confirmed' AND security IN (
          SELECT security FROM trades WHERE account = ? AND tombstone = 0
        )`,
       [account],
@@ -56,6 +63,10 @@ export async function updateMarketValue(account: db.DbAccount['id']) {
     prices: prices.map(price => ({
       ...price,
       date: db.fromDateRepr(price.date),
+    })),
+    splits: splits.map(split => ({
+      ...split,
+      date: db.fromDateRepr(split.date),
     })),
     today: currentDay(),
   });

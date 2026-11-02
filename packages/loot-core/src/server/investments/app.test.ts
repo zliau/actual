@@ -617,6 +617,7 @@ describe('holdings-get', () => {
     expect(await app.handlers['holdings-get']({ account })).toEqual({
       holdings: [],
       cash: 0,
+      suggestedSplits: [],
     });
   });
 });

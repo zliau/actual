@@ -77,6 +77,15 @@ export type DbSecurityPrice = {
   tombstone: 1 | 0;
 };
 
+export type DbSecuritySplit = {
+  id: string;
+  security: DbSecurity['id'];
+  date: number;
+  ratio: number;
+  status: 'suggested' | 'confirmed' | 'dismissed';
+  tombstone: 1 | 0;
+};
+
 export type DbTrade = {
   id: string;
   account: DbAccount['id'];

@@ -42,6 +42,7 @@ import { EditExchangeRateModal } from './modals/EditExchangeRateModal';
 import { EditFieldModal } from './modals/EditFieldModal';
 import { EditRuleModal } from './modals/EditRuleModal';
 import { EditSecurityPriceModal } from './modals/EditSecurityPriceModal';
+import { EditSecuritySplitModal } from './modals/EditSecuritySplitModal';
 import { EditTradeModal } from './modals/EditTradeModal';
 import { EditUserFinanceApp } from './modals/EditUser';
 import { EnableBankingExternalMsgModal } from './modals/EnableBankingExternalMsgModal';
@@ -160,6 +161,9 @@ export function Modals() {
 
         case 'edit-trade':
           return <EditTradeModal key={key} {...modal.options} />;
+
+        case 'edit-security-split':
+          return <EditSecuritySplitModal key={key} {...modal.options} />;
 
         case 'edit-security-price':
           return <EditSecurityPriceModal key={key} {...modal.options} />;

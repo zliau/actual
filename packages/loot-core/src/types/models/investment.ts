@@ -22,6 +22,19 @@ export type SecurityPriceEntity = {
   tombstone?: boolean;
 };
 
+export type SecuritySplitStatus = 'suggested' | 'confirmed' | 'dismissed';
+
+export type SecuritySplitEntity = {
+  id: string;
+  security: SecurityEntity['id'];
+  date: string;
+  // New shares for each old one: a 4-for-1 split is 4, a 1-for-10 one is 0.1
+  ratio: number;
+  // Only confirmed splits change holdings
+  status: SecuritySplitStatus;
+  tombstone?: boolean;
+};
+
 export type TradeType = 'buy' | 'sell';
 
 export type TradeEntity = {
@@ -66,6 +79,8 @@ export type AccountHoldings = {
   holdings: Holding[];
   // The account's transactions added up without its market value, in cents
   cash: number;
+  // Splits a provider reported for what the account holds, waiting for an answer
+  suggestedSplits: Array<SecuritySplitEntity & { symbol: string }>;
 };
 
 export type SecuritySearchResult = {
