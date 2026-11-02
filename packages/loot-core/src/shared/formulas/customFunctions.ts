@@ -72,7 +72,8 @@ function getUserPreferences(): UserPreferences {
   if (!cachedUserPreferences) {
     // If not loaded, use defaults
     return {
-      currency: getCurrency('USD'),
+      // Budgets without a currency keep the plain dollar sign in formulas
+      currency: { ...getCurrency('USD'), symbol: '$' },
       numberFormat: 'comma-dot',
       decimalPlaces: 2,
       thousandsSeparator: ',',

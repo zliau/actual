@@ -388,7 +388,7 @@ describe('Formula-based rule actions', () => {
     const transaction = { notes: 'original' };
     action.exec(transaction);
 
-    expect(transaction.notes).toBe('$1,234,567.89');
+    expect(transaction.notes).toBe('US$1,234,567.89');
   });
 
   it('should use cached currency preferences when FORMATCURRENCY arguments are omitted', () => {
@@ -499,7 +499,7 @@ describe('Formula-based rule actions', () => {
     const transaction = { notes: 'original' };
     action.exec(transaction);
 
-    expect(transaction.notes).toBe('-$1,234,567.89');
+    expect(transaction.notes).toBe('-US$1,234,567.89');
   });
 
   it('should format currency with custom separators using FORMATCURRENCY', () => {
