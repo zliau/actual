@@ -25,6 +25,7 @@ type SaveTradePayload =
       account: TradeEntity['account'];
       symbol: string;
       exchange: SecurityExchange;
+      name?: string | null;
     } & TradeFields)
   | ({ id: TradeEntity['id'] } & TradeFields);
 
@@ -59,6 +60,20 @@ function useInvestmentMutation<Payload>(
   });
 }
 
+// Fetches the closes held securities are missing
+export function useUpdateSecurityPricesMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => send('security-prices-update'),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: investmentQueries.lists(),
+      });
+    },
+  });
+}
+
 export function useSaveTradeMutation() {
   const { t } = useTranslation();
 
@@ -68,8 +83,8 @@ export function useSaveTradeMutation() {
       return;
     }
 
-    const { symbol, exchange, ...trade } = payload;
-    const security = await send('security-create', { symbol, exchange });
+    const { symbol, exchange, name, ...trade } = payload;
+    const security = await send('security-create', { symbol, exchange, name });
     await send('trade-create', { ...trade, security });
   }, t('There was an error saving the trade. Please try again.'));
 }

@@ -24,6 +24,7 @@ import { pushModal } from '#modals/modalsSlice';
 import { useDispatch } from '#redux';
 
 import { HoldingsNumberCell as NumberCell } from './HoldingsNumberCell';
+import { HoldingsPriceUpdate } from './HoldingsPriceUpdate';
 import { HoldingsRow as Row } from './HoldingsRow';
 
 const COLUMNS = {
@@ -90,7 +91,14 @@ export function Holdings({ account }: HoldingsProps) {
         gap: 8,
       }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 15,
+        }}
+      >
         <Text style={{ fontSize: 15, fontWeight: 500 }}>
           <Trans>Holdings</Trans>
         </Text>
@@ -103,6 +111,7 @@ export function Holdings({ account }: HoldingsProps) {
           </Text>
         )}
         <View style={{ flex: 1 }} />
+        {!isReadOnly && <HoldingsPriceUpdate currency={currency} />}
         {!isReadOnly && (
           <Button
             onPress={() =>

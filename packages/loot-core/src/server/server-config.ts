@@ -11,6 +11,7 @@ type ServerConfig = {
   AKAHU_SERVER: string;
   ENABLEBANKING_SERVER: string;
   EXCHANGE_RATES_SERVER: string;
+  SECURITIES_SERVER: string;
 };
 
 let config: ServerConfig | null = null;
@@ -51,6 +52,7 @@ export function getServer(url?: string): ServerConfig | null {
         AKAHU_SERVER: joinURL(url, '/akahu'),
         ENABLEBANKING_SERVER: joinURL(url, '/enablebanking'),
         EXCHANGE_RATES_SERVER: joinURL(url, '/exchange-rates'),
+        SECURITIES_SERVER: joinURL(url, '/securities'),
       };
     } catch (error) {
       logger.warn(

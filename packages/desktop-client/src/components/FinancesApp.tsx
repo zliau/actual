@@ -14,6 +14,7 @@ import { ProtectedRoute } from '#auth/ProtectedRoute';
 import { Permissions } from '#auth/types';
 import { useAutomaticBankSync } from '#hooks/useAutomaticBankSync';
 import { useAutomaticExchangeRates } from '#hooks/useAutomaticExchangeRates';
+import { useAutomaticSecurityPrices } from '#hooks/useAutomaticSecurityPrices';
 import { useGlobalPref } from '#hooks/useGlobalPref';
 import { useLocalPref } from '#hooks/useLocalPref';
 import { useMetaThemeColor } from '#hooks/useMetaThemeColor';
@@ -120,6 +121,7 @@ export function FinancesApp() {
 
   useAutomaticBankSync();
   useAutomaticExchangeRates();
+  useAutomaticSecurityPrices();
   useNewsNotification();
 
   const init = useEffectEvent(() => {

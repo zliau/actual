@@ -67,3 +67,38 @@ export type AccountHoldings = {
   // The account's transactions added up without its market value, in cents
   cash: number;
 };
+
+export type SecuritySearchResult = {
+  symbol: string;
+  name: string;
+};
+
+// A close to suggest as a trade's price, from the day asked for or the last
+// trading day before it. `no-close` means none was found for those days.
+export type SecurityCloseResult =
+  | { date: string; close: number }
+  | {
+      error:
+        | SecurityProviderFailure
+        | 'no-close'
+        | 'no-server'
+        | 'unauthorized';
+    };
+
+export type SecurityProviderFailure =
+  | 'not-configured'
+  | 'invalid-key'
+  | 'rate-limited'
+  | 'unknown-symbol'
+  | 'prices-unavailable';
+
+export type UpdateSecurityPricesResult =
+  | { error: 'unauthorized' | 'no-server' }
+  | {
+      // How many closes were stored
+      count: number;
+      // Exchanges that couldn't be asked, and why
+      problems: Partial<Record<SecurityExchange, SecurityProviderFailure>>;
+      // Symbols the provider had nothing for
+      unavailable: string[];
+    };

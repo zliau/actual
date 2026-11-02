@@ -19,6 +19,7 @@ export const SecretName = {
   akahu_appToken: 'akahu_appToken',
   enablebanking_applicationId: 'enablebanking_applicationId',
   enablebanking_secretKey: 'enablebanking_secretKey',
+  tiingo_token: 'tiingo_token',
 };
 
 function getSecretKey(name, fileId) {

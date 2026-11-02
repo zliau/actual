@@ -25,6 +25,13 @@ import type {
 } from '#types/models';
 
 import { updateMarketValue, updateMarketValueOfHolders } from './market-value';
+import {
+  getSecurityClose,
+  getSecurityPriceStatus,
+  searchSecurities,
+  updateSecurityPrices,
+} from './prices';
+import { storeSecurityPrice } from './store-price';
 
 export type InvestmentsHandlers = {
   'securities-get': typeof getSecurities;
@@ -37,6 +44,10 @@ export type InvestmentsHandlers = {
   'trade-update': typeof updateTrade;
   'trade-delete': typeof deleteTrade;
   'holdings-get': typeof getHoldings;
+  'security-prices-update': typeof updateSecurityPrices;
+  'security-prices-status': typeof getSecurityPriceStatus;
+  'securities-search': typeof searchSecurities;
+  'security-close-get': typeof getSecurityClose;
 };
 
 export const app = createApp<InvestmentsHandlers>();
@@ -50,6 +61,10 @@ app.method('trade-create', mutator(undoable(createTrade)));
 app.method('trade-update', mutator(undoable(updateTrade)));
 app.method('trade-delete', mutator(undoable(deleteTrade)));
 app.method('holdings-get', getHoldings);
+app.method('security-prices-update', mutator(updateSecurityPrices));
+app.method('security-prices-status', getSecurityPriceStatus);
+app.method('securities-search', searchSecurities);
+app.method('security-close-get', getSecurityClose);
 
 type TradeFields = Pick<
   TradeEntity,
@@ -164,9 +179,6 @@ async function getSecurityPrices({
   return rows.map(fromDbSecurityPrice);
 }
 
-// Stores a security's close for a day, replacing the one already stored. A
-// fetched price never replaces one the user entered, so manual corrections
-// survive the next fetch.
 async function setSecurityPrice({
   security,
   date,
@@ -179,35 +191,7 @@ async function setSecurityPrice({
   validateDate('security price', date);
   validatePositive('security price', close);
 
-  // The id comes from the security and day so devices storing the same price
-  // while they can't sync end up with one row. Clearing the tombstone brings
-  // back a price that was deleted.
-  const id = `${security}-${date}`;
-  const existing = await db.first<
-    Pick<db.DbSecurityPrice, 'source' | 'tombstone'>
-  >('SELECT source, tombstone FROM security_prices WHERE id = ?', [id]);
-
-  if (existing) {
-    if (
-      source === 'api' &&
-      existing.source === 'manual' &&
-      !existing.tombstone
-    ) {
-      return id;
-    }
-    await db.update('security_prices', { id, close, source, tombstone: 0 });
-    await updateMarketValueOfHolders(security);
-    return id;
-  }
-
-  await db.insert('security_prices', {
-    id,
-    security,
-    date: db.toDateRepr(date),
-    close,
-    source,
-    tombstone: 0,
-  });
+  const id = await storeSecurityPrice({ security, date, close, source });
   await updateMarketValueOfHolders(security);
   return id;
 }

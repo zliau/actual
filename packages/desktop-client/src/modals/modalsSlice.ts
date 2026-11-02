@@ -83,6 +83,10 @@ export type Modal =
       };
     }
   | {
+      name: 'security-price-setup';
+      options: Record<string, never>;
+    }
+  | {
       name: 'holding-details';
       options: {
         account: AccountEntity['id'];

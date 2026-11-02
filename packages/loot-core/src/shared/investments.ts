@@ -17,6 +17,8 @@ export const SHARE_EPSILON = 0.000001;
 // and spending: a price change or a trade is neither
 export const NOT_INVESTMENT_ACTIVITY = { investment_type: null };
 
+const RECENT_PRICE_DAYS = 60;
+
 const EXCHANGE_CURRENCIES: Record<SecurityExchange, string> = {
   US: 'USD',
   TSX: 'CAD',
@@ -234,4 +236,78 @@ export function getMarketValueChanges({
           : [{ security: security.id, month, date, amount, quantity, price }];
       });
   });
+}
+
+// The latest day a close can be expected for: closes come out after trading
+// ends, and there is no trading on weekends
+export function getLatestClosingDay(today: string): string {
+  let day = monthUtils.subDays(today, 1);
+  while ([0, 6].includes(monthUtils.parseDate(day).getDay())) {
+    day = monthUtils.subDays(day, 1);
+  }
+  return day;
+}
+
+// The days of closes to fetch for a security, or null if it has what it needs.
+// Sold out securities only need closes up to the last trade, for the past value
+// of the account.
+export function getPriceFetchRange({
+  firstTrade,
+  lastTrade,
+  earliestFetched,
+  latestFetched,
+  isHeld,
+  today,
+}: {
+  firstTrade: string;
+  lastTrade: string;
+  earliestFetched: string | null;
+  latestFetched: string | null;
+  isHeld: boolean;
+  today: string;
+}): { start: string; end: string } | null {
+  const end = isHeld || lastTrade > today ? today : lastTrade;
+
+  if (latestFetched == null) {
+    return { start: firstTrade, end };
+  }
+
+  // A backdated trade can need older closes. Only months count, since the first
+  // close kept is usually days after the first trade.
+  if (
+    earliestFetched != null &&
+    monthUtils.monthFromDate(firstTrade) <
+      monthUtils.monthFromDate(earliestFetched)
+  ) {
+    return { start: firstTrade, end };
+  }
+
+  const isUpToDate =
+    latestFetched >= (isHeld ? getLatestClosingDay(today) : end);
+  return isUpToDate
+    ? null
+    : { start: monthUtils.addDays(latestFetched, 1), end };
+}
+
+// Keeps what valuing the account needs of a long history: the last close of each
+// month, and every close of recent days. This saves syncing thousands of rows
+// across devices when an account with years of trades is first fetched.
+export function selectPricesToStore<T extends { date: string }>(
+  prices: T[],
+  today: string,
+): T[] {
+  const recentFrom = monthUtils.subDays(today, RECENT_PRICE_DAYS);
+  const lastOfMonth = new Map<string, string>();
+  for (const { date } of prices) {
+    const month = monthUtils.monthFromDate(date);
+    const last = lastOfMonth.get(month);
+    if (last == null || date > last) {
+      lastOfMonth.set(month, date);
+    }
+  }
+  return prices.filter(
+    ({ date }) =>
+      date >= recentFrom ||
+      lastOfMonth.get(monthUtils.monthFromDate(date)) === date,
+  );
 }

@@ -80,6 +80,7 @@ import { PasswordEnableModal } from './modals/PasswordEnableModal';
 import { PayeeAutocompleteModal } from './modals/PayeeAutocompleteModal';
 import { PluggyAiInitialiseModal } from './modals/PluggyAiInitialiseModal';
 import { ScheduledTransactionMenuModal } from './modals/ScheduledTransactionMenuModal';
+import { SecurityPriceSetupModal } from './modals/SecurityPriceSetupModal';
 import { SelectLinkedAccountsModal } from './modals/SelectLinkedAccountsModal';
 import { SimpleFinInitialiseModal } from './modals/SimpleFinInitialiseModal';
 import { TrackingBalanceMenuModal } from './modals/TrackingBalanceMenuModal';
@@ -150,6 +151,9 @@ export function Modals() {
 
         case 'account-currency':
           return <AccountCurrencyModal key={key} {...modal.options} />;
+
+        case 'security-price-setup':
+          return <SecurityPriceSetupModal key={key} />;
 
         case 'holding-details':
           return <HoldingDetailsModal key={key} {...modal.options} />;

@@ -19,7 +19,10 @@ import {
   normalizeSymbol,
   sellsMoreThanHeld,
 } from '@actual-app/core/shared/investments';
-import { currentDay } from '@actual-app/core/shared/months';
+import {
+  currentDay,
+  isValidYearMonthDay,
+} from '@actual-app/core/shared/months';
 import {
   amountToInteger,
   currencyToAmount,
@@ -47,7 +50,9 @@ import {
   useSaveTradeMutation,
 } from '#investments';
 
+import { TradeCloseHint } from './TradeCloseHint';
 import { TradeNumberField as NumberField } from './TradeNumberField';
+import { TradeSymbolSearch } from './TradeSymbolSearch';
 
 type EditTradeModalProps = {
   account: TradeEntity['account'];
@@ -72,6 +77,7 @@ export function EditTradeModal({
   const [type, setType] = useState<TradeType>(trade?.type ?? 'buy');
   const [date, setDate] = useState(trade?.date ?? currentDay());
   const [symbol, setSymbol] = useState(initialSymbol ?? '');
+  const [name, setName] = useState<string | null>(null);
   const [quantityText, setQuantityText] = useState(
     trade ? formatShares(trade.quantity) : '',
   );
@@ -82,10 +88,36 @@ export function EditTradeModal({
     trade && trade.fee > 0 ? formatSharePrice(trade.fee / 100) : '',
   );
   const [error, setError] = useState<string | null>(null);
+  // Looked up once typing in the symbol is done, so each keystroke doesn't use
+  // up part of a provider's allowance
+  const [lookupSymbol, setLookupSymbol] = useState(initialSymbol ?? '');
+  const [isPriceEdited, setIsPriceEdited] = useState(false);
 
   const exchange = getCurrencyExchange(currency);
+  const normalizedLookupSymbol = normalizeSymbol(lookupSymbol);
+  const isLookupReady =
+    !trade &&
+    exchange != null &&
+    normalizedLookupSymbol === normalizeSymbol(symbol) &&
+    isValidSymbol(normalizedLookupSymbol) &&
+    isValidYearMonthDay(date) &&
+    date <= currentDay();
+  const { data: closeResult, isFetching: isLookingUpClose } = useQuery({
+    ...investmentQueries.close({
+      exchange: exchange ?? 'US',
+      symbol: normalizedLookupSymbol,
+      date,
+    }),
+    enabled: isLookupReady,
+  });
+  const close =
+    isLookupReady && closeResult && 'close' in closeResult ? closeResult : null;
+  // The close fills in the price until one is typed in
+  const shownPriceText =
+    close && !isPriceEdited ? formatSharePrice(close.close) : priceText;
+
   const quantity = parseExchangeRate(quantityText);
-  const price = parseExchangeRate(priceText);
+  const price = parseExchangeRate(shownPriceText);
   const feeAmount = feeText.trim() === '' ? 0 : currencyToAmount(feeText);
   const fee =
     feeAmount != null && feeAmount >= 0 ? amountToInteger(feeAmount) : null;
@@ -138,6 +170,7 @@ export function EditTradeModal({
         account,
         symbol: normalizedSymbol,
         exchange,
+        name,
         ...fields,
       });
     }
@@ -212,11 +245,25 @@ export function EditTradeModal({
                 disabled={!!trade}
                 onChangeValue={value => {
                   setSymbol(value.toUpperCase());
+                  setName(null);
                   clearError();
                 }}
+                onUpdate={setLookupSymbol}
                 style={{ flex: 1 }}
               />
             </InlineField>
+            {!trade && exchange && (
+              <TradeSymbolSearch
+                exchange={exchange}
+                query={symbol}
+                onSelect={result => {
+                  setSymbol(result.symbol);
+                  setLookupSymbol(result.symbol);
+                  setName(result.name);
+                  clearError();
+                }}
+              />
+            )}
             <NumberField
               label={t('Shares')}
               name="quantity"
@@ -229,13 +276,22 @@ export function EditTradeModal({
             <NumberField
               label={t('Price')}
               name="price"
-              value={priceText}
+              value={shownPriceText}
               suffix={currency}
               onChange={value => {
                 setPriceText(value);
+                // Clearing the price brings the close back
+                setIsPriceEdited(value.trim() !== '');
                 clearError();
               }}
             />
+            {isLookupReady && (
+              <TradeCloseHint
+                currency={currency}
+                result={closeResult}
+                isLoading={isLookingUpClose}
+              />
+            )}
             <NumberField
               label={t('Fee')}
               name="fee"
