@@ -110,6 +110,7 @@ import type {
   TableNavigator,
   TableProps,
 } from '#components/table';
+import { useAccountAmountFormat } from '#hooks/useAccountAmountFormat';
 import {
   SchedulesProvider,
   useCachedSchedules,
@@ -128,7 +129,11 @@ import type {
 } from '#hooks/useDragDrop';
 import { useFormat } from '#hooks/useFormat';
 import { useLocalPref } from '#hooks/useLocalPref';
-import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
+import {
+  getForeignCurrency,
+  useHasForeignAccounts,
+  useMainCurrency,
+} from '#hooks/useMainCurrency';
 import { useMergedRefs } from '#hooks/useMergedRefs';
 import { usePrevious } from '#hooks/usePrevious';
 import { useProperFocus } from '#hooks/useProperFocus';
@@ -218,7 +223,9 @@ export function useAmountColumnWidths(
     t => integerToCurrency(Math.abs(t.amount ?? 0)) + ' '.repeat(symbolRoom),
   );
   const balanceValues = balances
-    ? Object.values(balances).map(balance => integerToCurrency(balance))
+    ? Object.values(balances).map(
+        balance => integerToCurrency(balance) + ' '.repeat(symbolRoom),
+      )
     : [];
   const convertedValues = transactions.map(
     t =>
@@ -1093,7 +1100,7 @@ type TransactionProps = {
   onDrop?: OnDropCallback;
   index: number;
   amountColumnWidths: AmountColumnWidths;
-  // Lists that mix accounts show which currency each amount is in
+  // Budgets with accounts in other currencies show which one each amount is in
   showCurrencySymbols?: boolean;
 };
 
@@ -1417,6 +1424,7 @@ const Transaction = memo(function Transaction({
   const payee =
     (payees && payeeId && getPayeesById(payees)[payeeId]) || undefined;
   const account = accounts && accountId && getAccountsById(accounts)[accountId];
+  const formatAccountAmount = useAccountAmountFormat(account || undefined);
   const formatAmountCell = (value: string) => {
     if (!value) {
       return '';
@@ -2133,7 +2141,7 @@ const Transaction = memo(function Transaction({
             value={
               runningBalance == null || isChild || isTemporaryId(id)
                 ? ''
-                : integerToCurrency(runningBalance)
+                : formatAccountAmount(runningBalance)
             }
             valueStyle={{
               color:
@@ -2314,7 +2322,7 @@ const Transaction = memo(function Transaction({
                 textAlign: 'right',
               }}
             >
-              {integerToCurrency(amount)}
+              {formatAccountAmount(amount)}
             </Text>
           </View>
         )}
@@ -2428,6 +2436,7 @@ function NotesCell({
 type TransactionErrorProps = {
   error: NonNullable<TransactionEntity['error']>;
   isDeposit: boolean;
+  account?: AccountEntity;
   onAddSplit: () => void;
   onDistributeRemainder: () => void;
   style?: CSSProperties;
@@ -2436,10 +2445,13 @@ type TransactionErrorProps = {
 function TransactionError({
   error,
   isDeposit,
+  account,
   onAddSplit,
   onDistributeRemainder,
   style,
 }: TransactionErrorProps) {
+  const formatAccountAmount = useAccountAmountFormat(account);
+
   switch (error.type) {
     case 'SplitTransactionError':
       if (error.version === 1) {
@@ -2457,7 +2469,7 @@ function TransactionError({
             <Text style={{ whiteSpace: 'nowrap' }}>
               <Trans>Amount left:</Trans>{' '}
               <Text style={{ fontWeight: 500 }}>
-                {integerToCurrency(
+                {formatAccountAmount(
                   isDeposit ? error.difference : -error.difference,
                 )}
               </Text>
@@ -2660,6 +2672,7 @@ function NewTransaction({
           <TransactionError
             error={error}
             isDeposit={isDeposit}
+            account={accounts.find(a => a.id === transactions[0].account)}
             onAddSplit={() => onAddSplit(transactions[0].id)}
             onDistributeRemainder={() =>
               onDistributeRemainder(transactions[0].id)
@@ -2682,8 +2695,6 @@ function NewTransaction({
 }
 
 type TransactionTableInnerProps = {
-  showAccount?: boolean;
-  showConverted?: boolean;
   tableRef: Ref<TableHandleRef<TransactionEntity>>;
   listContainerRef: RefObject<HTMLDivElement>;
   tableNavigator: TableNavigator<TransactionEntity>;
@@ -2837,7 +2848,7 @@ function TransactionTableInner({
     [props.transactions, props.showReconciled],
   );
 
-  const showCurrencySymbols = !!props.showAccount && !!props.showConverted;
+  const showCurrencySymbols = useHasForeignAccounts();
   const amountColumnWidths = useAmountColumnWidths(
     transactionsToRender,
     props.balances,
@@ -2972,6 +2983,7 @@ function TransactionTableInner({
             <TransactionError
               error={error}
               isDeposit={!!isChildDeposit}
+              account={accounts.find(a => a.id === trans.account)}
               onAddSplit={() => props.onAddSplit(trans.id)}
               onDistributeRemainder={() =>
                 props.onDistributeRemainder(trans.id)

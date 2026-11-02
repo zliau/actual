@@ -1,5 +1,6 @@
 import type { AccountEntity } from '@actual-app/core/types/models';
 
+import { useAccounts } from './useAccounts';
 import { useFeatureFlag } from './useFeatureFlag';
 import { useSyncedPref } from './useSyncedPref';
 
@@ -11,6 +12,17 @@ export function useMainCurrency(): string | null {
   const isEnabled = useFeatureFlag('currency');
   const [defaultCurrencyCode] = useSyncedPref('defaultCurrencyCode');
   return isEnabled && defaultCurrencyCode ? defaultCurrencyCode : null;
+}
+
+/**
+ * Whether any account is in another currency than the main one.
+ */
+export function useHasForeignAccounts(): boolean {
+  const mainCurrency = useMainCurrency();
+  const { data: accounts = [] } = useAccounts();
+  return accounts.some(
+    account => getForeignCurrency(account, mainCurrency) != null,
+  );
 }
 
 /**

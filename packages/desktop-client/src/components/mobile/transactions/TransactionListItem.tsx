@@ -18,7 +18,6 @@ import { TextOneLine } from '@actual-app/components/text-one-line';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import { isPreviewId } from '@actual-app/core/shared/transactions';
-import { integerToCurrency } from '@actual-app/core/shared/util';
 import type { IntegerAmount } from '@actual-app/core/shared/util';
 import type {
   AccountEntity,
@@ -33,6 +32,7 @@ import {
 import { makeAmountFullStyle } from '#components/budget/util';
 import { TransferDirectionIcon } from '#components/common/TransferDirectionIcon';
 import { useAccount } from '#hooks/useAccount';
+import { useAccountAmountFormat } from '#hooks/useAccountAmountFormat';
 import { useCachedSchedules } from '#hooks/useCachedSchedules';
 import { useCategories } from '#hooks/useCategories';
 import { useConvertedAmount } from '#hooks/useConvertedAmount';
@@ -104,11 +104,7 @@ export function TransactionListItem({
     value: convertedAmount,
     isMissingRate,
   } = useConvertedAmount(transaction, account);
-  // Amounts in another currency show which one, as lists can mix currencies
-  const formatAmount = (value: IntegerAmount) =>
-    currency != null
-      ? format(value, 'financial', currency)
-      : integerToCurrency(value);
+  const formatAmount = useAccountAmountFormat(account);
 
   const newTransactions = useSelector(
     state => state.transactions.newTransactions,
