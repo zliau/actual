@@ -661,7 +661,8 @@ function UncategorizedTransactionsBanner(props) {
   const format = useFormat();
 
   const transactionsQuery = useMemo(
-    () => uncategorizedTransactions().select('*'),
+    // Only to add up, so the amounts can be in the base currency
+    () => uncategorizedTransactions().options({ currency: 'base' }).select('*'),
     [],
   );
 

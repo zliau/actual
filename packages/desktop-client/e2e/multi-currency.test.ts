@@ -292,4 +292,21 @@ test.describe('Multiple currencies', () => {
     // Only tracking budgets have a saved or overspent amount
     await expect.poll(bodyText, { timeout: 20000 }).toMatch(/Saved|Overspent/);
   });
+
+  // Last because it changes the totals the other tests check
+  test('mobile uncategorized banner', async () => {
+    await navigation.goToAccountPage('US');
+    await new AccountPage(page).createSingleTransaction({
+      payee: 'Shop',
+      debit: '100',
+    });
+    await page.waitForTimeout(1500);
+
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto('/budget');
+    const banner = page.getByText(/uncategorized transaction/);
+    await expect(banner).toContainText(money(50), { timeout: 20000 });
+    await expect(banner).not.toContainText(money(100));
+    await page.setViewportSize({ width: 1280, height: 720 });
+  });
 });

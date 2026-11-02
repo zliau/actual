@@ -17,6 +17,7 @@ describe('forecast projection', () => {
         closed: 0,
         offbudget: 0,
         balance_current: 70,
+        latest_rate: 1,
       },
     ];
     const transactions: TransactionEntity[] = [
