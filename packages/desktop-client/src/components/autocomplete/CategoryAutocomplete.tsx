@@ -17,7 +17,6 @@ import { Text } from '@actual-app/components/text';
 import { TextOneLine } from '@actual-app/components/text-one-line';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
-import { integerToCurrency } from '@actual-app/core/shared/util';
 import type {
   CategoryEntity,
   CategoryGroupEntity,
@@ -27,6 +26,7 @@ import { css, cx } from '@emotion/css';
 import { useEnvelopeSheetValue } from '#components/budget/envelope/EnvelopeBudgetComponents';
 import { makeAmountFullStyle } from '#components/budget/util';
 import { FinancialText } from '#components/FinancialText';
+import { useAccountAmountFormat } from '#hooks/useAccountAmountFormat';
 import { useCategories } from '#hooks/useCategories';
 import { useSheetValue } from '#hooks/useSheetValue';
 import { useSyncedPref } from '#hooks/useSyncedPref';
@@ -374,6 +374,7 @@ function CategoryItem({
 
   const isToBudgetItem = item.id === 'to-budget';
   const toBudget = useEnvelopeSheetValue(envelopeBudget.toBudget);
+  const formatAmount = useAccountAmountFormat();
 
   return (
     <button
@@ -421,17 +422,13 @@ function CategoryItem({
             ? toBudget != null && (
                 <>
                   {' '}
-                  <FinancialText>
-                    {integerToCurrency(toBudget || 0)}
-                  </FinancialText>
+                  <FinancialText>{formatAmount(toBudget || 0)}</FinancialText>
                 </>
               )
             : balance != null && (
                 <>
                   {' '}
-                  <FinancialText>
-                    {integerToCurrency(balance || 0)}
-                  </FinancialText>
+                  <FinancialText>{formatAmount(balance || 0)}</FinancialText>
                 </>
               )}
         </TextOneLine>

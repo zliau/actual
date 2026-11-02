@@ -3,4 +3,4 @@ category: Features
 authors: [GITHUB_USERNAME]
 ---
 
-Show the currency of each amount in transaction lists that mix accounts in different currencies
+Show the currency symbol on amounts and balances once a budget has accounts in different currencies, and show US dollars as US$

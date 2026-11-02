@@ -55,7 +55,6 @@ import {
   getChangedValues,
   groupById,
   integerToAmount,
-  integerToCurrency,
   titleFirst,
 } from '@actual-app/core/shared/util';
 import type {
@@ -91,6 +90,8 @@ import {
   shouldApplyRuleChange,
   trackClearedField,
 } from '#components/transactions/table/utils';
+import { useAccount } from '#hooks/useAccount';
+import { useAccountAmountFormat } from '#hooks/useAccountAmountFormat';
 import { useAccounts } from '#hooks/useAccounts';
 import { useCategories } from '#hooks/useCategories';
 import { useDateFormat } from '#hooks/useDateFormat';
@@ -272,6 +273,8 @@ function Footer({
   isFuture,
 }: FooterProps) {
   const [transaction, ...childTransactions] = transactions;
+  const account = useAccount(transaction.account || '');
+  const formatAmount = useAccountAmountFormat(account);
   const emptySplitTransaction = childTransactions.find(t => t.amount === 0);
   const onClickRemainingSplit = () => {
     if (childTransactions.length === 0) {
@@ -335,7 +338,7 @@ function Footer({
               <Trans>
                 Add new split -{' '}
                 {{
-                  amount: integerToCurrency(
+                  amount: formatAmount(
                     transaction.amount > 0
                       ? transaction.error.difference
                       : -transaction.error.difference,
@@ -347,7 +350,7 @@ function Footer({
               <Trans>
                 Amount left:{' '}
                 {{
-                  amount: integerToCurrency(
+                  amount: formatAmount(
                     transaction.amount > 0
                       ? transaction.error.difference
                       : -transaction.error.difference,
@@ -1465,6 +1468,7 @@ const TransactionEditInner = memo<TransactionEditInnerProps>(
               keyboardHeader={
                 <FillRemainingButton
                   remaining={remaining}
+                  account={account}
                   onPress={() => {
                     void onUpdateInner(
                       childTrans,
@@ -2246,11 +2250,15 @@ export const TransactionEdit = () => {
 
 function FillRemainingButton({
   remaining,
+  account,
   onPress,
 }: {
   readonly remaining: number;
+  readonly account: AccountEntity | undefined;
   readonly onPress: () => void;
 }) {
+  const formatAmount = useAccountAmountFormat(account);
+
   return (
     <Button
       variant="primary"
@@ -2268,7 +2276,7 @@ function FillRemainingButton({
         <Trans>
           Use remaining:{' '}
           {{
-            amount: integerToCurrency(Math.abs(remaining)),
+            amount: formatAmount(Math.abs(remaining)),
           }}
         </Trans>
       </Text>

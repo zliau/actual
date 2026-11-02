@@ -14,7 +14,8 @@ type FormulaPreferencesOptions = {
 
 type CurrencySymbolPosition = 'before' | 'after';
 
-const DEFAULT_CURRENCY = getCurrency('USD');
+// Budgets without a currency keep the plain dollar sign in formulas
+const DEFAULT_CURRENCY = { ...getCurrency('USD'), symbol: '$' };
 const LOCALE_NUMBER_FORMAT_SAMPLE = 1_000_000.23;
 type FormulaPreferenceId =
   | 'flags.currency'

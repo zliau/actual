@@ -163,7 +163,7 @@ test.describe('Multiple currencies', () => {
   test('accounts sidebar', async () => {
     // All accounts and on budget, Main, then US with its converted balance
     await expectConverted([1350, 900, 450], [1800]);
-    expect(await bodyText()).toMatch(/\$\s?900[.,]00/);
+    expect(await bodyText()).toMatch(/US\$\s?900[.,]00/);
   });
 
   test('account page', async () => {
@@ -181,10 +181,10 @@ test.describe('Multiple currencies', () => {
       .first()
       .click();
     const balance = page.getByRole('dialog').getByRole('textbox');
-    await expect(balance).toHaveValue(/\$/);
+    await expect(balance).toHaveValue(/US\$/);
     await balance.fill('950');
     await page.keyboard.press('Enter');
-    await expect.poll(bodyText, { timeout: 20000 }).toMatch(/\$\s?950[.,]00/);
+    await expect.poll(bodyText, { timeout: 20000 }).toMatch(/US\$\s?950[.,]00/);
     expect(await bodyText()).not.toMatch(/950[.,]00\s?€/);
     await page.getByRole('button', { name: 'Exit reconciliation' }).click();
   });
@@ -193,7 +193,7 @@ test.describe('Multiple currencies', () => {
     await page.keyboard.press('ControlOrMeta+k');
     await expect
       .poll(bodyText, { timeout: 20000 })
-      .toMatch(/US \$\s?900[.,]00/);
+      .toMatch(/US US\$\s?900[.,]00/);
     await page.keyboard.press('Escape');
   });
 
@@ -211,7 +211,7 @@ test.describe('Multiple currencies', () => {
       .filter({ hasText: 'Main' })
       .first();
 
-    await expect(usRow.getByTestId('debit')).toHaveText(/\$\D?100[.,]00/);
+    await expect(usRow.getByTestId('debit')).toHaveText(/US\$\D?100[.,]00/);
     await expect(mainRow.getByTestId('debit')).toHaveText(/100[.,]00\D?€/);
 
     // Editing still works with a plain number
@@ -220,6 +220,22 @@ test.describe('Multiple currencies', () => {
       /^100[.,]00$/,
     );
     await page.keyboard.press('Escape');
+  });
+
+  test('account pages show the currency of each amount', async () => {
+    await page.getByRole('link', { name: /^US/ }).first().click();
+    const usRow = page
+      .getByTestId('transaction-table')
+      .getByTestId('row')
+      .first();
+    await expect(usRow.getByTestId('debit')).toHaveText(/US\$\D?100[.,]00/);
+
+    await page.getByRole('link', { name: /^Main/ }).first().click();
+    const mainRow = page
+      .getByTestId('transaction-table')
+      .getByTestId('row')
+      .first();
+    await expect(mainRow.getByTestId('debit')).toHaveText(/100[.,]00\D?€/);
   });
 
   test('envelope budget', async () => {
@@ -278,7 +294,7 @@ test.describe('Multiple currencies', () => {
     await page.setViewportSize({ width: 390, height: 800 });
     await page.goto('/accounts');
     await expectConverted([1350], [1800]);
-    expect(await bodyText()).toMatch(/\$\s?900[.,]00/);
+    expect(await bodyText()).toMatch(/US\$\s?900[.,]00/);
     await page.goto('/budget');
     await expectConverted([150], [200]);
     await page.setViewportSize({ width: 1280, height: 720 });
