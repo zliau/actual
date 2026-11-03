@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { theme } from '@actual-app/components/theme';
 import { spacing } from '@actual-app/components/tokens';
 import { View } from '@actual-app/components/view';
 
+import { MissingExchangeRates } from '#components/accounts/MissingExchangeRates';
 import * as bindings from '#spreadsheet/bindings';
 
 import { AccountSearchField } from './AccountSearchField';
@@ -62,6 +64,10 @@ export function AccountsSection() {
             onClose={onToggleSearch}
           />
         )}
+        <MissingExchangeRates
+          style={{ marginBlock: spacing.xs }}
+          textStyle={{ color: theme.sidebarItemText, fontSize: 12 }}
+        />
         {tree.onBudget.buckets.length > 0 && (
           <SideGroup
             label={t('On budget')}
