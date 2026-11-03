@@ -21,6 +21,7 @@ import type { AccountEntity } from '@actual-app/core/types/models';
 import { css, cx } from '@emotion/css';
 
 import { useReopenAccountMutation, useUpdateAccountMutation } from '#accounts';
+import { AccountMainCurrencyBalance } from '#components/accounts/AccountMainCurrencyBalance';
 import { BalanceHistoryGraph } from '#components/accounts/BalanceHistoryGraph';
 import { Link } from '#components/common/Link';
 import { Notes } from '#components/Notes';
@@ -37,8 +38,6 @@ import { openAccountCloseModal } from '#modals/modalsSlice';
 import { useDispatch, useSelector } from '#redux';
 import type { Binding, SheetFields } from '#spreadsheet';
 import { isTouchDevice } from '#util/isTouchDevice';
-
-import { AccountMainCurrencyBalance } from './AccountMainCurrencyBalance';
 
 export const accountNameStyle: CSSProperties = {
   marginTop: -2,
@@ -275,7 +274,18 @@ export function Account<FieldName extends SheetFields<'account'>>({
                 )
               }
             />
-            {account && <AccountMainCurrencyBalance account={account} />}
+            {account && (
+              <View style={{ alignItems: 'flex-end' }}>
+                <AccountMainCurrencyBalance
+                  account={account}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 400,
+                    color: theme.sidebarTextSubdued,
+                  }}
+                />
+              </View>
+            )}
           </Link>
         </View>
       </View>
