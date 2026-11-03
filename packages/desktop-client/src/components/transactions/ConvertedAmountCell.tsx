@@ -100,8 +100,12 @@ export function ConvertedAmountCell({
       width={width}
       textAlign="right"
       value={value == null ? '' : format(value, 'financial')}
+      // Muted, since it's derived from the amount next to it
       valueStyle={{
-        color: value != null && value < 0 ? theme.numberNegative : undefined,
+        color:
+          value != null && value < 0
+            ? `color-mix(in srgb, ${theme.numberNegative} 75%, ${theme.pageTextSubdued})`
+            : theme.pageTextSubdued,
       }}
       style={{ ...styles.tnum, ...style }}
       privacyFilter
