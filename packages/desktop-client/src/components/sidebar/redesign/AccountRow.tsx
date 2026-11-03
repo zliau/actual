@@ -15,6 +15,7 @@ import { css } from '@emotion/css';
 
 import { useReopenAccountMutation, useUpdateAccountMutation } from '#accounts';
 import { isAccountFailedSync } from '#accounts/syncStatus';
+import { AccountMainCurrencyBalance } from '#components/accounts/AccountMainCurrencyBalance';
 import { useContextMenu } from '#hooks/useContextMenu';
 import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useUpdatedAccounts } from '#hooks/useUpdatedAccounts';
@@ -199,17 +200,26 @@ export function AccountRow({
                 </Text>
               )}
               <Text style={styles.visuallyHidden}>{statusLabel}</Text>
-              <SidebarBalance
-                binding={bindings.accountBalance(account.id)}
-                currency={
-                  getForeignCurrency(account, mainCurrency) ?? undefined
-                }
-                style={{
-                  fontSize: 12,
-                  color: 'inherit',
-                  marginLeft: spacing.xs,
-                }}
-              />
+              <View style={{ alignItems: 'flex-end', marginLeft: spacing.xs }}>
+                <SidebarBalance
+                  binding={bindings.accountBalance(account.id)}
+                  currency={
+                    getForeignCurrency(account, mainCurrency) ?? undefined
+                  }
+                  style={{ fontSize: 12, color: 'inherit' }}
+                />
+                <AccountMainCurrencyBalance
+                  account={account}
+                  // Dimmed rather than a fixed grey, so it follows the row's
+                  // selected and updated colours
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 'normal',
+                    color: 'inherit',
+                    opacity: 0.7,
+                  }}
+                />
+              </View>
               <DragHandle />
             </View>
           </AccountHoverCard>

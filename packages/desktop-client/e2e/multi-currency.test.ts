@@ -166,6 +166,25 @@ test.describe('Multiple currencies', () => {
     expect(await bodyText()).toMatch(/US\$\s?900[.,]00/);
   });
 
+  test('redesigned accounts sidebar', async () => {
+    async function setRedesign() {
+      await page.goto('/settings');
+      await page
+        .getByRole('navigation', { name: 'Settings' })
+        .getByRole('link', { name: 'Experimental', exact: true })
+        .click();
+      await page.getByRole('checkbox', { name: 'Redesigned sidebar' }).click();
+      await page.waitForTimeout(1500);
+    }
+
+    await setRedesign();
+    await page.goto('/budget');
+    // US shows its own balance with the converted one under it
+    await expectConverted([1350, 900, 450], [1800]);
+    expect(await bodyText()).toMatch(/US\$\s?900[.,]00/);
+    await setRedesign();
+  });
+
   test('account page', async () => {
     await navigation.goToAccountPage('US');
     await expectConverted([50, 500]);
@@ -199,7 +218,8 @@ test.describe('Multiple currencies', () => {
 
   test('all accounts page', async () => {
     await page.goto('/accounts');
-    await expectConverted([1350], [1800]);
+    // US shows its converted balance under its own one
+    await expectConverted([1350, 450], [1800]);
   });
 
   test('all accounts page shows the currency of each amount', async () => {
@@ -314,7 +334,8 @@ test.describe('Multiple currencies', () => {
   test('mobile accounts and budget', async () => {
     await page.setViewportSize({ width: 390, height: 800 });
     await page.goto('/accounts');
-    await expectConverted([1350], [1800]);
+    // US shows its converted balance under its own one
+    await expectConverted([1350, 450], [1800]);
     expect(await bodyText()).toMatch(/US\$\s?900[.,]00/);
     await page.goto('/budget');
     await expectConverted([150], [200]);

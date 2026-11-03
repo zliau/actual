@@ -27,6 +27,7 @@ import { css } from '@emotion/css';
 
 import { useMoveAccountMutation, useSyncAndDownloadMutation } from '#accounts';
 import { isAccountFailedSync } from '#accounts/syncStatus';
+import { AccountMainCurrencyBalance } from '#components/accounts/AccountMainCurrencyBalance';
 import { MissingExchangeRates } from '#components/accounts/MissingExchangeRates';
 import { makeAmountFullStyle } from '#components/budget/util';
 import { MOBILE_NAV_HEIGHT } from '#components/mobile/MobileNavTabs';
@@ -206,25 +207,31 @@ function AccountListItem({
               {account.name}
             </TextOneLine>
           </View>
-          <CellValue binding={getBalanceQuery(account.id)} type="financial">
-            {props => (
-              <CellValueText<'account', 'balance'>
-                {...props}
-                currency={
-                  getForeignCurrency(account, mainCurrency) ?? undefined
-                }
-                style={{
-                  fontSize: 16,
-                  ...makeAmountFullStyle(props.value, {
-                    positiveColor: theme.numberPositive,
-                    negativeColor: theme.numberNegative,
-                    zeroColor: theme.numberNeutral,
-                  }),
-                }}
-                data-testid="account-balance"
-              />
-            )}
-          </CellValue>
+          <View style={{ alignItems: 'flex-end' }}>
+            <CellValue binding={getBalanceQuery(account.id)} type="financial">
+              {props => (
+                <CellValueText<'account', 'balance'>
+                  {...props}
+                  currency={
+                    getForeignCurrency(account, mainCurrency) ?? undefined
+                  }
+                  style={{
+                    fontSize: 16,
+                    ...makeAmountFullStyle(props.value, {
+                      positiveColor: theme.numberPositive,
+                      negativeColor: theme.numberNegative,
+                      zeroColor: theme.numberNeutral,
+                    }),
+                  }}
+                  data-testid="account-balance"
+                />
+              )}
+            </CellValue>
+            <AccountMainCurrencyBalance
+              account={account}
+              style={{ fontSize: 12, color: theme.pageTextSubdued }}
+            />
+          </View>
         </Button>
       )}
     </ListBoxItem>

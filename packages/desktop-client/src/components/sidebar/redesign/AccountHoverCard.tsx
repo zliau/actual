@@ -15,9 +15,11 @@ import { Tooltip } from '@actual-app/components/tooltip';
 import { View } from '@actual-app/components/view';
 import type { AccountEntity } from '@actual-app/core/types/models';
 
+import { AccountMainCurrencyBalance } from '#components/accounts/AccountMainCurrencyBalance';
 import { BalanceHistoryGraph } from '#components/accounts/BalanceHistoryGraph';
 import { Notes } from '#components/Notes';
 import { useIsTestEnv } from '#hooks/useIsTestEnv';
+import { getForeignCurrency, useMainCurrency } from '#hooks/useMainCurrency';
 import { useNotes } from '#hooks/useNotes';
 import { useSyncedPref } from '#hooks/useSyncedPref';
 import { isTouchDevice } from '#util/isTouchDevice';
@@ -39,6 +41,8 @@ export function AccountHoverCard({
     `side-nav.show-balance-history-${account.id}`,
   );
   const accountNote = useNotes(`account-${account.id}`);
+  const mainCurrency = useMainCurrency();
+  const isForeign = getForeignCurrency(account, mainCurrency) != null;
 
   if (isTouchDevice() || isTestEnv) {
     return children;
@@ -81,6 +85,15 @@ export function AccountHoverCard({
               </SpaceBetween>
             </Button>
           </SpaceBetween>
+          {isForeign && (
+            <SpaceBetween
+              gap={spacing.sm}
+              style={{ justifyContent: 'space-between', fontSize: 12 }}
+            >
+              <Text>{t('In {{currency}}:', { currency: mainCurrency })}</Text>
+              <AccountMainCurrencyBalance account={account} />
+            </SpaceBetween>
+          )}
           {showBalanceHistory === 'true' && (
             <BalanceHistoryGraph
               accountId={account.id}
