@@ -117,3 +117,28 @@ export type UpdateSecurityPricesResult =
       // Symbols the provider had nothing for
       unavailable: string[];
     };
+
+export type PerformancePoint = {
+  // The market value at the end of the month, in cents
+  value: number;
+  // The gain over the month, realized and unrealized, in cents
+  gain: number;
+  // The time-weighted growth since the first trade, so 1.1 is up 10%. Money put
+  // in or taken out doesn't change it, so it can be compared across months.
+  growth: number;
+};
+
+export type PerformanceMonth = {
+  month: string;
+  // The month's last day, or today for the current month
+  date: string;
+  total: PerformancePoint;
+  securities: Record<SecurityEntity['id'], PerformancePoint>;
+};
+
+// An investment account's returns over time, for the performance report
+export type InvestmentPerformance = {
+  // The securities the account has traded, in the order to show them
+  securities: Array<Pick<SecurityEntity, 'id' | 'symbol'>>;
+  months: PerformanceMonth[];
+};

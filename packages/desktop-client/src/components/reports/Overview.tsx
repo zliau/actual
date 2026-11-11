@@ -62,6 +62,7 @@ import { CashFlowCard } from './reports/CashFlowCard';
 import { CrossoverCard } from './reports/CrossoverCard';
 import { CustomReportListCards } from './reports/CustomReportListCards';
 import { FormulaCard } from './reports/FormulaCard';
+import { InvestmentPerformanceCard } from './reports/InvestmentPerformanceCard';
 import { MarkdownCard } from './reports/MarkdownCard';
 import { MissingReportCard } from './reports/MissingReportCard';
 import { MonteCarloCard } from './reports/monte-carlo/MonteCarloCard';
@@ -598,6 +599,14 @@ export function Overview({ dashboard }: OverviewProps) {
                               name: 'age-of-money-card' as const,
                               text: t('Age of Money'),
                             },
+                            ...(accounts.some(account => account.investment)
+                              ? [
+                                  {
+                                    name: 'investment-performance-card' as const,
+                                    text: t('Investment performance'),
+                                  },
+                                ]
+                              : []),
                             {
                               name: 'spending-card' as const,
                               text: t('Spending analysis'),
@@ -827,6 +836,15 @@ export function Overview({ dashboard }: OverviewProps) {
                           />
                         ) : widget.type === 'age-of-money-card' ? (
                           <AgeOfMoneyCard
+                            widgetId={item.i}
+                            isEditing={isEditing}
+                            meta={widget.meta}
+                            onMetaChange={newMeta =>
+                              onMetaChange(item, newMeta)
+                            }
+                          />
+                        ) : widget.type === 'investment-performance-card' ? (
+                          <InvestmentPerformanceCard
                             widgetId={item.i}
                             isEditing={isEditing}
                             meta={widget.meta}

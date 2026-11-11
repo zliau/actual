@@ -365,6 +365,16 @@ export type AgeOfMoneyWidget = AbstractWidget<
   } | null
 >;
 
+export type InvestmentPerformanceWidget = AbstractWidget<
+  'investment-performance-card',
+  {
+    name?: string;
+    // An investment account; the first open one when not set
+    account?: string;
+    timeFrame?: TimeFrame;
+  } | null
+>;
+
 type SpecializedWidget =
   | NetWorthWidget
   | CashFlowWidget
@@ -378,7 +388,8 @@ type SpecializedWidget =
   | FormulaWidget
   | SankeyWidget
   | AgeOfMoneyWidget
-  | BalanceForecastWidget;
+  | BalanceForecastWidget
+  | InvestmentPerformanceWidget;
 export type DashboardWidgetEntity = SpecializedWidget | CustomReportWidget;
 export type NewDashboardWidgetEntity = Omit<
   DashboardWidgetEntity,

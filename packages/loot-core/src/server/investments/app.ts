@@ -25,6 +25,7 @@ import type {
 } from '#types/models';
 
 import { updateMarketValue, updateMarketValueOfHolders } from './market-value';
+import { getInvestmentPerformance } from './performance';
 import {
   getSecurityClose,
   getSecurityPriceStatus,
@@ -60,6 +61,7 @@ export type InvestmentsHandlers = {
   'security-prices-status': typeof getSecurityPriceStatus;
   'securities-search': typeof searchSecurities;
   'security-close-get': typeof getSecurityClose;
+  'investment-performance-get': typeof getInvestmentPerformance;
 };
 
 export const app = createApp<InvestmentsHandlers>();
@@ -81,6 +83,7 @@ app.method('security-prices-update', mutator(updateSecurityPrices));
 app.method('security-prices-status', getSecurityPriceStatus);
 app.method('securities-search', searchSecurities);
 app.method('security-close-get', getSecurityClose);
+app.method('investment-performance-get', getInvestmentPerformance);
 
 type TradeFields = Pick<
   TradeEntity,

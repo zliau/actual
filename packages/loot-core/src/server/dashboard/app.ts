@@ -46,6 +46,7 @@ export function isWidgetType(
     'balance-forecast-card',
     'age-of-money-card',
     'monte-carlo-card',
+    'investment-performance-card',
   ].includes(type);
 }
 

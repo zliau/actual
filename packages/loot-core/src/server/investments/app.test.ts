@@ -7,11 +7,13 @@ import { batchUpdateTransactions } from '#server/transactions';
 import {
   calculateHolding,
   getMarketValueChanges,
+  getPerformanceHistory,
   getTradeCashAmount,
   NOT_INVESTMENT_ACTIVITY,
   sellsMoreThanHeld,
 } from '#shared/investments';
 import { q } from '#shared/query';
+import type { PerformanceMonth } from '#types/models';
 
 beforeEach(async () => {
   await global.emptyDatabase()();
@@ -947,6 +949,52 @@ describe('market value', () => {
   });
 });
 
+describe('investment-performance-get', () => {
+  beforeEach(async () => {
+    await global.emptyDatabase()();
+    await loadMappings();
+  });
+
+  it("gives the account's returns by month", async () => {
+    const account = await createInvestmentAccount();
+    const security = await createAapl();
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-01-04',
+      type: 'buy',
+      quantity: 10,
+      price: 100,
+      fee: 0,
+    });
+    await app.handlers['security-price-set']({
+      security,
+      date: '2016-01-29',
+      close: 110,
+    });
+    await app.handlers['security-price-set']({
+      security,
+      date: '2016-02-29',
+      close: 95,
+    });
+
+    const performance = await app.handlers['investment-performance-get']({
+      account,
+    });
+
+    expect(performance.securities).toEqual([{ id: security, symbol: 'AAPL' }]);
+    const [january, february] = performance.months;
+    expect(january).toMatchObject({
+      month: '2016-01',
+      date: '2016-01-31',
+      total: { value: 110000, gain: 10000, growth: 1.1 },
+    });
+    expect(january.securities[security].growth).toBe(1.1);
+    expect(february.total.growth).toBeCloseTo(0.95);
+    expect(february.total.gain).toBe(-15000);
+  });
+});
+
 describe('getMarketValueChanges', () => {
   const securities = [
     { id: 'US-A', symbol: 'A', name: null, currency: 'USD' },
@@ -1171,5 +1219,181 @@ describe('sellsMoreThanHeld', () => {
         { date: '2026-01-01', type: 'buy', quantity: 1 },
       ]),
     ).toBe(false);
+  });
+});
+
+describe('getPerformanceHistory', () => {
+  const securities = [{ id: 'US-A' }, { id: 'US-B' }];
+  const trade = (
+    security: string,
+    date: string,
+    type: 'buy' | 'sell',
+    quantity: number,
+    price: number,
+    fee = 0,
+  ) => ({ security, date, type, quantity, price, fee });
+  const growth = (months: PerformanceMonth[]) =>
+    months.map(({ total }) => total.growth);
+
+  it('has nothing without trades', () => {
+    expect(
+      getPerformanceHistory({
+        securities,
+        trades: [],
+        prices: [],
+        today: '2026-01-15',
+      }),
+    ).toEqual([]);
+  });
+
+  it('gives the value, gain and growth at each month end', () => {
+    const months = getPerformanceHistory({
+      securities,
+      trades: [trade('US-A', '2025-11-05', 'buy', 10, 100, 1000)],
+      prices: [
+        { security: 'US-A', date: '2025-12-31', close: 121 },
+        { security: 'US-A', date: '2026-01-10', close: 90 },
+      ],
+      today: '2026-01-15',
+    });
+    expect(months.map(({ month, date }) => [month, date])).toEqual([
+      ['2025-11', '2025-11-30'],
+      ['2025-12', '2025-12-31'],
+      ['2026-01', '2026-01-15'],
+    ]);
+    // Bought for 1,010 with the fee, which is lost straight away
+    expect(months.map(({ total }) => [total.value, total.gain])).toEqual([
+      [100000, -1000],
+      [121000, 21000],
+      [90000, -31000],
+    ]);
+    [100000 / 101000, 121000 / 101000, 90000 / 101000].forEach(
+      (expected, index) => expect(growth(months)[index]).toBeCloseTo(expected),
+    );
+    expect(months[1].securities['US-A']).toEqual(months[1].total);
+    expect(months[1].securities['US-B']).toBeUndefined();
+  });
+
+  it("doesn't count money put in or taken out as a return", () => {
+    const months = getPerformanceHistory({
+      securities,
+      trades: [
+        trade('US-A', '2026-01-05', 'buy', 10, 100),
+        // Up 10% by the next buy, which puts ten times as much in
+        trade('US-A', '2026-02-10', 'buy', 100, 110),
+        // Then down 10%, and half is sold
+        trade('US-A', '2026-03-10', 'sell', 55, 99),
+      ],
+      prices: [],
+      today: '2026-04-15',
+    });
+    // Up 10% then down 10%, however much was in at the time
+    expect(growth(months)[3]).toBeCloseTo(0.99);
+    // In money, the bigger second buy loses more than the first gained
+    expect(months.map(({ total }) => total.gain)).toEqual([
+      0, 10000, -121000, 0,
+    ]);
+  });
+
+  it('keeps the growth while nothing is held', () => {
+    const months = getPerformanceHistory({
+      securities,
+      trades: [
+        trade('US-A', '2026-01-05', 'buy', 10, 100),
+        trade('US-A', '2026-01-20', 'sell', 10, 150),
+        trade('US-A', '2026-03-05', 'buy', 10, 200),
+      ],
+      prices: [{ security: 'US-A', date: '2026-03-31', close: 220 }],
+      today: '2026-03-31',
+    });
+    expect(growth(months)).toEqual([1.5, 1.5, 1.5 * 1.1]);
+    expect(months[1].total.value).toBe(0);
+  });
+
+  it('counts fees and trades away from the close', () => {
+    const [month] = getPerformanceHistory({
+      securities,
+      trades: [
+        trade('US-A', '2026-01-05', 'buy', 10, 100, 500),
+        trade('US-A', '2026-01-20', 'sell', 10, 110, 500),
+      ],
+      // Bought below the day's close, and sold above it
+      prices: [
+        { security: 'US-A', date: '2026-01-05', close: 105 },
+        { security: 'US-A', date: '2026-01-20', close: 108 },
+      ],
+      today: '2026-01-31',
+    });
+    // 1,005 in and 1,095 out
+    expect(month.total.gain).toBe(9000);
+    expect(month.total.growth).toBeCloseTo((110000 - 500) / 100500);
+  });
+
+  it('counts a trade against the close of its own day', () => {
+    const [month] = getPerformanceHistory({
+      securities,
+      trades: [trade('US-A', '2026-01-31', 'buy', 10, 100, 500)],
+      prices: [{ security: 'US-A', date: '2026-01-31', close: 120 }],
+      today: '2026-02-01',
+    });
+    expect(month.total.growth).toBeCloseTo(120000 / 100500);
+    expect(month.total.gain).toBe(19500);
+  });
+
+  it('counts price changes between trades on the same day', () => {
+    const [month] = getPerformanceHistory({
+      securities,
+      trades: [
+        trade('US-A', '2026-01-05', 'buy', 100, 150),
+        // Some sold later that day at a lower price, like a sell to cover tax
+        trade('US-A', '2026-01-05', 'sell', 37, 148),
+        trade('US-B', '2026-01-02', 'buy', 10, 100),
+      ],
+      prices: [
+        { security: 'US-A', date: '2026-01-05', close: 149 },
+        { security: 'US-B', date: '2026-01-31', close: 100 },
+      ],
+      today: '2026-01-31',
+    });
+    // A: down from 150 to 148 before the sell, then up to the close of 149
+    expect(month.securities['US-A'].growth).toBeCloseTo(
+      (148 / 150) * (149 / 148),
+    );
+    // In money: 63 left worth 9,387 plus 5,476 from the sell, less 15,000
+    expect(month.securities['US-A'].gain).toBe(-13700);
+    // B's 1,000 didn't move, so it holds back the total's loss
+    expect(month.total.growth).toBeCloseTo(
+      ((1000 + 14800) / (1000 + 15000)) * ((1000 + 9387) / (1000 + 9324)),
+    );
+  });
+
+  it('weights the total by what each security held', () => {
+    const [month] = getPerformanceHistory({
+      securities,
+      trades: [
+        trade('US-A', '2026-01-05', 'buy', 10, 100),
+        trade('US-B', '2026-01-05', 'buy', 30, 100),
+      ],
+      prices: [
+        { security: 'US-A', date: '2026-01-10', close: 200 },
+        { security: 'US-B', date: '2026-01-10', close: 100 },
+      ],
+      today: '2026-01-15',
+    });
+    expect(month.securities['US-A'].growth).toBe(2);
+    expect(month.securities['US-B'].growth).toBe(1);
+    expect(month.total).toEqual({ value: 500000, gain: 100000, growth: 1.25 });
+  });
+
+  it('values shares at their split-adjusted price', () => {
+    const [, february] = getPerformanceHistory({
+      securities,
+      trades: [trade('US-A', '2026-01-05', 'buy', 10, 100)],
+      prices: [{ security: 'US-A', date: '2026-02-20', close: 30 }],
+      splits: [{ security: 'US-A', date: '2026-02-10', ratio: 4 }],
+      today: '2026-02-25',
+    });
+    expect(february.total.growth).toBeCloseTo(1.2);
+    expect(february.total.value).toBe(120000);
   });
 });

@@ -1,5 +1,7 @@
 import type {
   Holding,
+  PerformanceMonth,
+  PerformancePoint,
   SecurityEntity,
   SecurityExchange,
   SecurityPriceEntity,
@@ -227,23 +229,14 @@ export function getMarketValueChanges({
       price => price.security === security.id,
     );
 
-    const holdingOn = (day: string) => {
-      const latestPrice = securityPrices
-        .filter(price => price.date <= day)
-        .reduce<(typeof prices)[number] | undefined>(
-          (latest, price) =>
-            latest == null || price.date > latest.date ? price : latest,
-          undefined,
-        );
-      return calculateHolding(
+    const holdingOn = (day: string) =>
+      getHoldingOn({
         security,
-        securityTrades.filter(trade => trade.date <= day),
-        latestPrice,
-        splits.filter(
-          split => split.security === security.id && split.date <= day,
-        ),
-      );
-    };
+        trades: securityTrades,
+        prices: securityPrices,
+        splits,
+        day,
+      });
 
     let previousValue = 0;
     return monthUtils
@@ -261,6 +254,298 @@ export function getMarketValueChanges({
           ? []
           : [{ security: security.id, month, date, amount, quantity, price }];
       });
+  });
+}
+
+// A security's position at the end of a day, from the trades, closes and
+// splits up to then
+function getHoldingOn({
+  security,
+  trades,
+  prices,
+  splits,
+  day,
+}: {
+  security: Pick<SecurityEntity, 'id' | 'symbol' | 'name' | 'currency'>;
+  trades: Array<
+    Pick<
+      TradeEntity,
+      'security' | 'date' | 'type' | 'quantity' | 'price' | 'fee'
+    >
+  >;
+  prices: Array<Pick<SecurityPriceEntity, 'security' | 'date' | 'close'>>;
+  splits: Array<Pick<SecuritySplitEntity, 'security' | 'date' | 'ratio'>>;
+  day: string;
+}): Holding {
+  const latestPrice = prices
+    .filter(price => price.security === security.id && price.date <= day)
+    .reduce<(typeof prices)[number] | undefined>(
+      (latest, price) =>
+        latest == null || price.date > latest.date ? price : latest,
+      undefined,
+    );
+  return calculateHolding(
+    security,
+    trades.filter(trade => trade.security === security.id && trade.date <= day),
+    latestPrice,
+    splits.filter(split => split.security === security.id && split.date <= day),
+  );
+}
+
+type PerformanceTrade = Pick<
+  TradeEntity,
+  'security' | 'date' | 'type' | 'quantity' | 'price' | 'fee'
+>;
+
+// A security on one day of the performance history, in cents
+type DaySnapshot = {
+  // Whether the security has been bought by then
+  isHeld: boolean;
+  // What was held before the day's trades, valued at the latest close
+  open: number;
+  // Each of the day's trades in order, with what was held just before and just
+  // after it, both valued at its price
+  trades: Array<{
+    before: number;
+    after: number;
+    buyFee: number;
+    sellFee: number;
+  }>;
+  // What was held at the end of the day, valued at the latest close
+  close: number;
+  // Cash put in by buys, less cash taken out by sells, fees included
+  netFlow: number;
+};
+
+// A security's snapshot on each of the days, which must be oldest first. One
+// pass through its splits, trades and closes in date order: on a day, a split
+// comes first as it takes effect before the market opens, and the close last.
+function getDaySnapshots(
+  days: string[],
+  trades: PerformanceTrade[],
+  prices: Array<Pick<SecurityPriceEntity, 'date' | 'close'>>,
+  splits: Split[],
+): DaySnapshot[] {
+  type Event =
+    | { kind: 'split'; date: string; ratio: number }
+    | { kind: 'trade'; date: string; trade: PerformanceTrade }
+    | { kind: 'close'; date: string; close: number };
+  const order = (event: Event) =>
+    event.kind === 'split'
+      ? 0
+      : event.kind === 'close'
+        ? 3
+        : event.trade.type === 'buy'
+          ? 1
+          : 2;
+  const events: Event[] = [
+    ...splits.map(({ date, ratio }) => ({
+      kind: 'split' as const,
+      date,
+      ratio,
+    })),
+    ...trades.map(trade => ({
+      kind: 'trade' as const,
+      date: trade.date,
+      trade,
+    })),
+    ...prices.map(({ date, close }) => ({
+      kind: 'close' as const,
+      date,
+      close,
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || order(a) - order(b));
+
+  let index = 0;
+  let quantity = 0;
+  let price = 0;
+  let isHeld = false;
+  const valueAt = (perShare: number) => amountToInteger(quantity * perShare);
+
+  return days.map(day => {
+    const snapshot: DaySnapshot = {
+      isHeld,
+      open: 0,
+      trades: [],
+      close: 0,
+      netFlow: 0,
+    };
+    let isOpen = false;
+    while (index < events.length && events[index].date <= day) {
+      const event = events[index];
+      index += 1;
+      if (event.kind !== 'split' && event.date === day && !isOpen) {
+        snapshot.open = valueAt(price);
+        isOpen = true;
+      }
+      if (event.kind === 'split') {
+        quantity *= event.ratio;
+        price /= event.ratio;
+      } else if (event.kind === 'close') {
+        price = event.close;
+      } else {
+        const { trade } = event;
+        const before = valueAt(trade.price);
+        const value = amountToInteger(trade.quantity * trade.price);
+        if (trade.type === 'buy') {
+          quantity += trade.quantity;
+          isHeld = true;
+          snapshot.netFlow += value + trade.fee;
+        } else {
+          const remaining = quantity - trade.quantity;
+          quantity = remaining < SHARE_EPSILON ? 0 : remaining;
+          snapshot.netFlow -= value - trade.fee;
+        }
+        price = trade.price;
+        snapshot.trades.push({
+          before,
+          after: valueAt(trade.price),
+          buyFee: trade.type === 'buy' ? trade.fee : 0,
+          sellFee: trade.type === 'buy' ? 0 : trade.fee,
+        });
+      }
+    }
+    snapshot.isHeld = isHeld;
+    snapshot.close = valueAt(price);
+    if (!isOpen) {
+      snapshot.open = snapshot.close;
+    }
+    return snapshot;
+  });
+}
+
+// The time-weighted growth from the first trade to each day, for some
+// securities together: the time is cut at every trade, and the returns of the
+// pieces in between are multiplied, so that money put in or taken out doesn't
+// count as a gain or loss. 1.1 means up 10%. Fees count as losses, and a trade
+// at a price other than the previous one counts as a gain or loss on what was
+// held. Within a day, only the traded security's price changes between its
+// trades, as closes only come at the end of the day.
+function getGrowth(snapshots: DaySnapshot[][], days: string[]): number[] {
+  let growth = 1;
+  // What was held at the previous day's close
+  let start = 0;
+  return days.map((_, day) => {
+    // Each security's value at its latest price so far today
+    const values = snapshots.map(security => security[day].open);
+    let total = values.reduce((sum, value) => sum + value, 0);
+    let base = start;
+    snapshots.forEach((security, index) => {
+      for (const trade of security[day].trades) {
+        const before = total - values[index] + trade.before - trade.sellFee;
+        if (base > 0) {
+          growth *= before / base;
+        }
+        total += trade.after - values[index];
+        values[index] = trade.after;
+        base = total + trade.buyFee;
+      }
+    });
+    const close = snapshots.reduce(
+      (sum, security) => sum + security[day].close,
+      0,
+    );
+    if (base > 0) {
+      growth *= close / base;
+    }
+    start = close;
+    return growth;
+  });
+}
+
+// For each month from the first trade to today, the value at its end, the gain
+// over it, and the time-weighted growth since the first trade: of each security
+// and of all of them together. The month's end is today for the current month.
+export function getPerformanceHistory({
+  securities,
+  trades,
+  prices,
+  splits = [],
+  today,
+}: {
+  securities: Array<Pick<SecurityEntity, 'id'>>;
+  trades: PerformanceTrade[];
+  prices: Array<Pick<SecurityPriceEntity, 'security' | 'date' | 'close'>>;
+  splits?: Array<Pick<SecuritySplitEntity, 'security' | 'date' | 'ratio'>>;
+  today: string;
+}): PerformanceMonth[] {
+  const pastTrades = trades.filter(trade => trade.date <= today);
+  const firstDate = pastTrades.map(trade => trade.date).sort()[0];
+  if (firstDate == null) {
+    return [];
+  }
+
+  const months = monthUtils
+    .rangeInclusive(
+      monthUtils.monthFromDate(firstDate),
+      monthUtils.monthFromDate(today),
+    )
+    .map(month => {
+      const lastDay = monthUtils.lastDayOfMonth(month);
+      return { month, date: lastDay < today ? lastDay : today };
+    });
+  // Every month end and trading day, oldest first
+  const days = [
+    ...new Set([
+      ...months.map(({ date }) => date),
+      ...pastTrades.map(trade => trade.date),
+    ]),
+  ].sort();
+  const dayIndex = new Map(days.map((day, index) => [day, index]));
+
+  const snapshots = securities.map(security =>
+    getDaySnapshots(
+      days,
+      pastTrades.filter(trade => trade.security === security.id),
+      prices.filter(price => price.security === security.id),
+      splits.filter(split => split.security === security.id),
+    ),
+  );
+
+  // The month-end points of some securities together
+  const getPoints = (included: DaySnapshot[][]): PerformancePoint[] => {
+    const growth = getGrowth(included, days);
+    let previousGain = 0;
+    let netFlow = 0;
+    let dayIndexDone = 0;
+    return months.map(({ date }) => {
+      const end = dayIndex.get(date) ?? 0;
+      for (; dayIndexDone <= end; dayIndexDone++) {
+        for (const security of included) {
+          netFlow += security[dayIndexDone].netFlow;
+        }
+      }
+      const value = included.reduce(
+        (sum, security) => sum + security[end].close,
+        0,
+      );
+      // Everything gained so far is the value less the cash put in
+      const gainSoFar = value - netFlow;
+      const gain = gainSoFar - previousGain;
+      previousGain = gainSoFar;
+      return { value, gain, growth: growth[end] };
+    });
+  };
+
+  const totals = getPoints(snapshots);
+  const bySecurity = securities.map((security, index) => ({
+    id: security.id,
+    snapshots: snapshots[index],
+    points: getPoints([snapshots[index]]),
+  }));
+
+  return months.map(({ month, date }, index) => {
+    const end = dayIndex.get(date) ?? 0;
+    return {
+      month,
+      date,
+      total: totals[index],
+      securities: Object.fromEntries(
+        bySecurity
+          .filter(({ snapshots }) => snapshots[end].isHeld)
+          .map(({ id, points }) => [id, points[index]]),
+      ),
+    };
   });
 }
 

@@ -1,6 +1,7 @@
 import { send } from '@actual-app/core/platform/client/connection';
 import type {
   AccountHoldings,
+  InvestmentPerformance,
   SecurityCloseResult,
   SecurityExchange,
   SecurityPriceEntity,
@@ -44,6 +45,13 @@ export const investmentQueries = {
       queryFn: () => send('security-close-get', { exchange, symbol, date }),
       staleTime: Infinity,
       retry: false,
+    }),
+  performance: ({ account }: { account: string }) =>
+    queryOptions<InvestmentPerformance>({
+      queryKey: [...investmentQueries.lists(), 'performance', account],
+      queryFn: () => send('investment-performance-get', { account }),
+      // Manually invalidated when trades, prices or transactions change
+      staleTime: Infinity,
     }),
   trades: ({ account }: { account: string }) =>
     queryOptions<TradeEntity[]>({

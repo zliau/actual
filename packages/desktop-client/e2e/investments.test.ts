@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 
 import { expect, test } from './fixtures';
 import { ConfigurationPage } from './page-models/configuration-page';
+import { Navigation } from './page-models/navigation';
 
 // Worked out by hand, with the app's clock fixed at 2017-01-01:
 //
@@ -160,5 +161,18 @@ test.describe('Investment accounts', () => {
     await expect(page.getByText(/Cash.*3,995\.00/)).toBeVisible();
     await expect(holdingRow()).toContainText('1,200.00');
     await expect(balance()).toContainText('5,195.00');
+  });
+
+  test('shows the gain over time in a report', async () => {
+    const reportsPage = await new Navigation(page).goToReportsPage();
+    await reportsPage.waitToLoad();
+    await reportsPage.addWidget('Investment performance');
+
+    await page.goto('/reports/investment-performance');
+    // Bought for 1,005 with the fee, and worth 1,200 at the close
+    await expect(page.getByText('+19.4%').first()).toBeVisible();
+    await expect(
+      page.getByText(/195\.00 gained from Jan 2017 to Jan 2017/),
+    ).toBeVisible();
   });
 });

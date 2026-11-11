@@ -13,6 +13,7 @@ import { CashFlow } from './reports/CashFlow';
 import { Crossover } from './reports/Crossover';
 import { CustomReport } from './reports/CustomReport';
 import { Formula } from './reports/Formula';
+import { InvestmentPerformance } from './reports/InvestmentPerformance';
 import { MonteCarlo } from './reports/monte-carlo/MonteCarlo';
 import { NetWorth } from './reports/NetWorth';
 import { Sankey } from './reports/Sankey';
@@ -87,6 +88,22 @@ export function ReportRouter() {
         element={
           <ReportBoundary>
             <AgeOfMoney />
+          </ReportBoundary>
+        }
+      />
+      <Route
+        path="/investment-performance"
+        element={
+          <ReportBoundary>
+            <InvestmentPerformance />
+          </ReportBoundary>
+        }
+      />
+      <Route
+        path="/investment-performance/:id"
+        element={
+          <ReportBoundary>
+            <InvestmentPerformance />
           </ReportBoundary>
         }
       />
