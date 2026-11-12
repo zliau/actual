@@ -70,6 +70,26 @@ The dividend adds its cash to the account, and it counts toward the stock's retu
 
 If you have already entered dividends as deposits, delete them and record them as dividends instead, so that they count toward the stock's return.
 
+#### Reinvested Dividends
+
+If a dividend bought more shares instead of paying you cash, as with a dividend reinvestment plan (DRIP), record it as a reinvested dividend:
+
+1. Click **Add trade** and choose **Reinvested dividend**.
+2. Enter the date, the symbol, the shares the dividend bought and their price.
+3. Click **Save**.
+
+The new shares cost what the dividend paid, so their cost is added to the holding's average cost. No cash moves, and the dividend counts toward the stock's return.
+
+#### Return of Capital
+
+Some funds pay part of their distributions as a return of capital, which is your own money paid back rather than income. Your tax slip or statement shows how much. To record it:
+
+1. Click **Add trade** and choose **Return of capital**.
+2. Enter the date, the symbol and the amount.
+3. Click **Save**.
+
+A return of capital adds its cash to the account and lowers what your shares cost. If it lowers the cost below zero, the cost stays at zero and the rest counts as a realized gain.
+
 ### Moving Shares Between Accounts
 
 When shares move from one of your accounts to another, such as from your employer's stock plan to your own brokerage, record the move instead of a sell and a buy. A sell and a buy would count a gain you didn't make and lose what the shares cost you.

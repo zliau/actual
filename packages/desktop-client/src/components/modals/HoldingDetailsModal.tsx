@@ -2,7 +2,10 @@ import { Trans, useTranslation } from 'react-i18next';
 
 import { Button } from '@actual-app/components/button';
 import { View } from '@actual-app/components/view';
-import { getTradeCashAmount } from '@actual-app/core/shared/investments';
+import {
+  getTradeCashAmount,
+  isCashOnly,
+} from '@actual-app/core/shared/investments';
 import type {
   SecurityEntity,
   TradeEntity,
@@ -119,13 +122,15 @@ export function HoldingDetailsModal({
                         sell: t('Sell'),
                         vest: t('Vest'),
                         dividend: t('Dividend'),
+                        'reinvested-dividend': t('Reinvested dividend'),
+                        'return-of-capital': t('Return of capital'),
                         'move-in': t('Moved in'),
                         'move-out': t('Moved out'),
                       }[trade.type],
-                      trade.type === 'dividend'
+                      isCashOnly(trade.type)
                         ? ''
                         : formatShares(trade.quantity),
-                      trade.type === 'dividend'
+                      isCashOnly(trade.type)
                         ? ''
                         : formatSharePrice(trade.price),
                       getTradeCashAmount(trade) !== 0

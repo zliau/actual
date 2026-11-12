@@ -237,12 +237,16 @@ export const objects = {
       description: (
         <span>
           <code>buy</code>, <code>sell</code>, <code>vest</code>,{' '}
-          <code>dividend</code>, <code>move-out</code> or <code>move-in</code>.
-          A vest is shares received as pay, such as RSUs, and moves no cash. A
-          move is shares going to another of the user's accounts: they keep
-          their cost and no cash moves. It is added as a <code>move-out</code>{' '}
-          with <code>transfer_account</code>, and the <code>move-in</code> is
-          written in that account.
+          <code>dividend</code>, <code>reinvested-dividend</code>,{' '}
+          <code>return-of-capital</code>, <code>move-out</code> or{' '}
+          <code>move-in</code>. A reinvested dividend is shares a dividend
+          bought, and moves no cash. A return of capital lowers what the shares
+          cost, and anything past zero is a realized gain. A vest is shares
+          received as pay, such as RSUs, and moves no cash. A move is shares
+          going to another of the user's accounts: they keep their cost and no
+          cash moves. It is added as a <code>move-out</code> with{' '}
+          <code>transfer_account</code>, and the <code>move-in</code> is written
+          in that account.
         </span>
       ),
     },
@@ -250,7 +254,7 @@ export const objects = {
       name: 'quantity',
       type: 'number',
       description:
-        'The number of shares, which can be fractional. For a vest, the shares that arrived. Required except for a dividend, which has none.',
+        'The number of shares, which can be fractional. For a vest, the shares that arrived. Required except for a dividend or return of capital, which have none.',
     },
     {
       name: 'price',
@@ -259,7 +263,8 @@ export const objects = {
         <span>
           The price per share as a decimal, so $12.50 is <code>12.5</code>. For
           a move, the market price that day, which values the shares but doesn't
-          change their cost. Required except for a dividend, which has none.
+          change their cost. Required except for a dividend or return of
+          capital, which have none.
         </span>
       ),
     },
@@ -279,7 +284,7 @@ export const objects = {
       name: 'amount',
       type: types.amount,
       description:
-        'What a dividend paid. Required for a dividend, and must be 0 for anything else.',
+        'What a dividend or return of capital paid. Required for those, and must be 0 for anything else.',
     },
     {
       name: 'transfer_id',
@@ -388,7 +393,8 @@ export const objects = {
     {
       name: 'dividends',
       type: types.amount,
-      description: 'What the security has paid out in this account so far.',
+      description:
+        'What the security has paid out in dividends in this account so far, reinvested ones included.',
     },
   ],
 

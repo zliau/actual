@@ -10,6 +10,7 @@ import {
   getMoveInCosts,
   getSecurityId,
   getTradeCashAmount,
+  isCashOnly,
   isMove,
   isSecurityExchange,
   isValidSymbol,
@@ -95,9 +96,17 @@ type TradeFields = Pick<
   'date' | 'type' | 'quantity' | 'price' | 'fee' | 'withheld' | 'amount'
 >;
 
-// Trades can change between these types, but a dividend stays a dividend and
-// a move stays a move
-const SHARE_TRADE_TYPES: TradeType[] = ['buy', 'sell', 'vest'];
+// Trades can change type within each of these groups: those with shares and a
+// price, and cash paid out. A move stays a move.
+const TRADE_TYPE_GROUPS: TradeType[][] = [
+  ['buy', 'sell', 'vest', 'reinvested-dividend'],
+  ['dividend', 'return-of-capital'],
+];
+const TRADE_TYPES: TradeType[] = [
+  ...TRADE_TYPE_GROUPS.flat(),
+  'move-in',
+  'move-out',
+];
 
 function fromDbSecurity(row: db.DbSecurity): SecurityEntity {
   return {
@@ -400,8 +409,8 @@ async function updateTrade({
   const type = changes.type ?? trade.type;
   if (
     type !== trade.type &&
-    !(
-      SHARE_TRADE_TYPES.includes(type) && SHARE_TRADE_TYPES.includes(trade.type)
+    !TRADE_TYPE_GROUPS.some(
+      group => group.includes(type) && group.includes(trade.type),
     )
   ) {
     throw new ValidationError(
@@ -416,7 +425,7 @@ async function updateTrade({
     // Only buys and sells have a fee, and only vests withhold shares
     fee: type === 'buy' || type === 'sell' ? (changes.fee ?? trade.fee) : 0,
     withheld: type === 'vest' ? (changes.withheld ?? trade.withheld) : 0,
-    amount: type === 'dividend' ? (changes.amount ?? trade.amount) : 0,
+    amount: isCashOnly(type) ? (changes.amount ?? trade.amount) : 0,
   };
   validateTradeFields(fields);
 
@@ -676,6 +685,8 @@ function getTransactionFields(
     sell: `Sell ${shares}`,
     vest: `Vest ${shares}${fields.withheld > 0 ? `, ${fields.withheld} withheld for tax` : ''}`,
     dividend: `Dividend ${security.symbol}`,
+    'reinvested-dividend': `Reinvested dividend ${shares}`,
+    'return-of-capital': `Return of capital ${security.symbol}`,
     'move-out': `Move ${shares} to ${other}`,
     'move-in': `Move ${shares} from ${other}`,
   }[fields.type];
@@ -699,20 +710,18 @@ function validateTradeFields({
   amount,
 }: TradeFields) {
   validateDate('trade', date);
-  if (
-    !['buy', 'sell', 'vest', 'dividend', 'move-in', 'move-out'].includes(type)
-  ) {
+  if (!TRADE_TYPES.includes(type)) {
     throw new ValidationError(`trade has unknown type '${String(type)}'`);
   }
-  if (type === 'dividend') {
+  if (isCashOnly(type)) {
     if (!Number.isInteger(amount) || amount <= 0) {
       throw new ValidationError(
-        'dividend amount must be a positive whole number of cents',
+        `${type} amount must be a positive whole number of cents`,
       );
     }
     if (quantity !== 0 || price !== 0 || fee !== 0 || withheld !== 0) {
       throw new ValidationError(
-        'dividend has only an amount, not shares, a price or a fee',
+        `${type} has only an amount, not shares, a price or a fee`,
       );
     }
     return;
@@ -732,7 +741,9 @@ function validateTradeFields({
     throw new ValidationError('only a vest withholds shares');
   }
   if (amount !== 0) {
-    throw new ValidationError('only a dividend has an amount');
+    throw new ValidationError(
+      'only a dividend or return of capital has an amount',
+    );
   }
 }
 

@@ -15,6 +15,7 @@ import {
   getCurrencyExchange,
   getSecurityId,
   getTradeCashAmount,
+  isCashOnly,
   isMove,
   isValidSymbol,
   normalizeSymbol,
@@ -56,6 +57,7 @@ import { TradeCloseHint } from './TradeCloseHint';
 import { TradeMoveAccount } from './TradeMoveAccount';
 import { TradeNumberField as NumberField } from './TradeNumberField';
 import { TradeSymbolSearch } from './TradeSymbolSearch';
+import { TradeTypeHint } from './TradeTypeHint';
 import { TradeVestSummary } from './TradeVestSummary';
 
 type EditTradeModalProps = {
@@ -129,11 +131,12 @@ export function EditTradeModal({
     close && !isPriceEdited ? formatSharePrice(close.close) : priceText;
 
   const isVest = type === 'vest';
-  const isDividend = type === 'dividend';
+  // Dividends and returns of capital only have an amount
+  const isCashOnlyType = isCashOnly(type);
   const isMoveTrade = isMove(type);
   const hasFee = type === 'buy' || type === 'sell';
-  const enteredQuantity = isDividend ? 0 : parseExchangeRate(quantityText);
-  const price = isDividend ? 0 : parseExchangeRate(shownPriceText);
+  const enteredQuantity = isCashOnlyType ? 0 : parseExchangeRate(quantityText);
+  const price = isCashOnlyType ? 0 : parseExchangeRate(shownPriceText);
   const feeAmount = feeText.trim() === '' ? 0 : currencyToAmount(feeText);
   const fee = !hasFee
     ? 0
@@ -141,7 +144,7 @@ export function EditTradeModal({
       ? amountToInteger(feeAmount)
       : null;
   const enteredAmount = currencyToAmount(amountText);
-  const amount = !isDividend
+  const amount = !isCashOnlyType
     ? 0
     : enteredAmount != null && enteredAmount > 0
       ? amountToInteger(enteredAmount)
@@ -179,8 +182,8 @@ export function EditTradeModal({
       setError(t('Enter a symbol, like AAPL.'));
       return;
     }
-    if (isDividend && amount == null) {
-      setError(t('Enter the amount the dividend paid.'));
+    if (isCashOnlyType && amount == null) {
+      setError(t('Enter the amount you were paid.'));
       return;
     }
     if (type === 'move-out' && !trade && toAccount === '') {
@@ -195,7 +198,7 @@ export function EditTradeModal({
       setError(t('Enter the shares withheld for tax as a number, like 37.'));
       return;
     }
-    if (!isDividend && (quantity == null || quantity < SHARE_EPSILON)) {
+    if (!isCashOnlyType && (quantity == null || quantity < SHARE_EPSILON)) {
       setError(t('Fewer shares must be withheld for tax than vested.'));
       return;
     }
@@ -276,57 +279,37 @@ export function EditTradeModal({
                   setType(value);
                   clearError();
                 }}
-                // A dividend stays a dividend and a move stays a move, so
-                // delete those to make them something else
-                disabled={!!trade && (isDividend || isMoveTrade)}
+                // A move stays a move, so delete it to make it something else
+                disabled={!!trade && isMoveTrade}
                 options={
                   trade && isMoveTrade
                     ? [[trade.type, t('Move')]]
-                    : trade && isDividend
-                      ? [['dividend', t('Dividend')]]
-                      : [
-                          ['buy', t('Buy')],
-                          ['sell', t('Sell')],
-                          ['vest', t('Vest')],
-                          ...(trade
-                            ? []
-                            : ([
-                                ['dividend', t('Dividend')],
-                                ['move-out', t('Move to another account')],
-                              ] as const)),
-                        ]
+                    : [
+                        ...(!trade || !isCashOnlyType
+                          ? ([
+                              ['buy', t('Buy')],
+                              ['sell', t('Sell')],
+                              ['vest', t('Vest')],
+                              ['reinvested-dividend', t('Reinvested dividend')],
+                            ] as const)
+                          : []),
+                        ...(!trade || isCashOnlyType
+                          ? ([
+                              ['dividend', t('Dividend')],
+                              ['return-of-capital', t('Return of capital')],
+                            ] as const)
+                          : []),
+                        ...(trade
+                          ? []
+                          : ([
+                              ['move-out', t('Move to another account')],
+                            ] as const)),
+                      ]
                 }
                 style={{ flex: 1 }}
               />
             </InlineField>
-            {isDividend && (
-              <Text
-                style={{
-                  color: theme.pageTextLight,
-                  fontSize: 13,
-                  marginBottom: 5,
-                }}
-              >
-                <Trans>
-                  Cash a stock paid you. It counts toward that stock's return.
-                </Trans>
-              </Text>
-            )}
-            {isMoveTrade && (
-              <Text
-                style={{
-                  color: theme.pageTextLight,
-                  fontSize: 13,
-                  marginBottom: 5,
-                }}
-              >
-                <Trans>
-                  Shares moving to another of your accounts, such as from an
-                  employer's plan to your own brokerage. They keep what you paid
-                  for them, and no cash moves.
-                </Trans>
-              </Text>
-            )}
+            <TradeTypeHint type={type} />
             {isMoveTrade && (
               <TradeMoveAccount
                 account={account}
@@ -338,20 +321,6 @@ export function EditTradeModal({
                   clearError();
                 }}
               />
-            )}
-            {isVest && (
-              <Text
-                style={{
-                  color: theme.pageTextLight,
-                  fontSize: 13,
-                  marginBottom: 5,
-                }}
-              >
-                <Trans>
-                  Shares you received as pay, such as RSUs. They are added at
-                  their price on the vest date, and no cash leaves the account.
-                </Trans>
-              </Text>
             )}
             <InlineField label={t('Date')} width="100%">
               <View style={{ flex: 1 }}>
@@ -394,7 +363,7 @@ export function EditTradeModal({
                 }}
               />
             )}
-            {isDividend && (
+            {isCashOnlyType && (
               <NumberField
                 label={t('Amount')}
                 name="amount"
@@ -406,7 +375,7 @@ export function EditTradeModal({
                 }}
               />
             )}
-            {!isDividend && (
+            {!isCashOnlyType && (
               <NumberField
                 label={isVest ? t('Vested') : t('Shares')}
                 name="quantity"
@@ -429,7 +398,7 @@ export function EditTradeModal({
                 }}
               />
             )}
-            {!isDividend && (
+            {!isCashOnlyType && (
               <NumberField
                 label={t('Price')}
                 name="price"
@@ -443,7 +412,7 @@ export function EditTradeModal({
                 }}
               />
             )}
-            {isLookupReady && !isDividend && (
+            {isLookupReady && !isCashOnlyType && (
               <TradeCloseHint
                 currency={currency}
                 result={closeResult}
@@ -478,7 +447,7 @@ export function EditTradeModal({
                   currency={currency}
                 />
               )}
-            {(hasFee || isDividend) &&
+            {(hasFee || isCashOnlyType) &&
               quantity != null &&
               price != null &&
               fee != null &&

@@ -267,10 +267,10 @@ export function InvestmentPerformanceContent({
           <Paragraph>
             <Trans>
               Holdings are valued at each month's last closing price. Fees count
-              as losses and dividends as gains. Shares moved in or out count as
-              money put in or taken out, and cash in the account isn't included.
-              The amount under the percentage is the gain in money, which does
-              grow with how much you have invested.
+              as losses, and dividends and returns of capital as gains. Shares
+              moved in or out count as money put in or taken out, and cash in
+              the account isn't included. The amount under the percentage is the
+              gain in money, which does grow with how much you have invested.
             </Trans>
           </Paragraph>
         </View>

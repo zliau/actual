@@ -66,12 +66,14 @@ export function isInvestmentCurrency(currency: string): boolean {
   return Object.values(EXCHANGE_CURRENCIES).includes(currency);
 }
 
-// How a trade changes the shares held: buys, vests and moves in bring shares
-// in, sells and moves out take them out, and dividends leave them as they are
+// How a trade changes the shares held: buys, vests, reinvested dividends and
+// moves in bring shares in, sells and moves out take them out, and cash paid
+// out leaves them as they are
 export function getShareChange(type: TradeType): 1 | -1 | 0 {
   switch (type) {
     case 'buy':
     case 'vest':
+    case 'reinvested-dividend':
     case 'move-in':
       return 1;
     case 'sell':
@@ -85,6 +87,11 @@ export function getShareChange(type: TradeType): 1 | -1 | 0 {
 // Whether a trade brings shares in
 export function addsShares(type: TradeType): boolean {
   return getShareChange(type) === 1;
+}
+
+// Whether a trade is only cash a security paid out, without shares or a price
+export function isCashOnly(type: TradeType): boolean {
+  return type === 'dividend' || type === 'return-of-capital';
 }
 
 // Whether a trade moves shares between two of the user's accounts
@@ -112,6 +119,7 @@ export function getTradeCashAmount({
     case 'sell':
       return value - fee;
     case 'dividend':
+    case 'return-of-capital':
       return amount;
     default:
       return 0;
@@ -213,14 +221,26 @@ function applyEvent(position: Position, event: PositionEvent): number {
     position.dividends += event.amount ?? 0;
     return 0;
   }
+  if (event.type === 'return-of-capital') {
+    // Lowers the cost, and once that reaches zero the rest is a gain
+    const amount = event.amount ?? 0;
+    const costLeft = position.costBasis - amount;
+    position.realizedGain += Math.max(0, -costLeft);
+    position.costBasis = Math.max(0, costLeft);
+    return 0;
+  }
   position.lastPricedTrade = event;
   const value = amountToInteger(event.quantity * event.price);
   if (addsShares(event.type)) {
     position.quantity += event.quantity;
     // A vest's shares cost what they were worth that day, as that is the
-    // pay, and moved shares keep what they cost before
+    // pay, and reinvested ones cost the dividend that bought them. Moved
+    // shares keep what they cost before.
     position.costBasis +=
       event.type === 'move-in' ? (event.cost ?? value) : value + event.fee;
+    if (event.type === 'reinvested-dividend') {
+      position.dividends += value;
+    }
     return 0;
   }
   const remaining = position.quantity - event.quantity;
@@ -603,7 +623,7 @@ function getDaySnapshots(
         price = event.close;
       } else {
         const { trade } = event;
-        if (trade.type === 'dividend') {
+        if (isCashOnly(trade.type)) {
           // Paid out to the user, so a gain on what was held, valued at the
           // latest price
           const amount = trade.amount ?? 0;
@@ -616,8 +636,23 @@ function getDaySnapshots(
           });
           continue;
         }
-        const before = valueAt(trade.price);
         const value = amountToInteger(trade.quantity * trade.price);
+        if (trade.type === 'reinvested-dividend') {
+          // Paid out and bought back in shares at once: a gain, with no money
+          // put in
+          const before = valueAt(trade.price) + value;
+          quantity += trade.quantity;
+          isHeld = true;
+          price = trade.price;
+          snapshot.trades.push({
+            before,
+            after: valueAt(trade.price),
+            buyFee: 0,
+            sellFee: 0,
+          });
+          continue;
+        }
+        const before = valueAt(trade.price);
         // A vest counts as money put in at the day's price, like a buy, and
         // shares moved in or out count as money put in or taken out at theirs
         if (addsShares(trade.type)) {
@@ -653,11 +688,16 @@ function getDaySnapshots(
 // count as a gain or loss. 1.1 means up 10%. Fees count as losses, and a trade
 // at a price other than the previous one counts as a gain or loss on what was
 // held. Within a day, only the traded security's price changes between its
-// trades, as closes only come at the end of the day.
+// trades, as closes only come at the end of the day. A dividend paid once
+// everything has been sold is a return on the shares that were sold, so it
+// counts as if it had come with the sale.
 function getGrowth(snapshots: DaySnapshot[][], days: string[]): number[] {
   let growth = 1;
   // What was held at the previous day's close
   let start = 0;
+  // What was held just before the last sale that left nothing, with anything
+  // paid out on it since
+  let soldOut = 0;
   return days.map((_, day) => {
     // Each security's value at its latest price so far today
     const values = snapshots.map(security => security[day].open);
@@ -666,12 +706,19 @@ function getGrowth(snapshots: DaySnapshot[][], days: string[]): number[] {
     snapshots.forEach((security, index) => {
       for (const trade of security[day].trades) {
         const before = total - values[index] + trade.before - trade.sellFee;
-        if (base > 0) {
+        const wasHeld = base > 0;
+        if (wasHeld) {
           growth *= before / base;
+        } else if (soldOut > 0 && before > 0) {
+          growth *= (soldOut + before) / soldOut;
+          soldOut += before;
         }
         total += trade.after - values[index];
         values[index] = trade.after;
         base = total + trade.buyFee;
+        if (wasHeld && base <= 0) {
+          soldOut = before;
+        }
       }
     });
     const close = snapshots.reduce(

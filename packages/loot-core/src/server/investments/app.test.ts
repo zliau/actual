@@ -1100,6 +1100,164 @@ describe('dividends', () => {
   });
 });
 
+describe('reinvested dividends', () => {
+  it('add shares at the dividend without moving cash', async () => {
+    const account = await createInvestmentAccount();
+    const security = await createAapl();
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-10-03',
+      type: 'buy',
+      quantity: 10,
+      price: 100,
+    });
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-11-10',
+      type: 'reinvested-dividend',
+      quantity: 0.5,
+      price: 110,
+    });
+
+    const transactions = await db.getTransactions(account);
+    expect(
+      transactions.find(({ notes }) => notes?.startsWith('Reinvested')),
+    ).toMatchObject({
+      amount: 0,
+      notes: 'Reinvested dividend 0.5 AAPL @ 110',
+    });
+    const { holdings, cash } = await app.handlers['holdings-get']({ account });
+    expect(cash).toBe(-100000);
+    expect(holdings[0]).toMatchObject({
+      quantity: 10.5,
+      costBasis: 105500,
+      dividends: 5500,
+      marketValue: 115500,
+    });
+  });
+
+  it('can change type with buys, but not to a dividend', async () => {
+    const account = await createInvestmentAccount();
+    const security = await createAapl();
+    const id = await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-11-10',
+      type: 'reinvested-dividend',
+      quantity: 1,
+      price: 110,
+    });
+    await app.handlers['trade-update']({ id, type: 'buy' });
+    await expect(
+      app.handlers['trade-update']({ id, type: 'dividend' }),
+    ).rejects.toThrow("a buy trade can't be changed to a dividend");
+  });
+});
+
+describe('returns of capital', () => {
+  async function setUp() {
+    const account = await createInvestmentAccount();
+    const security = await createAapl();
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-10-03',
+      type: 'buy',
+      quantity: 10,
+      price: 100,
+    });
+    return { account, security };
+  }
+
+  it('bring in cash and lower the cost of the shares', async () => {
+    const { account, security } = await setUp();
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-11-10',
+      type: 'return-of-capital',
+      amount: 20000,
+    });
+
+    const transactions = await db.getTransactions(account);
+    expect(
+      transactions.find(({ notes }) => notes === 'Return of capital AAPL'),
+    ).toMatchObject({ amount: 20000 });
+    const { holdings, cash } = await app.handlers['holdings-get']({ account });
+    expect(cash).toBe(-80000);
+    expect(holdings[0]).toMatchObject({
+      quantity: 10,
+      costBasis: 80000,
+      averageCost: 80,
+      realizedGain: 0,
+      dividends: 0,
+    });
+  });
+
+  it('count what goes past zero cost as a realized gain', async () => {
+    const { account, security } = await setUp();
+    const id = await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-11-10',
+      type: 'return-of-capital',
+      amount: 120000,
+    });
+    const { holdings } = await app.handlers['holdings-get']({ account });
+    expect(holdings[0]).toMatchObject({ costBasis: 0, realizedGain: 20000 });
+
+    // Later buys start from zero again
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-11-20',
+      type: 'buy',
+      quantity: 10,
+      price: 50,
+    });
+    const after = await app.handlers['holdings-get']({ account });
+    expect(after.holdings[0]).toMatchObject({
+      costBasis: 50000,
+      averageCost: 25,
+    });
+
+    await app.handlers['trade-update']({ id, type: 'dividend' });
+    const [trade] = (await app.handlers['trades-get']({ account })).filter(
+      other => other.id === id,
+    );
+    expect(trade).toMatchObject({ type: 'dividend', amount: 120000 });
+  });
+
+  it('lower the cost that moved shares carry', async () => {
+    const { account, security } = await setUp();
+    const other = await accountsApp.handlers['account-create']({
+      name: 'Other',
+      currency: 'USD',
+      investment: true,
+    });
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-11-10',
+      type: 'return-of-capital',
+      amount: 10000,
+    });
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-11-20',
+      type: 'move-out',
+      quantity: 10,
+      price: 100,
+      transfer_account: other,
+    });
+    const { holdings } = await app.handlers['holdings-get']({ account: other });
+    expect(holdings[0].costBasis).toBe(90000);
+  });
+});
+
 describe('moves', () => {
   async function setUp() {
     const from = await accountsApp.handlers['account-create']({
@@ -1881,6 +2039,78 @@ describe('getPerformanceHistory', () => {
     expect(month.total.growth).toBeCloseTo(1.05);
     expect(month.total.gain).toBe(5000);
     expect(month.total.value).toBe(100000);
+  });
+
+  it('counts reinvested dividends and returns of capital as gains', () => {
+    const [month] = getPerformanceHistory({
+      securities,
+      trades: [
+        trade('US-A', '2026-01-05', 'buy', 10, 100),
+        // 50 paid out in a share bought at 100, then 50 paid back in cash
+        trade('US-A', '2026-01-10', 'reinvested-dividend', 0.5, 100),
+        {
+          ...trade('US-A', '2026-01-20', 'return-of-capital', 0, 0),
+          amount: 5000,
+        },
+      ],
+      prices: [],
+      today: '2026-01-31',
+    });
+    expect(month.total.growth).toBeCloseTo(1.05 * (1 + 5000 / 105000));
+    expect(month.total.gain).toBe(10000);
+    expect(month.total.value).toBe(105000);
+  });
+
+  it('counts dividends paid after everything is sold', () => {
+    const months = getPerformanceHistory({
+      securities,
+      trades: [
+        trade('US-A', '2026-01-05', 'buy', 10, 100),
+        // Sold for 1,100, then 50 and 60 paid out on those shares
+        trade('US-A', '2026-01-20', 'sell', 10, 110),
+        { ...trade('US-A', '2026-02-10', 'dividend', 0, 0), amount: 5000 },
+        { ...trade('US-A', '2026-02-20', 'dividend', 0, 0), amount: 6000 },
+      ],
+      prices: [],
+      today: '2026-02-28',
+    });
+    // As if the 110 had come with the sale: 1,210 back on 1,000
+    expect(growth(months)[0]).toBeCloseTo(1.1);
+    expect(growth(months)[1]).toBeCloseTo(1.21);
+    expect(months[1].securities['US-A'].growth).toBeCloseTo(1.21);
+    expect(months[1].total.gain).toBe(11000);
+  });
+
+  it('counts a reinvested dividend paid after everything is sold', () => {
+    const months = getPerformanceHistory({
+      securities,
+      trades: [
+        trade('US-A', '2026-01-05', 'buy', 10, 100),
+        trade('US-A', '2026-01-20', 'sell', 10, 100),
+        // 50 paid out in half a share, which then goes up 10%
+        trade('US-A', '2026-02-10', 'reinvested-dividend', 0.5, 100),
+      ],
+      prices: [{ security: 'US-A', date: '2026-02-27', close: 110 }],
+      today: '2026-02-28',
+    });
+    expect(growth(months)[1]).toBeCloseTo(1.05 * 1.1);
+  });
+
+  it('starts again from what was sold when sold out twice', () => {
+    const months = getPerformanceHistory({
+      securities,
+      trades: [
+        trade('US-A', '2026-01-05', 'buy', 10, 100),
+        trade('US-A', '2026-01-10', 'sell', 10, 100),
+        trade('US-A', '2026-01-15', 'buy', 20, 100),
+        trade('US-A', '2026-01-20', 'sell', 20, 100),
+        // 100 paid out on the 2,000 sold last
+        { ...trade('US-A', '2026-01-25', 'dividend', 0, 0), amount: 10000 },
+      ],
+      prices: [],
+      today: '2026-01-31',
+    });
+    expect(growth(months)[0]).toBeCloseTo(1.05);
   });
 
   it('counts moved shares as money put in or taken out', () => {
