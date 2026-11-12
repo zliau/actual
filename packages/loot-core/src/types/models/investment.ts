@@ -36,8 +36,16 @@ export type SecuritySplitEntity = {
 };
 
 // A vest is shares received as pay, like RSUs: they come in at the day's price
-// without any cash leaving the account
-export type TradeType = 'buy' | 'sell' | 'vest';
+// without any cash leaving the account. A dividend is cash a security paid out.
+// Shares moved between two of the user's accounts are a move-out in one and a
+// move-in in the other: they keep what they cost, and no cash moves.
+export type TradeType =
+  | 'buy'
+  | 'sell'
+  | 'vest'
+  | 'dividend'
+  | 'move-in'
+  | 'move-out';
 
 export type TradeEntity = {
   id: string;
@@ -45,14 +53,22 @@ export type TradeEntity = {
   security: SecurityEntity['id'];
   date: string;
   type: TradeType;
+  // 0 for a dividend
   quantity: number;
-  // Per share, in whole units of the security's currency
+  // Per share, in whole units of the security's currency. For a move, the
+  // market price that day, which values the shares but doesn't change their
+  // cost. 0 for a dividend.
   price: number;
   // In cents, like transaction amounts
   fee: number;
   // Shares a vest held back for tax, which never reach the account. The
   // quantity is what arrived. Always 0 for buys and sells.
   withheld: number;
+  // The cash a dividend paid, in cents. Always 0 for other trades.
+  amount: number;
+  // The other half of a move: its trade, and the account it is in
+  transfer_id: string | null;
+  transfer_account: string | null;
   // The transaction that moves the trade's cash in the account
   transaction_id: string | null;
   tombstone?: boolean;
@@ -78,6 +94,8 @@ export type Holding = {
   // Of the cost basis, so 0.1 is a 10% gain
   unrealizedGainRatio: number;
   realizedGain: number;
+  // Paid out by the security so far
+  dividends: number;
 };
 
 export type AccountHoldings = {

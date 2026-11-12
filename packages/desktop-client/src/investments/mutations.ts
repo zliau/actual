@@ -17,7 +17,7 @@ import { investmentQueries } from './queries';
 
 type TradeFields = Pick<
   TradeEntity,
-  'date' | 'type' | 'quantity' | 'price' | 'fee' | 'withheld'
+  'date' | 'type' | 'quantity' | 'price' | 'fee' | 'withheld' | 'amount'
 >;
 
 // New trades name the symbol, and the security is added if it isn't stored yet
@@ -27,6 +27,8 @@ type SaveTradePayload =
       symbol: string;
       exchange: SecurityExchange;
       name?: string | null;
+      // For a move out: the account the shares go to
+      transfer_account?: TradeEntity['account'];
     } & TradeFields)
   | ({ id: TradeEntity['id'] } & TradeFields);
 

@@ -722,7 +722,7 @@ async function closeAccount({
         });
         if (holdings.some(holding => holding.quantity > 0)) {
           throw APIError(
-            'account still holds shares: sell them before closing it',
+            'account still holds shares: sell them or move them to another account before closing it',
           );
         }
       }

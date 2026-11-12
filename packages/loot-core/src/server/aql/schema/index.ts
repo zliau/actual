@@ -146,6 +146,8 @@ export const schema = {
     price: f('float', { required: true }),
     fee: f('integer', { default: 0 }),
     withheld: f('float', { default: 0 }),
+    amount: f('integer', { default: 0 }),
+    transfer_id: f('id', { ref: 'trades' }),
     transaction_id: f('id', { ref: 'transactions' }),
     tombstone: f('boolean'),
   },

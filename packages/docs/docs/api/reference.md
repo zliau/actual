@@ -491,19 +491,19 @@ Get trades, newest first, optionally only those of one account or security.
 
 <Method name="addTrade" args={[{ name: 'trade', type: 'Trade' }]} returns="Promise<id>" />
 
-Add a buy, sell or vest, and write its transaction. A vest's transaction has an amount of 0, since no cash moves. Selling more shares than the account holds on that date is an error, as is a security in another currency than the account.
+Add a buy, sell, vest, dividend or move, and write its transaction. A vest's or move's transaction has an amount of 0, since no cash moves. To move shares, add a `move-out` with the `transfer_account` they go to: the `move-in` is added there too, and the shares keep their cost. Taking out more shares than the account holds on that date is an error, as is a security in another currency than the account, or a move to an account in another currency.
 
 #### `updateTrade`
 
 <Method name="updateTrade" args={[{ name: 'id', type: 'id' }, { name: 'fields', type: 'object' }]} />
 
-Update the `date`, `type`, `quantity`, `price`, `fee` or `withheld` of a trade, along with its transaction.
+Update the `date`, `type`, `quantity`, `price`, `fee`, `withheld` or `amount` of a trade, along with its transaction. Buys, sells and vests can change type between themselves, but a dividend stays a dividend and a move stays a move. Changing either half of a move changes both.
 
 #### `deleteTrade`
 
 <Method name="deleteTrade" args={[{ name: 'id', type: 'id' }]} />
 
-Delete a trade and its transaction.
+Delete a trade and its transaction. Deleting either half of a move deletes both.
 
 #### `getHoldings`
 

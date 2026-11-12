@@ -66,44 +66,78 @@ export function isInvestmentCurrency(currency: string): boolean {
   return Object.values(EXCHANGE_CURRENCIES).includes(currency);
 }
 
-// Whether a trade brings shares in: a buy, or a vest of shares received as pay
+// How a trade changes the shares held: buys, vests and moves in bring shares
+// in, sells and moves out take them out, and dividends leave them as they are
+export function getShareChange(type: TradeType): 1 | -1 | 0 {
+  switch (type) {
+    case 'buy':
+    case 'vest':
+    case 'move-in':
+      return 1;
+    case 'sell':
+    case 'move-out':
+      return -1;
+    default:
+      return 0;
+  }
+}
+
+// Whether a trade brings shares in
 export function addsShares(type: TradeType): boolean {
-  return type !== 'sell';
+  return getShareChange(type) === 1;
+}
+
+// Whether a trade moves shares between two of the user's accounts
+export function isMove(type: TradeType): boolean {
+  return type === 'move-in' || type === 'move-out';
 }
 
 // The change in the account's cash, in cents. A buy costs the shares plus the
-// fee, and a sell brings in the shares less the fee. A vest's shares are pay,
-// so no cash moves.
+// fee, a sell brings in the shares less the fee, and a dividend brings in what
+// it paid. A vest's shares are pay and moved shares were already the user's,
+// so no cash moves for them.
 export function getTradeCashAmount({
   type,
   quantity,
   price,
   fee,
-}: Pick<TradeEntity, 'type' | 'quantity' | 'price' | 'fee'>): number {
+  amount = 0,
+}: Pick<TradeEntity, 'type' | 'quantity' | 'price' | 'fee'> & {
+  amount?: number;
+}): number {
   const value = amountToInteger(quantity * price);
-  if (type === 'vest') {
-    return 0;
+  switch (type) {
+    case 'buy':
+      return -(value + fee);
+    case 'sell':
+      return value - fee;
+    case 'dividend':
+      return amount;
+    default:
+      return 0;
   }
-  return type === 'buy' ? -(value + fee) : value - fee;
 }
 
 type Split = Pick<SecuritySplitEntity, 'date' | 'ratio'>;
 
 // Oldest first. A split takes effect before the market opens, so on its day it
-// comes before any trade, and buys and vests come before sells.
+// comes before any trade. Shares coming in come before those going out, and
+// dividends come last.
 function sortEvents<T extends Pick<TradeEntity, 'date' | 'type'>>(
   trades: T[],
   splits: Split[],
 ): Array<(T & { kind: 'trade' }) | (Split & { kind: 'split' })> {
   const order = (event: { kind: string; type?: TradeType }) =>
-    event.type == null ? 0 : addsShares(event.type) ? 1 : 2;
+    event.type == null
+      ? 0
+      : ({ 1: 1, '-1': 2, 0: 3 } as const)[getShareChange(event.type)];
   return [
     ...trades.map(trade => ({ ...trade, kind: 'trade' as const })),
     ...splits.map(split => ({ ...split, kind: 'split' as const })),
   ].sort((a, b) => a.date.localeCompare(b.date) || order(a) - order(b));
 }
 
-// Whether a security's trades ever sell more shares than are held at that
+// Whether a security's trades ever take out more shares than are held at that
 // point, once its splits are counted.
 export function sellsMoreThanHeld(
   trades: Array<Pick<TradeEntity, 'date' | 'type' | 'quantity'>>,
@@ -114,7 +148,7 @@ export function sellsMoreThanHeld(
     if (event.kind === 'split') {
       held *= event.ratio;
     } else {
-      held += addsShares(event.type) ? event.quantity : -event.quantity;
+      held += getShareChange(event.type) * event.quantity;
     }
     if (held < -SHARE_EPSILON) {
       return true;
@@ -123,55 +157,194 @@ export function sellsMoreThanHeld(
   return false;
 }
 
-// Works out a position from all of a security's trades, using average cost: a
-// buy adds its value and fee to the cost, and a sell takes out its share of the
-// cost at the average. A split changes the shares but not the cost. The price is
-// the latest close, or the latest trade's price when that is newer, adjusted for
-// any split since then.
+// A trade for working out a position. A move in carries the cost the shares
+// had in the account they left, in cents. Without it, as when that account was
+// deleted, they cost what they were worth on the day of the move.
+export type HoldingTrade = Pick<
+  TradeEntity,
+  'date' | 'type' | 'quantity' | 'price' | 'fee'
+> & {
+  id?: TradeEntity['id'];
+  amount?: number;
+  cost?: number;
+};
+
+type Position = {
+  quantity: number;
+  costBasis: number;
+  realizedGain: number;
+  dividends: number;
+  // The latest trade with a price, for valuing the shares without a close
+  lastPricedTrade: HoldingTrade | undefined;
+};
+
+type PositionEvent = ReturnType<typeof sortEvents<HoldingTrade>>[number];
+
+function getEmptyPosition(): Position {
+  return {
+    quantity: 0,
+    costBasis: 0,
+    realizedGain: 0,
+    dividends: 0,
+    lastPricedTrade: undefined,
+  };
+}
+
+// Goes through a security's trades in order, using average cost: shares coming
+// in add what they cost, and shares going out take out their share of the cost
+// at the average. Only a sell realizes a gain. A split changes the shares but
+// not the cost.
+function getPosition(trades: HoldingTrade[], splits: Split[]): Position {
+  const position = getEmptyPosition();
+  for (const event of sortEvents(trades, splits)) {
+    applyEvent(position, event);
+  }
+  return position;
+}
+
+// Adds one event to a position. Returns the cost that shares going out took
+// with them, in cents.
+function applyEvent(position: Position, event: PositionEvent): number {
+  if (event.kind === 'split') {
+    position.quantity *= event.ratio;
+    return 0;
+  }
+  if (event.type === 'dividend') {
+    position.dividends += event.amount ?? 0;
+    return 0;
+  }
+  position.lastPricedTrade = event;
+  const value = amountToInteger(event.quantity * event.price);
+  if (addsShares(event.type)) {
+    position.quantity += event.quantity;
+    // A vest's shares cost what they were worth that day, as that is the
+    // pay, and moved shares keep what they cost before
+    position.costBasis +=
+      event.type === 'move-in' ? (event.cost ?? value) : value + event.fee;
+    return 0;
+  }
+  const remaining = position.quantity - event.quantity;
+  const isAllGone = remaining < SHARE_EPSILON;
+  const costOut = isAllGone
+    ? position.costBasis
+    : Math.round((position.costBasis * event.quantity) / position.quantity);
+  if (event.type === 'sell') {
+    position.realizedGain += value - event.fee - costOut;
+  }
+  position.costBasis -= costOut;
+  position.quantity = isAllGone ? 0 : remaining;
+  return costOut;
+}
+
+// The cost each move in carries, in cents, by trade id: what its shares cost
+// in the account they left. Takes one security's trades across all accounts
+// and goes through each account's in order, in step: an account waits at a
+// move in until the account the shares come from reaches the move out, so
+// shares moved back and forth any number of times keep their first cost.
+// A move in whose other half is missing, as when its account was deleted, gets
+// no cost, and so costs what the shares were worth on the day.
+export function getMoveInCosts(
+  trades: Array<
+    HoldingTrade & Pick<TradeEntity, 'id' | 'account' | 'transfer_id'>
+  >,
+  splits: Split[] = [],
+): Map<TradeEntity['id'], number> {
+  const ids = new Set(trades.map(trade => trade.id));
+  const costs = new Map<TradeEntity['id'], number>();
+  // Move ins still waiting for their move out
+  const pending = new Set(
+    trades.flatMap(trade =>
+      trade.type === 'move-in' &&
+      trade.transfer_id &&
+      ids.has(trade.transfer_id)
+        ? [trade.id]
+        : [],
+    ),
+  );
+
+  const accounts = [...new Set(trades.map(trade => trade.account))].map(
+    account => ({
+      position: getEmptyPosition(),
+      events: sortEvents(
+        trades.filter(trade => trade.account === account),
+        splits,
+      ),
+      next: 0,
+    }),
+  );
+
+  const advance = (account: (typeof accounts)[number]) => {
+    let moved = false;
+    while (account.next < account.events.length) {
+      const event = account.events[account.next];
+      if (event.kind === 'trade' && pending.has(event.id)) {
+        break;
+      }
+      const cost = applyEvent(
+        account.position,
+        event.kind === 'trade' && event.type === 'move-in'
+          ? { ...event, cost: costs.get(event.id) }
+          : event,
+      );
+      if (event.kind === 'trade' && event.type === 'move-out') {
+        if (event.transfer_id && pending.delete(event.transfer_id)) {
+          costs.set(event.transfer_id, cost);
+        }
+      }
+      account.next++;
+      moved = true;
+    }
+    return moved;
+  };
+
+  for (;;) {
+    let moved = false;
+    for (const account of accounts) {
+      moved = advance(account) || moved;
+    }
+    if (pending.size === 0 && !moved) {
+      break;
+    }
+    if (!moved) {
+      // Moves on one day that go both ways wait for each other, since shares
+      // coming in are counted before those going out. Let the first one in
+      // through at what its shares were worth.
+      const stuck = accounts.find(
+        account => account.next < account.events.length,
+      );
+      const event = stuck?.events[stuck.next];
+      if (event?.kind !== 'trade') {
+        break;
+      }
+      pending.delete(event.id);
+    }
+  }
+  return costs;
+}
+
+// Works out a position from all of a security's trades in an account. The
+// price is the latest close, or the latest trade's price when that is newer,
+// adjusted for any split since then.
 export function calculateHolding(
   security: Pick<SecurityEntity, 'id' | 'symbol' | 'name' | 'currency'>,
-  trades: Array<
-    Pick<TradeEntity, 'date' | 'type' | 'quantity' | 'price' | 'fee'>
-  >,
+  trades: HoldingTrade[],
   latestPrice?: Pick<SecurityPriceEntity, 'date' | 'close'>,
   splits: Split[] = [],
 ): Holding {
-  let quantity = 0;
-  let costBasis = 0;
-  let realizedGain = 0;
-  let lastTrade: (typeof trades)[number] | undefined;
-  for (const event of sortEvents(trades, splits)) {
-    if (event.kind === 'split') {
-      quantity *= event.ratio;
-    } else {
-      lastTrade = event;
-      const value = amountToInteger(event.quantity * event.price);
-      // A vest's shares cost what they were worth that day, as that is the pay
-      if (addsShares(event.type)) {
-        quantity += event.quantity;
-        costBasis += value + event.fee;
-      } else {
-        const remaining = quantity - event.quantity;
-        const isSoldOut = remaining < SHARE_EPSILON;
-        const costSold = isSoldOut
-          ? costBasis
-          : Math.round((costBasis * event.quantity) / quantity);
-        realizedGain += value - event.fee - costSold;
-        costBasis -= costSold;
-        quantity = isSoldOut ? 0 : remaining;
-      }
-    }
-  }
+  const { quantity, costBasis, realizedGain, dividends, lastPricedTrade } =
+    getPosition(trades, splits);
 
   const isCloseCurrent =
     latestPrice != null &&
-    (lastTrade == null || latestPrice.date >= lastTrade.date);
-  const priceDate = isCloseCurrent ? latestPrice.date : (lastTrade?.date ?? '');
+    (lastPricedTrade == null || latestPrice.date >= lastPricedTrade.date);
+  const priceDate = isCloseCurrent
+    ? latestPrice.date
+    : (lastPricedTrade?.date ?? '');
   // A price from before a split is for shares that have since been divided
   const laterSplits = splits.filter(split => split.date > priceDate);
   const price = laterSplits.reduce(
     (adjusted, split) => adjusted / split.ratio,
-    isCloseCurrent ? latestPrice.close : (lastTrade?.price ?? 0),
+    isCloseCurrent ? latestPrice.close : (lastPricedTrade?.price ?? 0),
   );
 
   const marketValue = amountToInteger(quantity * price);
@@ -191,6 +364,7 @@ export function calculateHolding(
     unrealizedGain,
     unrealizedGainRatio: costBasis > 0 ? unrealizedGain / costBasis : 0,
     realizedGain,
+    dividends,
   };
 }
 
@@ -198,16 +372,22 @@ export type MarketValueChange = {
   security: SecurityEntity['id'];
   month: string;
   date: string;
-  // The change in value over the month, in cents
+  // The change in value, in cents
   amount: number;
-  // What was held at the end of the month, and the price it was valued at
+  // For a month: what was held at its end, and the price it was valued at.
+  // For a trade: its shares and price.
   quantity: number;
   price: number;
+  // Set when this is the value of the shares a trade brought in or took out
+  trade?: Pick<TradeEntity, 'id' | 'type'>;
 };
 
-// What the account's market value transactions should be: for each security
-// and each month from its first trade, the change in its value over that month.
-// Together they add up to the current value. Months without a change have none.
+// What the account's market value transactions should be, for each security
+// from its first trade. On the day of a trade, the value of the shares it
+// brought in or took out at its price, so the balance doesn't dip between
+// paying for shares and the end of the month. And for each month, the rest of
+// the change in value over it, which is what prices did. Together they add up
+// to the current value. Months without such a change have none.
 export function getMarketValueChanges({
   securities,
   trades,
@@ -221,7 +401,7 @@ export function getMarketValueChanges({
   trades: Array<
     Pick<
       TradeEntity,
-      'security' | 'date' | 'type' | 'quantity' | 'price' | 'fee'
+      'id' | 'security' | 'date' | 'type' | 'quantity' | 'price' | 'fee'
     >
   >;
   prices: Array<Pick<SecurityPriceEntity, 'security' | 'date' | 'close'>>;
@@ -249,6 +429,22 @@ export function getMarketValueChanges({
         day,
       });
 
+    const tradeChanges = securityTrades
+      .filter(trade => trade.date <= today)
+      .map((trade): MarketValueChange => ({
+        security: security.id,
+        month: monthUtils.monthFromDate(trade.date),
+        date: trade.date,
+        amount:
+          getShareChange(trade.type) *
+          amountToInteger(trade.quantity * trade.price),
+        quantity: trade.quantity,
+        price: trade.price,
+        trade: { id: trade.id, type: trade.type },
+      }))
+      .filter(change => change.amount !== 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
     let previousValue = 0;
     return monthUtils
       .rangeInclusive(
@@ -259,11 +455,23 @@ export function getMarketValueChanges({
         const lastDay = monthUtils.lastDayOfMonth(month);
         const date = lastDay < today ? lastDay : today;
         const { marketValue, quantity, price } = holdingOn(date);
-        const amount = marketValue - previousValue;
+        const monthTrades = tradeChanges.filter(
+          change => change.month === month,
+        );
+        const traded = monthTrades.reduce(
+          (sum, change) => sum + change.amount,
+          0,
+        );
+        const amount = marketValue - previousValue - traded;
         previousValue = marketValue;
-        return amount === 0
-          ? []
-          : [{ security: security.id, month, date, amount, quantity, price }];
+        return [
+          ...monthTrades,
+          ...(amount === 0
+            ? []
+            : [
+                { security: security.id, month, date, amount, quantity, price },
+              ]),
+        ];
       });
   });
 }
@@ -306,7 +514,7 @@ function getHoldingOn({
 type PerformanceTrade = Pick<
   TradeEntity,
   'security' | 'date' | 'type' | 'quantity' | 'price' | 'fee'
->;
+> & { amount?: number };
 
 // A security on one day of the performance history, in cents
 type DaySnapshot = {
@@ -346,10 +554,8 @@ function getDaySnapshots(
     event.kind === 'split'
       ? 0
       : event.kind === 'close'
-        ? 3
-        : addsShares(event.trade.type)
-          ? 1
-          : 2;
+        ? 4
+        : ({ 1: 1, '-1': 2, 0: 3 } as const)[getShareChange(event.trade.type)];
   const events: Event[] = [
     ...splits.map(({ date, ratio }) => ({
       kind: 'split' as const,
@@ -397,9 +603,23 @@ function getDaySnapshots(
         price = event.close;
       } else {
         const { trade } = event;
+        if (trade.type === 'dividend') {
+          // Paid out to the user, so a gain on what was held, valued at the
+          // latest price
+          const amount = trade.amount ?? 0;
+          snapshot.netFlow -= amount;
+          snapshot.trades.push({
+            before: valueAt(price) + amount,
+            after: valueAt(price),
+            buyFee: 0,
+            sellFee: 0,
+          });
+          continue;
+        }
         const before = valueAt(trade.price);
         const value = amountToInteger(trade.quantity * trade.price);
-        // A vest counts as money put in at the day's price, like a buy
+        // A vest counts as money put in at the day's price, like a buy, and
+        // shares moved in or out count as money put in or taken out at theirs
         if (addsShares(trade.type)) {
           quantity += trade.quantity;
           isHeld = true;

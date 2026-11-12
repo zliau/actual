@@ -47,6 +47,7 @@ export async function getInvestmentPerformance({
       trades: trades.map(trade => ({
         ...trade,
         date: db.fromDateRepr(trade.date),
+        amount: trade.amount ?? 0,
       })),
       prices: prices.map(price => ({
         ...price,

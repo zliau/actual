@@ -236,38 +236,65 @@ export const objects = {
       required: true,
       description: (
         <span>
-          <code>buy</code>, <code>sell</code> or <code>vest</code>. A vest is
-          shares received as pay, such as RSUs, and moves no cash.
+          <code>buy</code>, <code>sell</code>, <code>vest</code>,{' '}
+          <code>dividend</code>, <code>move-out</code> or <code>move-in</code>.
+          A vest is shares received as pay, such as RSUs, and moves no cash. A
+          move is shares going to another of the user's accounts: they keep
+          their cost and no cash moves. It is added as a <code>move-out</code>{' '}
+          with <code>transfer_account</code>, and the <code>move-in</code> is
+          written in that account.
         </span>
       ),
     },
     {
       name: 'quantity',
       type: 'number',
-      required: true,
       description:
-        'The number of shares, which can be fractional. For a vest, the shares that arrived.',
+        'The number of shares, which can be fractional. For a vest, the shares that arrived. Required except for a dividend, which has none.',
     },
     {
       name: 'price',
       type: 'number',
-      required: true,
       description: (
         <span>
-          The price per share as a decimal, so $12.50 is <code>12.5</code>.
+          The price per share as a decimal, so $12.50 is <code>12.5</code>. For
+          a move, the market price that day, which values the shares but doesn't
+          change their cost. Required except for a dividend, which has none.
         </span>
       ),
     },
     {
       name: 'fee',
       type: types.amount,
-      description: 'Optional; will default to 0. Must be 0 for a vest.',
+      description:
+        'Optional; will default to 0. Only a buy or sell can have a fee.',
     },
     {
       name: 'withheld',
       type: 'number',
       description:
-        'The shares a vest held back for tax, which never arrived. Optional; will default to 0, and must be 0 for a buy or sell.',
+        'The shares a vest held back for tax, which never arrived. Optional; will default to 0, and must be 0 for anything but a vest.',
+    },
+    {
+      name: 'amount',
+      type: types.amount,
+      description:
+        'What a dividend paid. Required for a dividend, and must be 0 for anything else.',
+    },
+    {
+      name: 'transfer_id',
+      type: 'id | null',
+      description: 'For a move, the trade of the other half of it.',
+    },
+    {
+      name: 'transfer_account',
+      type: 'id | null',
+      description: (
+        <span>
+          For a move, the account the shares went to or came from. Set it when
+          adding a <code>move-out</code>.
+        </span>
+      ),
     },
     {
       name: 'transaction_id',
@@ -358,6 +385,11 @@ export const objects = {
       ),
     },
     { name: 'realizedGain', type: types.amount },
+    {
+      name: 'dividends',
+      type: types.amount,
+      description: 'What the security has paid out in this account so far.',
+    },
   ],
 
   accountGroup: [

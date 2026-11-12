@@ -71,24 +71,29 @@ export async function updateMarketValue(account: db.DbAccount['id']) {
     today: currentDay(),
   });
 
-  // The id comes from the account, security and month so devices working this
-  // out while they can't sync end up with one transaction for each. Older
-  // transactions for all securities at once don't match one, so they go.
+  // The id comes from the account and the trade, or the security and month, so
+  // devices working this out while they can't sync end up with one transaction
+  // for each. Older transactions for all securities at once don't match one,
+  // so they go.
   const symbols = new Map(
     securities.map(security => [security.id, security.symbol]),
   );
   const wanted = new Map(
-    changes.map(change => [
-      `market-value-${account}-${change.security}-${change.month}`,
-      {
-        date: change.date,
-        amount: change.amount,
-        notes: getMarketValueNotes(
-          symbols.get(change.security) ?? change.security,
-          change,
-        ),
-      },
-    ]),
+    changes.map(change => {
+      const symbol = symbols.get(change.security) ?? change.security;
+      return [
+        change.trade
+          ? `market-value-${account}-trade-${change.trade.id}`
+          : `market-value-${account}-${change.security}-${change.month}`,
+        {
+          date: change.date,
+          amount: change.amount,
+          notes: change.trade
+            ? getTradedSharesNotes(symbol, change)
+            : getMarketValueNotes(symbol, change),
+        },
+      ];
+    }),
   );
   const existingById = new Map(existing.map(row => [row.id, row]));
 
@@ -143,6 +148,17 @@ function getMarketValueNotes(
   const shares = Number(quantity.toFixed(6));
   const sharePrice = Number(price.toFixed(4));
   return `Market value ${shares} ${symbol} @ ${sharePrice}`;
+}
+
+// Says what a trade's shares were worth when they came in or went out: `Shares
+// in: 10 AAPL @ 100`
+function getTradedSharesNotes(
+  symbol: string,
+  { amount, quantity, price }: MarketValueChange,
+) {
+  const shares = Number(quantity.toFixed(6));
+  const sharePrice = Number(price.toFixed(4));
+  return `Shares ${amount > 0 ? 'in' : 'out'}: ${shares} ${symbol} @ ${sharePrice}`;
 }
 
 // Prices change the value of every open account holding the security

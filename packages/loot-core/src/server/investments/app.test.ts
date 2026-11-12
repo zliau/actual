@@ -13,7 +13,7 @@ import {
   sellsMoreThanHeld,
 } from '#shared/investments';
 import { q } from '#shared/query';
-import type { PerformanceMonth } from '#types/models';
+import type { PerformanceMonth, TradeType } from '#types/models';
 
 beforeEach(async () => {
   await global.emptyDatabase()();
@@ -724,8 +724,9 @@ describe('market value', () => {
   it('adds the value of a buy, leaving only the fee off the balance', async () => {
     const { account } = await setUp();
 
+    // On the day of the buy, so the balance doesn't dip until the month ends
     expect(await marketValueTransactions(account)).toEqual([
-      { date: '2016-10-31', amount: 100000 },
+      { date: '2016-10-15', amount: 100000 },
     ]);
     expect(await getBalance(account)).toBe(-500);
   });
@@ -737,7 +738,7 @@ describe('market value', () => {
     await set({ security, date: '2016-12-20', close: 90 });
 
     expect(await marketValueTransactions(account)).toEqual([
-      { date: '2016-10-31', amount: 100000 },
+      { date: '2016-10-15', amount: 100000 },
       { date: '2016-11-30', amount: 10000 },
       { date: '2016-12-31', amount: -20000 },
     ]);
@@ -781,21 +782,27 @@ describe('market value', () => {
         .sort((a, b) => a.notes.localeCompare(b.notes)),
     ).toEqual([
       {
-        date: '2016-10-31',
-        amount: 100000,
-        notes: 'Market value 10 AAPL @ 100',
-      },
-      {
         date: '2016-11-30',
         amount: 10123,
         notes: 'Market value 10 AAPL @ 110.1235',
       },
+      // What the price did between the buy at 60 and the sale at 62
+      { date: '2016-12-31', amount: 500, notes: 'Market value MSFT, sold' },
       {
-        date: '2016-11-30',
-        amount: 15000,
-        notes: 'Market value 2.5 MSFT @ 60',
+        date: '2016-10-15',
+        amount: 100000,
+        notes: 'Shares in: 10 AAPL @ 100',
       },
-      { date: '2016-12-31', amount: -15000, notes: 'Market value MSFT, sold' },
+      {
+        date: '2016-11-15',
+        amount: 15000,
+        notes: 'Shares in: 2.5 MSFT @ 60',
+      },
+      {
+        date: '2016-12-15',
+        amount: -15500,
+        notes: 'Shares out: 2.5 MSFT @ 62',
+      },
     ]);
   });
 
@@ -818,7 +825,7 @@ describe('market value', () => {
     });
 
     expect(await marketValueTransactions(account)).toEqual([
-      { date: '2016-10-31', amount: 100000 },
+      { date: '2016-10-15', amount: 100000 },
     ]);
   });
 
@@ -860,7 +867,7 @@ describe('market value', () => {
     await app.handlers['security-price-delete']({ id });
 
     expect(await marketValueTransactions(account)).toEqual([
-      { date: '2016-10-31', amount: 100000 },
+      { date: '2016-10-15', amount: 100000 },
     ]);
   });
 
@@ -869,7 +876,7 @@ describe('market value', () => {
     await app.handlers['trade-update']({ id, date: '2016-09-15', quantity: 5 });
 
     expect(await marketValueTransactions(account)).toEqual([
-      { date: '2016-09-30', amount: 50000 },
+      { date: '2016-09-15', amount: 50000 },
     ]);
   });
 
@@ -889,7 +896,7 @@ describe('market value', () => {
       price: 100,
     });
     expect(await marketValueTransactions(account)).toEqual([
-      { date: '2016-10-31', amount: 20000 },
+      { date: '2016-10-15', amount: 20000 },
     ]);
   });
 
@@ -928,7 +935,7 @@ describe('market value', () => {
     });
 
     expect(await marketValueTransactions(account)).toEqual([
-      { date: '2016-10-31', amount: 100000 },
+      { date: '2016-10-15', amount: 100000 },
     ]);
   });
 
@@ -1021,6 +1028,344 @@ describe('market value', () => {
   });
 });
 
+describe('dividends', () => {
+  it('bring in cash for a security without changing its shares', async () => {
+    const account = await createInvestmentAccount();
+    const security = await createAapl();
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-10-03',
+      type: 'buy',
+      quantity: 10,
+      price: 100,
+    });
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-11-10',
+      type: 'dividend',
+      amount: 1240,
+    });
+
+    const transactions = await db.getTransactions(account);
+    expect(
+      transactions.find(({ notes }) => notes === 'Dividend AAPL'),
+    ).toMatchObject({ amount: 1240, investment_type: 'trade' });
+    const { holdings, cash } = await app.handlers['holdings-get']({ account });
+    expect(cash).toBe(-100000 + 1240);
+    expect(holdings[0]).toMatchObject({
+      quantity: 10,
+      costBasis: 100000,
+      // A dividend has no price, so the shares are still valued at the buy's
+      price: 100,
+      realizedGain: 0,
+      dividends: 1240,
+    });
+  });
+
+  it('only have an amount', async () => {
+    const account = await createInvestmentAccount();
+    const security = await createAapl();
+    const base = {
+      account,
+      security,
+      date: '2016-11-10',
+      type: 'dividend' as const,
+    };
+    await expect(
+      app.handlers['trade-create']({ ...base, amount: 0 }),
+    ).rejects.toThrow('dividend amount must be a positive');
+    await expect(
+      app.handlers['trade-create']({ ...base, amount: 100, quantity: 1 }),
+    ).rejects.toThrow('dividend has only an amount');
+  });
+
+  it("can't be changed to another type", async () => {
+    const account = await createInvestmentAccount();
+    const security = await createAapl();
+    const id = await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-11-10',
+      type: 'dividend',
+      amount: 500,
+    });
+    await expect(
+      app.handlers['trade-update']({ id, type: 'buy' }),
+    ).rejects.toThrow("a dividend trade can't be changed to a buy");
+    await app.handlers['trade-update']({ id, amount: 700 });
+    const [trade] = await app.handlers['trades-get']({ account });
+    expect(trade.amount).toBe(700);
+  });
+});
+
+describe('moves', () => {
+  async function setUp() {
+    const from = await accountsApp.handlers['account-create']({
+      name: 'Plan',
+      currency: 'USD',
+      investment: true,
+    });
+    const to = await accountsApp.handlers['account-create']({
+      name: 'Brokerage',
+      currency: 'USD',
+      investment: true,
+    });
+    const security = await createAapl();
+    // 20 shares cost 1,000 and 3,000, so 200 each on average
+    await app.handlers['trade-create']({
+      account: from,
+      security,
+      date: '2016-01-04',
+      type: 'vest',
+      quantity: 10,
+      price: 100,
+    });
+    await app.handlers['trade-create']({
+      account: from,
+      security,
+      date: '2016-02-01',
+      type: 'buy',
+      quantity: 10,
+      price: 300,
+    });
+    const id = await app.handlers['trade-create']({
+      account: from,
+      security,
+      date: '2016-06-01',
+      type: 'move-out',
+      quantity: 15,
+      price: 400,
+      transfer_account: to,
+    });
+    return { from, to, security, id };
+  }
+
+  it('take shares to another account with their cost', async () => {
+    const { from, to, id } = await setUp();
+
+    const [moveOut] = await app.handlers['trades-get']({ account: from });
+    const [moveIn] = await app.handlers['trades-get']({ account: to });
+    expect(moveOut).toMatchObject({
+      id,
+      type: 'move-out',
+      transfer_id: moveIn.id,
+      transfer_account: to,
+    });
+    expect(moveIn).toMatchObject({
+      type: 'move-in',
+      quantity: 15,
+      price: 400,
+      transfer_id: id,
+      transfer_account: from,
+    });
+
+    const fromHolding = (await app.handlers['holdings-get']({ account: from }))
+      .holdings[0];
+    expect(fromHolding).toMatchObject({
+      quantity: 5,
+      costBasis: 100000,
+      realizedGain: 0,
+    });
+    const toHoldings = await app.handlers['holdings-get']({ account: to });
+    expect(toHoldings.cash).toBe(0);
+    expect(toHoldings.holdings[0]).toMatchObject({
+      quantity: 15,
+      costBasis: 300000,
+      averageCost: 200,
+      marketValue: 600000,
+    });
+
+    // No cash moves, and each account's value follows its shares
+    const notes = (await db.getTransactions(to)).map(t => [t.notes, t.amount]);
+    expect(notes).toContainEqual(['Move 15 AAPL @ 400 from Plan', 0]);
+    expect(await getBalance(to)).toBe(600000);
+    expect(await getBalance(from)).toBe(-300000 + 200000);
+  });
+
+  it('follow changes to what the shares cost before', async () => {
+    const { from, to, security } = await setUp();
+    await app.handlers['trade-create']({
+      account: from,
+      security,
+      date: '2016-03-01',
+      type: 'buy',
+      quantity: 20,
+      price: 50,
+    });
+    // Now 40 shares cost 5,000, so 125 each
+    const { holdings } = await app.handlers['holdings-get']({ account: to });
+    expect(holdings[0].costBasis).toBe(187500);
+  });
+
+  it('keep their first cost when moved again', async () => {
+    const { to, security } = await setUp();
+    const third = await accountsApp.handlers['account-create']({
+      name: 'Third',
+      currency: 'USD',
+      investment: true,
+    });
+    await app.handlers['trade-create']({
+      account: to,
+      security,
+      date: '2016-07-01',
+      type: 'move-out',
+      quantity: 15,
+      price: 500,
+      transfer_account: third,
+    });
+    const { holdings } = await app.handlers['holdings-get']({ account: third });
+    expect(holdings[0]).toMatchObject({ quantity: 15, costBasis: 300000 });
+  });
+
+  it('keep their first cost when moved again on the same day', async () => {
+    const { to, security } = await setUp();
+    const third = await accountsApp.handlers['account-create']({
+      name: 'Third',
+      currency: 'USD',
+      investment: true,
+    });
+    await app.handlers['trade-create']({
+      account: to,
+      security,
+      date: '2016-06-01',
+      type: 'move-out',
+      quantity: 15,
+      price: 400,
+      transfer_account: third,
+    });
+    const { holdings } = await app.handlers['holdings-get']({ account: third });
+    expect(holdings[0]).toMatchObject({ quantity: 15, costBasis: 300000 });
+  });
+
+  it('keep their first cost however often they go back and forth', async () => {
+    const { from, to, security } = await setUp();
+    // 15 shares sit in the brokerage and 5 in the plan, all at 200 each
+    for (let day = 10; day < 24; day++) {
+      const isBack = day % 2 === 0;
+      await app.handlers['trade-create']({
+        account: isBack ? to : from,
+        security,
+        date: `2016-06-${day}`,
+        type: 'move-out',
+        quantity: 15,
+        price: 1000,
+        transfer_account: isBack ? from : to,
+      });
+    }
+    const [fromHolding] = (
+      await app.handlers['holdings-get']({ account: from })
+    ).holdings;
+    const [toHolding] = (await app.handlers['holdings-get']({ account: to }))
+      .holdings;
+    expect(fromHolding).toMatchObject({ quantity: 5, costBasis: 100000 });
+    expect(toHolding).toMatchObject({ quantity: 15, costBasis: 300000 });
+  });
+
+  it('take what shares were worth when moved both ways on one day', async () => {
+    const { from, to, security } = await setUp();
+    // Each account counts its shares coming in before those going out, so
+    // these two wait for each other and one of them is let through at 400
+    await app.handlers['trade-create']({
+      account: to,
+      security,
+      date: '2016-06-01',
+      type: 'move-out',
+      quantity: 5,
+      price: 400,
+      transfer_account: from,
+    });
+    const holdings = await Promise.all(
+      [from, to].map(
+        async account =>
+          (await app.handlers['holdings-get']({ account })).holdings[0],
+      ),
+    );
+    expect(holdings.map(holding => holding.quantity)).toEqual([10, 10]);
+    expect(
+      holdings.reduce((total, holding) => total + holding.costBasis, 0),
+    ).toBeGreaterThan(0);
+  });
+
+  it('change and delete both halves together', async () => {
+    const { from, to, id } = await setUp();
+    const [moveIn] = await app.handlers['trades-get']({ account: to });
+
+    await app.handlers['trade-update']({ id: moveIn.id, quantity: 5 });
+    const [moveOut] = await app.handlers['trades-get']({ account: from });
+    expect(moveOut).toMatchObject({ id, quantity: 5, type: 'move-out' });
+
+    await app.handlers['trade-delete']({ id });
+    expect(await app.handlers['trades-get']({ account: to })).toEqual([]);
+    expect(
+      (await db.getTransactions(to)).filter(t => t.investment_type === 'trade'),
+    ).toEqual([]);
+  });
+
+  it("can't take more shares than are held, or leave later sells short", async () => {
+    const { to, security, id } = await setUp();
+    await expect(
+      app.handlers['trade-update']({ id, quantity: 25 }),
+    ).rejects.toThrow('trade sells more shares than are held');
+
+    await app.handlers['trade-create']({
+      account: to,
+      security,
+      date: '2016-08-01',
+      type: 'sell',
+      quantity: 15,
+      price: 500,
+    });
+    await expect(
+      app.handlers['trade-update']({ id, quantity: 10 }),
+    ).rejects.toThrow('trade sells more shares than are held');
+    await expect(app.handlers['trade-delete']({ id })).rejects.toThrow(
+      'later sells',
+    );
+  });
+
+  it('only go to another open account in the same currency', async () => {
+    const { from, security } = await setUp();
+    const cad = await createInvestmentAccount('CAD');
+    const base = {
+      account: from,
+      security,
+      date: '2016-06-02',
+      type: 'move-out' as const,
+      quantity: 1,
+      price: 400,
+    };
+    await expect(app.handlers['trade-create'](base)).rejects.toThrow(
+      'needs the account the shares go to',
+    );
+    await expect(
+      app.handlers['trade-create']({ ...base, transfer_account: from }),
+    ).rejects.toThrow('only move to another account');
+    await expect(
+      app.handlers['trade-create']({ ...base, transfer_account: cad }),
+    ).rejects.toThrow('only move to another USD account');
+    await expect(
+      app.handlers['trade-create']({ ...base, type: 'move-in' }),
+    ).rejects.toThrow('made from the account the shares leave');
+  });
+
+  it('let an account be closed once its shares have moved', async () => {
+    const { from, to, security } = await setUp();
+    await app.handlers['trade-create']({
+      account: from,
+      security,
+      date: '2016-06-03',
+      type: 'move-out',
+      quantity: 5,
+      price: 400,
+      transfer_account: to,
+    });
+    const { holdings } = await app.handlers['holdings-get']({ account: from });
+    expect(holdings[0].quantity).toBe(0);
+  });
+});
+
 describe('investment-performance-get', () => {
   beforeEach(async () => {
     await global.emptyDatabase()();
@@ -1078,6 +1423,7 @@ describe('getMarketValueChanges', () => {
     quantity: number,
     price: number,
   ) => ({
+    id: `buy-${security}-${date}`,
     security,
     date,
     type: 'buy' as const,
@@ -1105,6 +1451,36 @@ describe('getMarketValueChanges', () => {
     ).toEqual([]);
   });
 
+  it('values shares on the day of their trade, so the balance has no dip', () => {
+    expect(
+      getMarketValueChanges({
+        securities,
+        trades: [buy('US-A', '2025-11-05', 1, 100)],
+        prices: [{ security: 'US-A', date: '2025-11-20', close: 104 }],
+        today: '2026-01-15',
+      }),
+    ).toEqual([
+      {
+        security: 'US-A',
+        month: '2025-11',
+        date: '2025-11-05',
+        amount: 10000,
+        quantity: 1,
+        price: 100,
+        trade: { id: 'buy-US-A-2025-11-05', type: 'buy' },
+      },
+      // Only what the price did since
+      {
+        security: 'US-A',
+        month: '2025-11',
+        date: '2025-11-30',
+        amount: 400,
+        quantity: 1,
+        price: 104,
+      },
+    ]);
+  });
+
   it('dates the current month today and skips months without a change', () => {
     expect(
       getMarketValueChanges({
@@ -1114,14 +1490,7 @@ describe('getMarketValueChanges', () => {
         today: '2026-01-15',
       }),
     ).toEqual([
-      {
-        security: 'US-A',
-        month: '2025-11',
-        date: '2025-11-30',
-        amount: 10000,
-        quantity: 1,
-        price: 100,
-      },
+      expect.objectContaining({ date: '2025-11-05', amount: 10000 }),
       {
         security: 'US-A',
         month: '2026-01',
@@ -1151,8 +1520,14 @@ describe('getMarketValueChanges', () => {
     ).toEqual([
       expect.objectContaining({
         security: 'US-A',
+        date: '2025-11-05',
+        amount: 10000,
+      }),
+      expect.objectContaining({
+        security: 'US-A',
         month: '2025-11',
-        amount: 11000,
+        date: '2025-11-30',
+        amount: 1000,
       }),
       expect.objectContaining({
         security: 'US-A',
@@ -1162,19 +1537,20 @@ describe('getMarketValueChanges', () => {
       }),
       expect.objectContaining({
         security: 'US-B',
-        month: '2025-12',
+        date: '2025-12-05',
         amount: 10000,
         quantity: 2,
       }),
     ]);
   });
 
-  it('adds up to the current value through a sale', () => {
+  it('takes out the shares of a sale on its day, and adds up to nothing', () => {
     const changes = getMarketValueChanges({
       securities,
       trades: [
         buy('US-A', '2025-11-05', 3, 100),
         {
+          id: 'sell',
           security: 'US-A',
           date: '2025-12-05',
           type: 'sell' as const,
@@ -1186,7 +1562,36 @@ describe('getMarketValueChanges', () => {
       prices: [],
       today: '2026-01-15',
     });
+    expect(changes).toEqual([
+      expect.objectContaining({ date: '2025-11-05', amount: 30000 }),
+      expect.objectContaining({ date: '2025-12-05', amount: -36000 }),
+      // The gain since the buy, which the sale turned into cash
+      expect.objectContaining({ date: '2025-12-31', amount: 6000 }),
+    ]);
     expect(changes.reduce((sum, change) => sum + change.amount, 0)).toBe(0);
+  });
+
+  it('has no shares to value for cash a security paid out', () => {
+    const changes = getMarketValueChanges({
+      securities,
+      trades: [
+        buy('US-A', '2025-11-05', 1, 100),
+        {
+          id: 'dividend',
+          security: 'US-A',
+          date: '2025-11-20',
+          type: 'dividend' as const,
+          quantity: 0,
+          price: 0,
+          fee: 0,
+        },
+      ],
+      prices: [],
+      today: '2026-01-15',
+    });
+    expect(changes).toEqual([
+      expect.objectContaining({ date: '2025-11-05', amount: 10000 }),
+    ]);
   });
 });
 
@@ -1307,7 +1712,7 @@ describe('getPerformanceHistory', () => {
   const trade = (
     security: string,
     date: string,
-    type: 'buy' | 'sell',
+    type: TradeType,
     quantity: number,
     price: number,
     fee = 0,
@@ -1460,6 +1865,37 @@ describe('getPerformanceHistory', () => {
       today: '2026-01-31',
     });
     expect(month.total).toEqual({ value: 110000, gain: 10000, growth: 1.1 });
+  });
+
+  it('counts dividends as a gain', () => {
+    const [month] = getPerformanceHistory({
+      securities,
+      trades: [
+        trade('US-A', '2026-01-05', 'buy', 10, 100),
+        { ...trade('US-A', '2026-01-20', 'dividend', 0, 0), amount: 5000 },
+      ],
+      prices: [],
+      today: '2026-01-31',
+    });
+    // The price didn't move, and 50 was paid out on 1,000
+    expect(month.total.growth).toBeCloseTo(1.05);
+    expect(month.total.gain).toBe(5000);
+    expect(month.total.value).toBe(100000);
+  });
+
+  it('counts moved shares as money put in or taken out', () => {
+    const months = getPerformanceHistory({
+      securities,
+      trades: [
+        trade('US-A', '2026-01-05', 'move-in', 10, 100),
+        trade('US-A', '2026-02-10', 'move-out', 5, 120),
+      ],
+      prices: [{ security: 'US-A', date: '2026-02-27', close: 130 }],
+      today: '2026-02-28',
+    });
+    expect(growth(months)[1]).toBeCloseTo(1.3);
+    // Up 200 before half moved out at 120, then up 50 on what was left
+    expect(months.map(({ total }) => total.gain)).toEqual([0, 25000]);
   });
 
   it('weights the total by what each security held', () => {

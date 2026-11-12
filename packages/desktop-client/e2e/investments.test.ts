@@ -77,7 +77,7 @@ test.describe('Investment accounts', () => {
     await expect(holdingRow()).toContainText('1,000.00');
     await expect(page.getByText(/Cash.*3,995\.00/)).toBeVisible();
     await expect(page.getByText('Buy 10 AAPL @ 100')).toBeVisible();
-    await expect(page.getByText('Market value')).toBeVisible();
+    await expect(page.getByText('Shares in: 10 AAPL @ 100')).toBeVisible();
     await expect(balance()).toContainText('4,995.00');
   });
 
@@ -122,7 +122,7 @@ test.describe('Investment accounts', () => {
   test("doesn't let the register change what trades write", async () => {
     const row = page
       .getByTestId('row')
-      .filter({ hasText: 'Market value' })
+      .filter({ hasText: 'Shares in' })
       .first();
     await row.getByTestId('notes').click();
 

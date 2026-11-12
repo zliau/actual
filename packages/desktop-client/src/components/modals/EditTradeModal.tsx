@@ -15,6 +15,7 @@ import {
   getCurrencyExchange,
   getSecurityId,
   getTradeCashAmount,
+  isMove,
   isValidSymbol,
   normalizeSymbol,
   sellsMoreThanHeld,
@@ -52,6 +53,7 @@ import {
 } from '#investments';
 
 import { TradeCloseHint } from './TradeCloseHint';
+import { TradeMoveAccount } from './TradeMoveAccount';
 import { TradeNumberField as NumberField } from './TradeNumberField';
 import { TradeSymbolSearch } from './TradeSymbolSearch';
 import { TradeVestSummary } from './TradeVestSummary';
@@ -93,6 +95,10 @@ export function EditTradeModal({
   const [feeText, setFeeText] = useState(
     trade && trade.fee > 0 ? formatSharePrice(trade.fee / 100) : '',
   );
+  const [amountText, setAmountText] = useState(
+    trade && trade.amount > 0 ? formatSharePrice(trade.amount / 100) : '',
+  );
+  const [toAccount, setToAccount] = useState('');
   const [error, setError] = useState<string | null>(null);
   // Looked up once typing in the symbol is done, so each keystroke doesn't use
   // up part of a provider's allowance
@@ -123,13 +129,22 @@ export function EditTradeModal({
     close && !isPriceEdited ? formatSharePrice(close.close) : priceText;
 
   const isVest = type === 'vest';
-  const enteredQuantity = parseExchangeRate(quantityText);
-  const price = parseExchangeRate(shownPriceText);
+  const isDividend = type === 'dividend';
+  const isMoveTrade = isMove(type);
+  const hasFee = type === 'buy' || type === 'sell';
+  const enteredQuantity = isDividend ? 0 : parseExchangeRate(quantityText);
+  const price = isDividend ? 0 : parseExchangeRate(shownPriceText);
   const feeAmount = feeText.trim() === '' ? 0 : currencyToAmount(feeText);
-  const fee = isVest
+  const fee = !hasFee
     ? 0
     : feeAmount != null && feeAmount >= 0
       ? amountToInteger(feeAmount)
+      : null;
+  const enteredAmount = currencyToAmount(amountText);
+  const amount = !isDividend
+    ? 0
+    : enteredAmount != null && enteredAmount > 0
+      ? amountToInteger(enteredAmount)
       : null;
   // Left empty or typed as 0 when nothing was withheld
   const withheld =
@@ -164,6 +179,14 @@ export function EditTradeModal({
       setError(t('Enter a symbol, like AAPL.'));
       return;
     }
+    if (isDividend && amount == null) {
+      setError(t('Enter the amount the dividend paid.'));
+      return;
+    }
+    if (type === 'move-out' && !trade && toAccount === '') {
+      setError(t('Choose the account the shares move to.'));
+      return;
+    }
     if (enteredQuantity == null) {
       setError(t('Shares must be more than zero.'));
       return;
@@ -172,7 +195,7 @@ export function EditTradeModal({
       setError(t('Enter the shares withheld for tax as a number, like 37.'));
       return;
     }
-    if (quantity == null || quantity < SHARE_EPSILON) {
+    if (!isDividend && (quantity == null || quantity < SHARE_EPSILON)) {
       setError(t('Fewer shares must be withheld for tax than vested.'));
       return;
     }
@@ -184,8 +207,11 @@ export function EditTradeModal({
       setError(t('The fee must be zero or more.'));
       return;
     }
+    if (quantity == null || amount == null) {
+      return;
+    }
 
-    const fields = { date, type, quantity, price, fee, withheld };
+    const fields = { date, type, quantity, price, fee, withheld, amount };
     if (sellsMoreThanHeld([...otherTrades, fields], splits)) {
       setError(
         t(
@@ -205,6 +231,7 @@ export function EditTradeModal({
         exchange,
         name,
         ...fields,
+        ...(type === 'move-out' && { transfer_account: toAccount }),
       });
     }
     close();
@@ -249,14 +276,69 @@ export function EditTradeModal({
                   setType(value);
                   clearError();
                 }}
-                options={[
-                  ['buy', t('Buy')],
-                  ['sell', t('Sell')],
-                  ['vest', t('Vest')],
-                ]}
+                // A dividend stays a dividend and a move stays a move, so
+                // delete those to make them something else
+                disabled={!!trade && (isDividend || isMoveTrade)}
+                options={
+                  trade && isMoveTrade
+                    ? [[trade.type, t('Move')]]
+                    : trade && isDividend
+                      ? [['dividend', t('Dividend')]]
+                      : [
+                          ['buy', t('Buy')],
+                          ['sell', t('Sell')],
+                          ['vest', t('Vest')],
+                          ...(trade
+                            ? []
+                            : ([
+                                ['dividend', t('Dividend')],
+                                ['move-out', t('Move to another account')],
+                              ] as const)),
+                        ]
+                }
                 style={{ flex: 1 }}
               />
             </InlineField>
+            {isDividend && (
+              <Text
+                style={{
+                  color: theme.pageTextLight,
+                  fontSize: 13,
+                  marginBottom: 5,
+                }}
+              >
+                <Trans>
+                  Cash a stock paid you. It counts toward that stock's return.
+                </Trans>
+              </Text>
+            )}
+            {isMoveTrade && (
+              <Text
+                style={{
+                  color: theme.pageTextLight,
+                  fontSize: 13,
+                  marginBottom: 5,
+                }}
+              >
+                <Trans>
+                  Shares moving to another of your accounts, such as from an
+                  employer's plan to your own brokerage. They keep what you paid
+                  for them, and no cash moves.
+                </Trans>
+              </Text>
+            )}
+            {isMoveTrade && (
+              <TradeMoveAccount
+                account={account}
+                currency={currency}
+                trade={trade}
+                value={toAccount}
+                onChange={value => {
+                  setToAccount(value);
+                  clearError();
+                }}
+              />
+            )}
             {isVest && (
               <Text
                 style={{
@@ -312,15 +394,29 @@ export function EditTradeModal({
                 }}
               />
             )}
-            <NumberField
-              label={isVest ? t('Vested') : t('Shares')}
-              name="quantity"
-              value={quantityText}
-              onChange={value => {
-                setQuantityText(value);
-                clearError();
-              }}
-            />
+            {isDividend && (
+              <NumberField
+                label={t('Amount')}
+                name="amount"
+                value={amountText}
+                suffix={currency}
+                onChange={value => {
+                  setAmountText(value);
+                  clearError();
+                }}
+              />
+            )}
+            {!isDividend && (
+              <NumberField
+                label={isVest ? t('Vested') : t('Shares')}
+                name="quantity"
+                value={quantityText}
+                onChange={value => {
+                  setQuantityText(value);
+                  clearError();
+                }}
+              />
+            )}
             {isVest && (
               <NumberField
                 label={t('Withheld')}
@@ -333,26 +429,28 @@ export function EditTradeModal({
                 }}
               />
             )}
-            <NumberField
-              label={t('Price')}
-              name="price"
-              value={shownPriceText}
-              suffix={currency}
-              onChange={value => {
-                setPriceText(value);
-                // Clearing the price brings the close back
-                setIsPriceEdited(value.trim() !== '');
-                clearError();
-              }}
-            />
-            {isLookupReady && (
+            {!isDividend && (
+              <NumberField
+                label={t('Price')}
+                name="price"
+                value={shownPriceText}
+                suffix={currency}
+                onChange={value => {
+                  setPriceText(value);
+                  // Clearing the price brings the close back
+                  setIsPriceEdited(value.trim() !== '');
+                  clearError();
+                }}
+              />
+            )}
+            {isLookupReady && !isDividend && (
               <TradeCloseHint
                 currency={currency}
                 result={closeResult}
                 isLoading={isLookingUpClose}
               />
             )}
-            {!isVest && (
+            {hasFee && (
               <NumberField
                 label={t('Fee')}
                 name="fee"
@@ -380,18 +478,28 @@ export function EditTradeModal({
                   currency={currency}
                 />
               )}
-            {!isVest && quantity != null && price != null && fee != null && (
-              <Text style={{ color: theme.pageTextLight, marginTop: 10 }}>
-                <Trans>Cash change</Trans>{' '}
-                <FinancialText style={{ fontWeight: 600 }}>
-                  {format(
-                    getTradeCashAmount({ type, quantity, price, fee }),
-                    'financial-with-sign',
-                    currency,
-                  )}
-                </FinancialText>
-              </Text>
-            )}
+            {(hasFee || isDividend) &&
+              quantity != null &&
+              price != null &&
+              fee != null &&
+              amount != null && (
+                <Text style={{ color: theme.pageTextLight, marginTop: 10 }}>
+                  <Trans>Cash change</Trans>{' '}
+                  <FinancialText style={{ fontWeight: 600 }}>
+                    {format(
+                      getTradeCashAmount({
+                        type,
+                        quantity,
+                        price,
+                        fee,
+                        amount,
+                      }),
+                      'financial-with-sign',
+                      currency,
+                    )}
+                  </FinancialText>
+                </Text>
+              )}
 
             <ModalButtons
               leftContent={

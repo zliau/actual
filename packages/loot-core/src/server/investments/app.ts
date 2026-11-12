@@ -7,13 +7,16 @@ import { undoable } from '#server/undo';
 import {
   calculateHolding,
   getExchangeCurrency,
+  getMoveInCosts,
   getSecurityId,
   getTradeCashAmount,
+  isMove,
   isSecurityExchange,
   isValidSymbol,
   normalizeSymbol,
   sellsMoreThanHeld,
 } from '#shared/investments';
+import type { HoldingTrade } from '#shared/investments';
 import { currentDay, isValidYearMonthDay } from '#shared/months';
 import type {
   AccountHoldings,
@@ -21,7 +24,9 @@ import type {
   SecurityExchange,
   SecurityPriceEntity,
   SecurityPriceSource,
+  SecuritySplitEntity,
   TradeEntity,
+  TradeType,
 } from '#types/models';
 
 import { updateMarketValue, updateMarketValueOfHolders } from './market-value';
@@ -87,8 +92,12 @@ app.method('investment-performance-get', getInvestmentPerformance);
 
 type TradeFields = Pick<
   TradeEntity,
-  'date' | 'type' | 'quantity' | 'price' | 'fee' | 'withheld'
+  'date' | 'type' | 'quantity' | 'price' | 'fee' | 'withheld' | 'amount'
 >;
+
+// Trades can change between these types, but a dividend stays a dividend and
+// a move stays a move
+const SHARE_TRADE_TYPES: TradeType[] = ['buy', 'sell', 'vest'];
 
 function fromDbSecurity(row: db.DbSecurity): SecurityEntity {
   return {
@@ -110,7 +119,9 @@ function fromDbSecurityPrice(row: db.DbSecurityPrice): SecurityPriceEntity {
   };
 }
 
-function fromDbTrade(row: db.DbTrade): TradeEntity {
+function fromDbTrade(
+  row: db.DbTrade & { transfer_account?: string | null },
+): TradeEntity {
   return {
     id: row.id,
     account: row.account,
@@ -121,6 +132,9 @@ function fromDbTrade(row: db.DbTrade): TradeEntity {
     price: row.price,
     fee: row.fee,
     withheld: row.withheld ?? 0,
+    amount: row.amount ?? 0,
+    transfer_id: row.transfer_id ?? null,
+    transfer_account: row.transfer_account ?? null,
     transaction_id: row.transaction_id ?? null,
   };
 }
@@ -247,9 +261,10 @@ async function getTrades({
     params.push(security);
   }
 
-  const rows = await db.all<db.DbTrade>(
-    `SELECT t.* FROM trades t
+  const rows = await db.all<db.DbTrade & { transfer_account: string | null }>(
+    `SELECT t.*, other.account AS transfer_account FROM trades t
      JOIN accounts a ON a.id = t.account
+     LEFT JOIN trades other ON other.id = t.transfer_id AND other.tombstone = 0
      WHERE ${conditions.join(' AND ')}
      ORDER BY t.date DESC, t.id`,
     params,
@@ -262,17 +277,28 @@ async function createTrade({
   security,
   date,
   type,
-  quantity,
-  price,
+  quantity = 0,
+  price = 0,
   fee = 0,
   withheld = 0,
-}: Pick<TradeEntity, 'account' | 'security'> &
-  Omit<TradeFields, 'fee' | 'withheld'> & {
-    fee?: number | undefined;
-    withheld?: number | undefined;
-  }): Promise<TradeEntity['id']> {
-  const fields = { date, type, quantity, price, fee, withheld };
+  amount = 0,
+  transfer_account,
+}: Pick<TradeEntity, 'account' | 'security' | 'date' | 'type'> & {
+  quantity?: number | undefined;
+  price?: number | undefined;
+  fee?: number | undefined;
+  withheld?: number | undefined;
+  amount?: number | undefined;
+  // For a move out: the account the shares go to
+  transfer_account?: TradeEntity['account'] | undefined;
+}): Promise<TradeEntity['id']> {
+  const fields = { date, type, quantity, price, fee, withheld, amount };
   validateTradeFields(fields);
+  if (type === 'move-in') {
+    throw new ValidationError(
+      'a move is made from the account the shares leave, as a move-out',
+    );
+  }
 
   const [dbAccount, dbSecurity] = await Promise.all([
     getOpenInvestmentAccount(account),
@@ -283,6 +309,10 @@ async function createTrade({
       `trade of a ${dbSecurity.currency} security needs a ${dbSecurity.currency} account`,
     );
   }
+  const dbToAccount =
+    type === 'move-out'
+      ? await getMoveDestination(dbAccount, transfer_account)
+      : null;
 
   const existing = await getTrades({ account, security });
   const splits = await getConfirmedSplits(security);
@@ -292,24 +322,74 @@ async function createTrade({
 
   let id = '';
   await batchMessages(async () => {
-    const transactionId = await db.insertTransaction(
-      getTransactionFields(account, dbSecurity, fields),
-    );
-    id = await db.insertWithUUID('trades', {
-      account,
-      security,
-      date: db.toDateRepr(date),
-      type,
-      quantity,
-      price,
-      fee,
-      withheld,
-      transaction_id: transactionId,
-      tombstone: 0,
-    });
+    if (dbToAccount) {
+      const inId = await insertTrade(dbToAccount, dbSecurity, {
+        ...fields,
+        type: 'move-in',
+        otherAccount: dbAccount,
+      });
+      id = await insertTrade(dbAccount, dbSecurity, {
+        ...fields,
+        otherAccount: dbToAccount,
+        transfer_id: inId,
+      });
+      await db.update('trades', { id: inId, transfer_id: id });
+    } else {
+      id = await insertTrade(dbAccount, dbSecurity, fields);
+    }
   });
   await updateMarketValue(account);
+  if (dbToAccount) {
+    await updateMarketValue(dbToAccount.id);
+  }
   return id;
+}
+
+// Stores a trade and the transaction that moves its cash
+async function insertTrade(
+  account: db.DbAccount,
+  security: db.DbSecurity,
+  {
+    otherAccount,
+    transfer_id = null,
+    ...fields
+  }: TradeFields & {
+    otherAccount?: db.DbAccount;
+    transfer_id?: string | null;
+  },
+): Promise<TradeEntity['id']> {
+  const transactionId = await db.insertTransaction(
+    getTransactionFields(account.id, security, fields, otherAccount),
+  );
+  return db.insertWithUUID('trades', {
+    account: account.id,
+    security: security.id,
+    ...fields,
+    date: db.toDateRepr(fields.date),
+    transfer_id,
+    transaction_id: transactionId,
+    tombstone: 0,
+  });
+}
+
+// The open investment account in the same currency that a move out goes to
+async function getMoveDestination(
+  from: db.DbAccount,
+  to: TradeEntity['account'] | undefined,
+): Promise<db.DbAccount> {
+  if (!to) {
+    throw new ValidationError('a move-out needs the account the shares go to');
+  }
+  if (to === from.id) {
+    throw new ValidationError('shares can only move to another account');
+  }
+  const account = await getOpenInvestmentAccount(to);
+  if (account.currency !== from.currency) {
+    throw new ValidationError(
+      `shares can only move to another ${from.currency} account`,
+    );
+  }
+  return account;
 }
 
 async function updateTrade({
@@ -318,68 +398,160 @@ async function updateTrade({
 }: Pick<TradeEntity, 'id'> & Partial<TradeFields>): Promise<void> {
   const trade = await getStoredTrade(id);
   const type = changes.type ?? trade.type;
+  if (
+    type !== trade.type &&
+    !(
+      SHARE_TRADE_TYPES.includes(type) && SHARE_TRADE_TYPES.includes(trade.type)
+    )
+  ) {
+    throw new ValidationError(
+      `a ${trade.type} trade can't be changed to a ${type}`,
+    );
+  }
   const fields: TradeFields = {
     date: changes.date ?? trade.date,
     type,
     quantity: changes.quantity ?? trade.quantity,
     price: changes.price ?? trade.price,
     // Only buys and sells have a fee, and only vests withhold shares
-    fee: type === 'vest' ? 0 : (changes.fee ?? trade.fee),
+    fee: type === 'buy' || type === 'sell' ? (changes.fee ?? trade.fee) : 0,
     withheld: type === 'vest' ? (changes.withheld ?? trade.withheld) : 0,
+    amount: type === 'dividend' ? (changes.amount ?? trade.amount) : 0,
   };
   validateTradeFields(fields);
 
-  const others = await getOtherTrades(trade);
+  const other = isMove(trade.type) ? await getOtherHalf(trade) : null;
+  const halves = [
+    { trade, fields },
+    ...(other
+      ? [{ trade: other, fields: { ...fields, type: other.type } }]
+      : []),
+  ];
   const splits = await getConfirmedSplits(trade.security);
-  if (sellsMoreThanHeld([...others, fields], splits)) {
-    throw new ValidationError('trade sells more shares than are held');
+  for (const half of halves) {
+    const others = await getOtherTrades(half.trade);
+    if (sellsMoreThanHeld([...others, half.fields], splits)) {
+      throw new ValidationError('trade sells more shares than are held');
+    }
   }
 
   const dbSecurity = await getSecurity(trade.security);
-  const transaction = getTransactionFields(trade.account, dbSecurity, fields);
+  const accounts = await getAccountsById(
+    halves.map(half => half.trade.account),
+  );
+  await batchMessages(async () => {
+    for (const half of halves) {
+      const otherAccount = halves.find(h => h !== half)?.trade.account;
+      await saveTrade(
+        half.trade,
+        half.fields,
+        getTransactionFields(
+          half.trade.account,
+          dbSecurity,
+          half.fields,
+          otherAccount ? accounts.get(otherAccount) : undefined,
+        ),
+      );
+    }
+  });
+  for (const half of halves) {
+    await updateMarketValue(half.trade.account);
+  }
+}
+
+// Saves a stored trade's fields and its transaction
+async function saveTrade(
+  trade: TradeEntity,
+  fields: TradeFields,
+  transaction: ReturnType<typeof getTransactionFields>,
+) {
   const linked =
     trade.transaction_id &&
     (await db.first<Pick<db.DbTransaction, 'id'>>(
       'SELECT id FROM transactions WHERE id = ? AND tombstone = 0',
       [trade.transaction_id],
     ));
-
-  await batchMessages(async () => {
-    let transactionId = trade.transaction_id;
-    if (linked) {
-      await db.updateTransaction({ id: linked.id, ...transaction });
-    } else {
-      // The transaction was deleted from the account, so bring the cash back
-      transactionId = await db.insertTransaction(transaction);
-    }
-    await db.update('trades', {
-      id,
-      ...fields,
-      date: db.toDateRepr(fields.date),
-      transaction_id: transactionId,
-    });
+  let transactionId = trade.transaction_id;
+  if (linked) {
+    await db.updateTransaction({ id: linked.id, ...transaction });
+  } else {
+    // The transaction was deleted from the account, so bring the cash back
+    transactionId = await db.insertTransaction(transaction);
+  }
+  await db.update('trades', {
+    id: trade.id,
+    ...fields,
+    date: db.toDateRepr(fields.date),
+    transaction_id: transactionId,
   });
-  await updateMarketValue(trade.account);
 }
 
+// Deleting either half of a move deletes both
 async function deleteTrade({ id }: Pick<TradeEntity, 'id'>): Promise<void> {
   const trade = await getStoredTrade(id);
+  const other = isMove(trade.type) ? await getOtherHalf(trade) : null;
+  const halves = other ? [trade, other] : [trade];
 
-  const others = await getOtherTrades(trade);
   const splits = await getConfirmedSplits(trade.security);
-  if (sellsMoreThanHeld(others, splits)) {
-    throw new ValidationError(
-      'deleting this trade would leave later sells with more shares than are held',
-    );
+  for (const half of halves) {
+    const others = await getOtherTrades(half);
+    if (sellsMoreThanHeld(others, splits)) {
+      throw new ValidationError(
+        'deleting this trade would leave later sells with more shares than are held',
+      );
+    }
   }
 
   await batchMessages(async () => {
-    if (trade.transaction_id) {
-      await db.deleteTransaction({ id: trade.transaction_id });
+    for (const half of halves) {
+      if (half.transaction_id) {
+        await db.deleteTransaction({ id: half.transaction_id });
+      }
+      await db.delete_('trades', half.id);
     }
-    await db.delete_('trades', id);
   });
-  await updateMarketValue(trade.account);
+  for (const half of halves) {
+    await updateMarketValue(half.account);
+  }
+}
+
+// The other half of a move, unless its account was deleted
+async function getOtherHalf(trade: TradeEntity): Promise<TradeEntity | null> {
+  if (!trade.transfer_id) {
+    return null;
+  }
+  const [other] = (await getTrades({ security: trade.security })).filter(
+    candidate => candidate.id === trade.transfer_id,
+  );
+  return other ?? null;
+}
+
+async function getAccountsById(
+  ids: Array<db.DbAccount['id']>,
+): Promise<Map<db.DbAccount['id'], db.DbAccount>> {
+  const rows = await db.all<db.DbAccount>(
+    `SELECT * FROM accounts WHERE id IN (${ids.map(() => '?').join(', ')})`,
+    ids,
+  );
+  return new Map(rows.map(row => [row.id, row]));
+}
+
+// A security's trades in an account, ready to work out a position: each move
+// in carries the cost its shares had in the account they left
+async function getHoldingTrades(
+  account: TradeEntity['account'],
+  security: SecurityEntity['id'],
+  splits: Array<Pick<SecuritySplitEntity, 'date' | 'ratio'>>,
+): Promise<HoldingTrade[]> {
+  const trades = await getTrades({ security });
+  const costs = getMoveInCosts(trades, splits);
+  return trades
+    .filter(trade => trade.account === account)
+    .map(trade =>
+      trade.type === 'move-in'
+        ? { ...trade, cost: costs.get(trade.id) }
+        : trade,
+    );
 }
 
 // Every security the account has traded, sold out ones included since their
@@ -416,26 +588,29 @@ async function getHoldings({
   );
   const allSplits = splits.map(fromDbSecuritySplit);
 
-  const holdings = securities.flatMap(security => {
-    const securityTrades = trades.filter(
-      trade => trade.security === security.id,
-    );
-    if (securityTrades.length === 0) {
-      return [];
-    }
-    const latest = latestPrices.find(price => price.security === security.id);
-    return [
-      calculateHolding(
+  const tradedSecurities = securities.filter(security =>
+    trades.some(trade => trade.security === security.id),
+  );
+  const holdings = await Promise.all(
+    tradedSecurities.map(async security => {
+      const securitySplits = allSplits.filter(
+        split => split.security === security.id && split.status === 'confirmed',
+      );
+      const hasMovesIn = trades.some(
+        trade => trade.security === security.id && trade.type === 'move-in',
+      );
+      const securityTrades = hasMovesIn
+        ? await getHoldingTrades(account, security.id, securitySplits)
+        : trades.filter(trade => trade.security === security.id);
+      const latest = latestPrices.find(price => price.security === security.id);
+      return calculateHolding(
         fromDbSecurity(security),
         securityTrades,
         latest && { date: db.fromDateRepr(latest.date), close: latest.close },
-        allSplits.filter(
-          split =>
-            split.security === security.id && split.status === 'confirmed',
-        ),
-      ),
-    ];
-  });
+        securitySplits,
+      );
+    }),
+  );
 
   return {
     holdings: holdings.sort(
@@ -492,15 +667,23 @@ function getTransactionFields(
   account: TradeEntity['account'],
   security: db.DbSecurity,
   fields: TradeFields,
+  otherAccount?: Pick<db.DbAccount, 'name'>,
 ) {
-  const label = { buy: 'Buy', sell: 'Sell', vest: 'Vest' }[fields.type];
-  const withheld =
-    fields.withheld > 0 ? `, ${fields.withheld} withheld for tax` : '';
+  const shares = `${fields.quantity} ${security.symbol} @ ${fields.price}`;
+  const other = otherAccount?.name ?? 'a deleted account';
+  const notes = {
+    buy: `Buy ${shares}`,
+    sell: `Sell ${shares}`,
+    vest: `Vest ${shares}${fields.withheld > 0 ? `, ${fields.withheld} withheld for tax` : ''}`,
+    dividend: `Dividend ${security.symbol}`,
+    'move-out': `Move ${shares} to ${other}`,
+    'move-in': `Move ${shares} from ${other}`,
+  }[fields.type];
   return {
     account,
     amount: getTradeCashAmount(fields),
     date: fields.date,
-    notes: `${label} ${fields.quantity} ${security.symbol} @ ${fields.price}${withheld}`,
+    notes,
     cleared: true,
     investment_type: 'trade',
   };
@@ -513,24 +696,43 @@ function validateTradeFields({
   price,
   fee,
   withheld,
+  amount,
 }: TradeFields) {
   validateDate('trade', date);
-  if (type !== 'buy' && type !== 'sell' && type !== 'vest') {
+  if (
+    !['buy', 'sell', 'vest', 'dividend', 'move-in', 'move-out'].includes(type)
+  ) {
     throw new ValidationError(`trade has unknown type '${String(type)}'`);
+  }
+  if (type === 'dividend') {
+    if (!Number.isInteger(amount) || amount <= 0) {
+      throw new ValidationError(
+        'dividend amount must be a positive whole number of cents',
+      );
+    }
+    if (quantity !== 0 || price !== 0 || fee !== 0 || withheld !== 0) {
+      throw new ValidationError(
+        'dividend has only an amount, not shares, a price or a fee',
+      );
+    }
+    return;
   }
   validatePositive('trade quantity', quantity);
   validatePositive('trade price', price);
   if (!Number.isInteger(fee) || fee < 0) {
     throw new ValidationError('trade fee must be a whole number of cents');
   }
-  if (type === 'vest' && fee !== 0) {
-    throw new ValidationError('vest has no fee');
+  if (type !== 'buy' && type !== 'sell' && fee !== 0) {
+    throw new ValidationError(`${type} has no fee`);
   }
   if (!Number.isFinite(withheld) || withheld < 0) {
     throw new ValidationError('trade withheld shares must be zero or more');
   }
   if (type !== 'vest' && withheld !== 0) {
     throw new ValidationError('only a vest withholds shares');
+  }
+  if (amount !== 0) {
+    throw new ValidationError('only a dividend has an amount');
   }
 }
 

@@ -162,7 +162,8 @@ export function CloseAccountModal({
         <strong>
           {{ symbols: heldSymbols.join(', ') } as TransObjectLiteral}
         </strong>
-        . Sell them before closing the account, so that only cash moves out.
+        . Sell them or move them to another account before closing this one, so
+        that only cash moves out.
       </Trans>
     </Paragraph>
   );

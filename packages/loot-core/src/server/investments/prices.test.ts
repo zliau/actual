@@ -433,8 +433,13 @@ describe('splits', () => {
     expect(
       transactions
         .filter(t => t.investment_type === 'market-value')
-        .map(t => t.amount),
-    ).toEqual([120000]);
+        .map(({ date, amount }) => ({ date, amount }))
+        .sort((a, b) => a.date.localeCompare(b.date)),
+      // The shares bought, then October's rise, and nothing for the split
+    ).toEqual([
+      { date: '2016-10-15', amount: 100000 },
+      { date: '2016-10-31', amount: 20000 },
+    ]);
   });
 
   it('applies to every account holding the security', async () => {

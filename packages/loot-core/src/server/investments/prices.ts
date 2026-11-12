@@ -281,7 +281,11 @@ async function fetchSecurityPrices({
     );
     const { quantity } = calculateHolding(
       { id: security.id, symbol: security.symbol, name: null, currency: '' },
-      trades.map(trade => ({ ...trade, date: db.fromDateRepr(trade.date) })),
+      trades.map(trade => ({
+        ...trade,
+        date: db.fromDateRepr(trade.date),
+        amount: trade.amount ?? 0,
+      })),
       undefined,
       await getConfirmedSplits(security.id),
     );

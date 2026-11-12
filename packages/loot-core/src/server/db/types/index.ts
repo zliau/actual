@@ -3,6 +3,8 @@
 // are specific to the AQL query framework and does not necessarily
 // match the actual database schema.
 
+import type { TradeType } from '#types/models';
+
 type JsonString = string;
 
 export type DbAccount = {
@@ -91,11 +93,13 @@ export type DbTrade = {
   account: DbAccount['id'];
   security: DbSecurity['id'];
   date: number;
-  type: 'buy' | 'sell' | 'vest';
+  type: TradeType;
   quantity: number;
   price: number;
   fee: number;
   withheld?: number | null;
+  amount?: number | null;
+  transfer_id?: string | null;
   transaction_id?: string | null;
   tombstone: 1 | 0;
 };

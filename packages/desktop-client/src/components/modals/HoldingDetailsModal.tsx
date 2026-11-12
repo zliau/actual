@@ -2,6 +2,7 @@ import { Trans, useTranslation } from 'react-i18next';
 
 import { Button } from '@actual-app/components/button';
 import { View } from '@actual-app/components/view';
+import { getTradeCashAmount } from '@actual-app/core/shared/investments';
 import type {
   SecurityEntity,
   TradeEntity,
@@ -100,7 +101,7 @@ export function HoldingDetailsModal({
                   t('Type'),
                   t('Shares'),
                   t('Price'),
-                  t('Fee'),
+                  t('Cash'),
                 ]}
               >
                 {trades.map(trade => (
@@ -117,11 +118,22 @@ export function HoldingDetailsModal({
                         buy: t('Buy'),
                         sell: t('Sell'),
                         vest: t('Vest'),
+                        dividend: t('Dividend'),
+                        'move-in': t('Moved in'),
+                        'move-out': t('Moved out'),
                       }[trade.type],
-                      formatShares(trade.quantity),
-                      formatSharePrice(trade.price),
-                      trade.fee > 0
-                        ? format(trade.fee, 'financial', currency)
+                      trade.type === 'dividend'
+                        ? ''
+                        : formatShares(trade.quantity),
+                      trade.type === 'dividend'
+                        ? ''
+                        : formatSharePrice(trade.price),
+                      getTradeCashAmount(trade) !== 0
+                        ? format(
+                            getTradeCashAmount(trade),
+                            'financial-with-sign',
+                            currency,
+                          )
                         : '',
                     ]}
                   />

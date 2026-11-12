@@ -43,8 +43,6 @@ Each trade moves the account's cash. Buying 10 shares at $100 with a $5 fee take
 Money moving into the account is an ordinary [transfer](../transactions/transfers.md) from your bank account. Record those too, or the cash shown in the account goes negative when you buy.
 :::
 
-Dividends are also ordinary transactions. Add one to the account as a deposit when you receive it.
-
 ### Stock You Receive as Pay
 
 If your employer pays you in shares, such as RSUs, record each vest as a trade:
@@ -58,6 +56,35 @@ If your employer pays you in shares, such as RSUs, record each vest as a trade:
 Only the shares that reach your account are added, and no cash leaves the account. Their cost is the price on the vest date, which is also what your gain or loss is worked out from when you sell. Below the fields, Actual shows the shares you received, the pay the vest is worth, and how much of that was withheld for tax.
 
 Shares you receive as pay don't affect your budget until you sell them and move the cash to a budget account, since you can't spend them before then. Shares that haven't vested yet aren't yours, so don't record them until they vest.
+
+### Dividends
+
+To record a dividend a stock paid you:
+
+1. Click **Add trade** and choose **Dividend**.
+2. Enter the date it was paid and the symbol.
+3. Under **Amount**, enter the cash you received.
+4. Click **Save**.
+
+The dividend adds its cash to the account, and it counts toward the stock's return in the investment performance report. Click the holding to see its dividends with its trades.
+
+If you have already entered dividends as deposits, delete them and record them as dividends instead, so that they count toward the stock's return.
+
+### Moving Shares Between Accounts
+
+When shares move from one of your accounts to another, such as from your employer's stock plan to your own brokerage, record the move instead of a sell and a buy. A sell and a buy would count a gain you didn't make and lose what the shares cost you.
+
+To move shares:
+
+1. Open the account the shares are leaving, click **Add trade** and choose **Move to another account**.
+2. Under **To**, choose the account the shares are going to. It needs to be another investment account in the same currency.
+3. Enter the date, the symbol and the number of shares.
+4. Enter the price per share on that day. Actual fills in that day's closing price if you have set up price updates. The price is only used to value the shares in each account, and doesn't change what they cost.
+5. Click **Save**.
+
+The shares leave the first account and arrive in the other, which shows them in its Holdings table at the same average cost. No cash moves. If you later change a trade from before the move in the first account, the cost in the other account follows.
+
+To change or delete a move, click the holding in either account and then click the move. Changing or deleting it changes or deletes both sides.
 
 ## Reading the Holdings Table
 
@@ -122,14 +149,19 @@ Enter trades using the number of shares and the price you had at the time. Actua
 
 ## How the Balance Works
 
-The account's balance is its cash plus the value of its holdings. To make that work, Actual adds a **Market value** transaction for each stock every month, holding the change in that stock's value over the month. Its notes say which stock it is for and what you held at the end of the month, like `Market value 10 AAPL @ 120`, or `Market value AAPL, sold` in the month you sold the last of it. Actual updates these transactions whenever a trade or price changes.
+The account's balance is its cash plus the value of its holdings. To make that work, Actual adds two kinds of transactions next to the ones that move cash:
+
+- A **Shares in** or **Shares out** transaction on the day of each trade that moves shares, holding what those shares were worth at the trade's price, like `Shares in: 10 AAPL @ 100`. A buy takes cash out and brings shares of the same value in, so the balance only changes by the fee.
+- A **Market value** transaction for each stock every month, holding what price changes did to that stock's value over the month. Its notes say which stock it is for and what you held at the end of the month, like `Market value 10 AAPL @ 120`, or `Market value AAPL, sold` in the month you sold the last of it.
+
+Actual updates these transactions whenever a trade or price changes.
 
 This means that:
 
 - The sidebar, account groups and the net worth report all include your holdings.
 - Reports of income and spending leave out trades and market value transactions.
-- Past net worth is accurate at the end of each month rather than for every day.
+- Past balances are accurate on the day of each trade and at the end of each month. Price changes within a past month only show at its end.
 
-Market value and trade transactions are written by Actual, so they can't be edited in the transaction list. Change the trade or price they come from instead.
+Shares, market value and trade transactions are written by Actual, so they can't be edited in the transaction list. Change the trade or price they come from instead.
 
-An investment account can only be closed once you have sold everything it holds, so that only cash moves out. Force closing it instead deletes the account and all its transactions.
+An investment account can only be closed once you have sold everything it holds or moved it to another account, so that only cash moves out. Force closing it instead deletes the account and all its transactions.

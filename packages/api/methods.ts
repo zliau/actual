@@ -285,10 +285,14 @@ export function getTrades(
 }
 
 export function addTrade(
-  trade: Pick<
-    TradeEntity,
-    'account' | 'security' | 'date' | 'type' | 'quantity' | 'price'
-  > & { fee?: number; withheld?: number },
+  trade: Pick<TradeEntity, 'account' | 'security' | 'date' | 'type'> & {
+    quantity?: number;
+    price?: number;
+    fee?: number;
+    withheld?: number;
+    amount?: number;
+    transfer_account?: TradeEntity['account'];
+  },
 ) {
   return send('api/trade-create', trade);
 }
@@ -298,7 +302,7 @@ export function updateTrade(
   fields: Partial<
     Pick<
       TradeEntity,
-      'date' | 'type' | 'quantity' | 'price' | 'fee' | 'withheld'
+      'date' | 'type' | 'quantity' | 'price' | 'fee' | 'withheld' | 'amount'
     >
   >,
 ) {

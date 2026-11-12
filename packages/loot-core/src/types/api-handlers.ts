@@ -201,16 +201,23 @@ export type ApiHandlers = {
   ) => Promise<TradeEntity[]>;
 
   'api/trade-create': (
-    arg: Pick<
-      TradeEntity,
-      'account' | 'security' | 'date' | 'type' | 'quantity' | 'price'
-    > & { fee?: number },
+    arg: Pick<TradeEntity, 'account' | 'security' | 'date' | 'type'> & {
+      quantity?: number;
+      price?: number;
+      fee?: number;
+      withheld?: number;
+      amount?: number;
+      transfer_account?: TradeEntity['account'];
+    },
   ) => Promise<TradeEntity['id']>;
 
   'api/trade-update': (arg: {
     id: TradeEntity['id'];
     fields: Partial<
-      Pick<TradeEntity, 'date' | 'type' | 'quantity' | 'price' | 'fee'>
+      Pick<
+        TradeEntity,
+        'date' | 'type' | 'quantity' | 'price' | 'fee' | 'withheld' | 'amount'
+      >
     >;
   }) => Promise<void>;
 
