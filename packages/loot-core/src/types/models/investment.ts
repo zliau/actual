@@ -35,7 +35,9 @@ export type SecuritySplitEntity = {
   tombstone?: boolean;
 };
 
-export type TradeType = 'buy' | 'sell';
+// A vest is shares received as pay, like RSUs: they come in at the day's price
+// without any cash leaving the account
+export type TradeType = 'buy' | 'sell' | 'vest';
 
 export type TradeEntity = {
   id: string;
@@ -48,6 +50,9 @@ export type TradeEntity = {
   price: number;
   // In cents, like transaction amounts
   fee: number;
+  // Shares a vest held back for tax, which never reach the account. The
+  // quantity is what arrived. Always 0 for buys and sells.
+  withheld: number;
   // The transaction that moves the trade's cash in the account
   transaction_id: string | null;
   tombstone?: boolean;

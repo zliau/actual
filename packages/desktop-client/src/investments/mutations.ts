@@ -17,7 +17,7 @@ import { investmentQueries } from './queries';
 
 type TradeFields = Pick<
   TradeEntity,
-  'date' | 'type' | 'quantity' | 'price' | 'fee'
+  'date' | 'type' | 'quantity' | 'price' | 'fee' | 'withheld'
 >;
 
 // New trades name the symbol, and the security is added if it isn't stored yet

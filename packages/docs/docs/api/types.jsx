@@ -236,7 +236,8 @@ export const objects = {
       required: true,
       description: (
         <span>
-          <code>buy</code> or <code>sell</code>.
+          <code>buy</code>, <code>sell</code> or <code>vest</code>. A vest is
+          shares received as pay, such as RSUs, and moves no cash.
         </span>
       ),
     },
@@ -244,7 +245,8 @@ export const objects = {
       name: 'quantity',
       type: 'number',
       required: true,
-      description: 'The number of shares, which can be fractional.',
+      description:
+        'The number of shares, which can be fractional. For a vest, the shares that arrived.',
     },
     {
       name: 'price',
@@ -259,7 +261,13 @@ export const objects = {
     {
       name: 'fee',
       type: types.amount,
-      description: 'Optional; will default to 0.',
+      description: 'Optional; will default to 0. Must be 0 for a vest.',
+    },
+    {
+      name: 'withheld',
+      type: 'number',
+      description:
+        'The shares a vest held back for tax, which never arrived. Optional; will default to 0, and must be 0 for a buy or sell.',
     },
     {
       name: 'transaction_id',

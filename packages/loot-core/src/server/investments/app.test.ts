@@ -511,6 +511,78 @@ describe('investments app', () => {
   });
 });
 
+describe('vests', () => {
+  async function vest(fields: Record<string, unknown> = {}) {
+    const account = await createInvestmentAccount();
+    const security = await createAapl();
+    const id = await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-10-15',
+      type: 'vest',
+      quantity: 65,
+      price: 150,
+      withheld: 35,
+      ...fields,
+    });
+    return { account, security, id };
+  }
+
+  it('bring in shares at the vest price without moving cash', async () => {
+    const { account, id } = await vest();
+
+    const [trade] = await app.handlers['trades-get']({ account });
+    expect(trade).toMatchObject({
+      id,
+      type: 'vest',
+      quantity: 65,
+      withheld: 35,
+    });
+    const transactions = await db.getTransactions(account);
+    expect(
+      transactions.find(({ investment_type }) => investment_type === 'trade'),
+    ).toMatchObject({
+      amount: 0,
+      notes: 'Vest 65 AAPL @ 150, 35 withheld for tax',
+    });
+
+    const { holdings, cash } = await app.handlers['holdings-get']({ account });
+    expect(cash).toBe(0);
+    expect(holdings[0]).toMatchObject({
+      quantity: 65,
+      costBasis: 975000,
+      unrealizedGain: 0,
+    });
+    expect(await getBalance(account)).toBe(975000);
+  });
+
+  it('leave out the withheld shares from the notes when there are none', async () => {
+    const { account } = await vest({ withheld: 0 });
+    const transactions = await db.getTransactions(account);
+    expect(transactions.map(({ notes }) => notes)).toContain(
+      'Vest 65 AAPL @ 150',
+    );
+  });
+
+  it("can't have a fee, and only they withhold shares", async () => {
+    await expect(vest({ fee: 500 })).rejects.toThrow('vest has no fee');
+    await expect(vest({ type: 'buy' })).rejects.toThrow(
+      'only a vest withholds shares',
+    );
+    await expect(vest({ withheld: -1 })).rejects.toThrow('zero or more');
+  });
+
+  it('drop the withheld shares when changed to a buy', async () => {
+    const { account, id } = await vest();
+    await app.handlers['trade-update']({ id, type: 'buy' });
+
+    const [trade] = await app.handlers['trades-get']({ account });
+    expect(trade).toMatchObject({ type: 'buy', withheld: 0 });
+    const { cash } = await app.handlers['holdings-get']({ account });
+    expect(cash).toBe(-975000);
+  });
+});
+
 // The clock in tests is fixed at 2017-01-01
 describe('holdings-get', () => {
   it('values each holding and adds up the cash', async () => {
@@ -1211,6 +1283,14 @@ describe('getTradeCashAmount', () => {
   });
 });
 
+describe('getTradeCashAmount of a vest', () => {
+  it('moves no cash', () => {
+    expect(
+      getTradeCashAmount({ type: 'vest', quantity: 10, price: 100, fee: 0 }),
+    ).toBe(0);
+  });
+});
+
 describe('sellsMoreThanHeld', () => {
   it('counts buys before sells on the same day', () => {
     expect(
@@ -1365,6 +1445,21 @@ describe('getPerformanceHistory', () => {
     expect(month.total.growth).toBeCloseTo(
       ((1000 + 14800) / (1000 + 15000)) * ((1000 + 9387) / (1000 + 9324)),
     );
+  });
+
+  it('counts a vest as money put in at its price', () => {
+    const [month] = getPerformanceHistory({
+      securities,
+      trades: [
+        {
+          ...trade('US-A', '2026-01-05', 'buy', 10, 100),
+          type: 'vest' as const,
+        },
+      ],
+      prices: [{ security: 'US-A', date: '2026-01-20', close: 110 }],
+      today: '2026-01-31',
+    });
+    expect(month.total).toEqual({ value: 110000, gain: 10000, growth: 1.1 });
   });
 
   it('weights the total by what each security held', () => {

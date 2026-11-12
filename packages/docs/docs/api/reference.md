@@ -491,13 +491,13 @@ Get trades, newest first, optionally only those of one account or security.
 
 <Method name="addTrade" args={[{ name: 'trade', type: 'Trade' }]} returns="Promise<id>" />
 
-Add a buy or a sell, and write the transaction for its cash. Selling more shares than the account holds on that date is an error, as is a security in another currency than the account.
+Add a buy, sell or vest, and write its transaction. A vest's transaction has an amount of 0, since no cash moves. Selling more shares than the account holds on that date is an error, as is a security in another currency than the account.
 
 #### `updateTrade`
 
 <Method name="updateTrade" args={[{ name: 'id', type: 'id' }, { name: 'fields', type: 'object' }]} />
 
-Update the `date`, `type`, `quantity`, `price` or `fee` of a trade, along with its transaction.
+Update the `date`, `type`, `quantity`, `price`, `fee` or `withheld` of a trade, along with its transaction.
 
 #### `deleteTrade`
 

@@ -91,10 +91,11 @@ export type DbTrade = {
   account: DbAccount['id'];
   security: DbSecurity['id'];
   date: number;
-  type: 'buy' | 'sell';
+  type: 'buy' | 'sell' | 'vest';
   quantity: number;
   price: number;
   fee: number;
+  withheld?: number | null;
   transaction_id?: string | null;
   tombstone: 1 | 0;
 };

@@ -288,7 +288,7 @@ export function addTrade(
   trade: Pick<
     TradeEntity,
     'account' | 'security' | 'date' | 'type' | 'quantity' | 'price'
-  > & { fee?: number },
+  > & { fee?: number; withheld?: number },
 ) {
   return send('api/trade-create', trade);
 }
@@ -296,7 +296,10 @@ export function addTrade(
 export function updateTrade(
   id: TradeEntity['id'],
   fields: Partial<
-    Pick<TradeEntity, 'date' | 'type' | 'quantity' | 'price' | 'fee'>
+    Pick<
+      TradeEntity,
+      'date' | 'type' | 'quantity' | 'price' | 'fee' | 'withheld'
+    >
   >,
 ) {
   return send('api/trade-update', { id, fields });

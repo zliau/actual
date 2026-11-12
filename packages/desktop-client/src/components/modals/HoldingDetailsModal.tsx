@@ -113,7 +113,11 @@ export function HoldingDetailsModal({
                     onPress={() => onEditTrade(trade)}
                     cells={[
                       showDate(trade.date),
-                      trade.type === 'buy' ? t('Buy') : t('Sell'),
+                      {
+                        buy: t('Buy'),
+                        sell: t('Sell'),
+                        vest: t('Vest'),
+                      }[trade.type],
                       formatShares(trade.quantity),
                       formatSharePrice(trade.price),
                       trade.fee > 0

@@ -7,6 +7,7 @@ import type {
   SecurityPriceEntity,
   SecuritySplitEntity,
   TradeEntity,
+  TradeType,
 } from '#types/models';
 
 import * as monthUtils from './months';
@@ -65,8 +66,14 @@ export function isInvestmentCurrency(currency: string): boolean {
   return Object.values(EXCHANGE_CURRENCIES).includes(currency);
 }
 
+// Whether a trade brings shares in: a buy, or a vest of shares received as pay
+export function addsShares(type: TradeType): boolean {
+  return type !== 'sell';
+}
+
 // The change in the account's cash, in cents. A buy costs the shares plus the
-// fee, and a sell brings in the shares less the fee.
+// fee, and a sell brings in the shares less the fee. A vest's shares are pay,
+// so no cash moves.
 export function getTradeCashAmount({
   type,
   quantity,
@@ -74,19 +81,22 @@ export function getTradeCashAmount({
   fee,
 }: Pick<TradeEntity, 'type' | 'quantity' | 'price' | 'fee'>): number {
   const value = amountToInteger(quantity * price);
+  if (type === 'vest') {
+    return 0;
+  }
   return type === 'buy' ? -(value + fee) : value - fee;
 }
 
 type Split = Pick<SecuritySplitEntity, 'date' | 'ratio'>;
 
 // Oldest first. A split takes effect before the market opens, so on its day it
-// comes before any trade, and buys come before sells.
+// comes before any trade, and buys and vests come before sells.
 function sortEvents<T extends Pick<TradeEntity, 'date' | 'type'>>(
   trades: T[],
   splits: Split[],
 ): Array<(T & { kind: 'trade' }) | (Split & { kind: 'split' })> {
-  const order = (event: { kind: string; type?: string }) =>
-    event.kind === 'split' ? 0 : event.type === 'buy' ? 1 : 2;
+  const order = (event: { kind: string; type?: TradeType }) =>
+    event.type == null ? 0 : addsShares(event.type) ? 1 : 2;
   return [
     ...trades.map(trade => ({ ...trade, kind: 'trade' as const })),
     ...splits.map(split => ({ ...split, kind: 'split' as const })),
@@ -104,7 +114,7 @@ export function sellsMoreThanHeld(
     if (event.kind === 'split') {
       held *= event.ratio;
     } else {
-      held += event.type === 'buy' ? event.quantity : -event.quantity;
+      held += addsShares(event.type) ? event.quantity : -event.quantity;
     }
     if (held < -SHARE_EPSILON) {
       return true;
@@ -136,7 +146,8 @@ export function calculateHolding(
     } else {
       lastTrade = event;
       const value = amountToInteger(event.quantity * event.price);
-      if (event.type === 'buy') {
+      // A vest's shares cost what they were worth that day, as that is the pay
+      if (addsShares(event.type)) {
         quantity += event.quantity;
         costBasis += value + event.fee;
       } else {
@@ -313,7 +324,8 @@ type DaySnapshot = {
   }>;
   // What was held at the end of the day, valued at the latest close
   close: number;
-  // Cash put in by buys, less cash taken out by sells, fees included
+  // Money put in by buys and vests, less cash taken out by sells, fees
+  // included. A vest puts in its shares' value, as pay.
   netFlow: number;
 };
 
@@ -335,7 +347,7 @@ function getDaySnapshots(
       ? 0
       : event.kind === 'close'
         ? 3
-        : event.trade.type === 'buy'
+        : addsShares(event.trade.type)
           ? 1
           : 2;
   const events: Event[] = [
@@ -387,7 +399,8 @@ function getDaySnapshots(
         const { trade } = event;
         const before = valueAt(trade.price);
         const value = amountToInteger(trade.quantity * trade.price);
-        if (trade.type === 'buy') {
+        // A vest counts as money put in at the day's price, like a buy
+        if (addsShares(trade.type)) {
           quantity += trade.quantity;
           isHeld = true;
           snapshot.netFlow += value + trade.fee;
@@ -400,8 +413,8 @@ function getDaySnapshots(
         snapshot.trades.push({
           before,
           after: valueAt(trade.price),
-          buyFee: trade.type === 'buy' ? trade.fee : 0,
-          sellFee: trade.type === 'buy' ? 0 : trade.fee,
+          buyFee: addsShares(trade.type) ? trade.fee : 0,
+          sellFee: addsShares(trade.type) ? 0 : trade.fee,
         });
       }
     }

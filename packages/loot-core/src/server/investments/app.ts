@@ -87,7 +87,7 @@ app.method('investment-performance-get', getInvestmentPerformance);
 
 type TradeFields = Pick<
   TradeEntity,
-  'date' | 'type' | 'quantity' | 'price' | 'fee'
+  'date' | 'type' | 'quantity' | 'price' | 'fee' | 'withheld'
 >;
 
 function fromDbSecurity(row: db.DbSecurity): SecurityEntity {
@@ -120,6 +120,7 @@ function fromDbTrade(row: db.DbTrade): TradeEntity {
     quantity: row.quantity,
     price: row.price,
     fee: row.fee,
+    withheld: row.withheld ?? 0,
     transaction_id: row.transaction_id ?? null,
   };
 }
@@ -264,11 +265,13 @@ async function createTrade({
   quantity,
   price,
   fee = 0,
+  withheld = 0,
 }: Pick<TradeEntity, 'account' | 'security'> &
-  Omit<TradeFields, 'fee'> & { fee?: number | undefined }): Promise<
-  TradeEntity['id']
-> {
-  const fields = { date, type, quantity, price, fee };
+  Omit<TradeFields, 'fee' | 'withheld'> & {
+    fee?: number | undefined;
+    withheld?: number | undefined;
+  }): Promise<TradeEntity['id']> {
+  const fields = { date, type, quantity, price, fee, withheld };
   validateTradeFields(fields);
 
   const [dbAccount, dbSecurity] = await Promise.all([
@@ -300,6 +303,7 @@ async function createTrade({
       quantity,
       price,
       fee,
+      withheld,
       transaction_id: transactionId,
       tombstone: 0,
     });
@@ -313,12 +317,15 @@ async function updateTrade({
   ...changes
 }: Pick<TradeEntity, 'id'> & Partial<TradeFields>): Promise<void> {
   const trade = await getStoredTrade(id);
+  const type = changes.type ?? trade.type;
   const fields: TradeFields = {
     date: changes.date ?? trade.date,
-    type: changes.type ?? trade.type,
+    type,
     quantity: changes.quantity ?? trade.quantity,
     price: changes.price ?? trade.price,
-    fee: changes.fee ?? trade.fee,
+    // Only buys and sells have a fee, and only vests withhold shares
+    fee: type === 'vest' ? 0 : (changes.fee ?? trade.fee),
+    withheld: type === 'vest' ? (changes.withheld ?? trade.withheld) : 0,
   };
   validateTradeFields(fields);
 
@@ -486,12 +493,14 @@ function getTransactionFields(
   security: db.DbSecurity,
   fields: TradeFields,
 ) {
-  const label = fields.type === 'buy' ? 'Buy' : 'Sell';
+  const label = { buy: 'Buy', sell: 'Sell', vest: 'Vest' }[fields.type];
+  const withheld =
+    fields.withheld > 0 ? `, ${fields.withheld} withheld for tax` : '';
   return {
     account,
     amount: getTradeCashAmount(fields),
     date: fields.date,
-    notes: `${label} ${fields.quantity} ${security.symbol} @ ${fields.price}`,
+    notes: `${label} ${fields.quantity} ${security.symbol} @ ${fields.price}${withheld}`,
     cleared: true,
     investment_type: 'trade',
   };
@@ -503,15 +512,25 @@ function validateTradeFields({
   quantity,
   price,
   fee,
+  withheld,
 }: TradeFields) {
   validateDate('trade', date);
-  if (type !== 'buy' && type !== 'sell') {
+  if (type !== 'buy' && type !== 'sell' && type !== 'vest') {
     throw new ValidationError(`trade has unknown type '${String(type)}'`);
   }
   validatePositive('trade quantity', quantity);
   validatePositive('trade price', price);
   if (!Number.isInteger(fee) || fee < 0) {
     throw new ValidationError('trade fee must be a whole number of cents');
+  }
+  if (type === 'vest' && fee !== 0) {
+    throw new ValidationError('vest has no fee');
+  }
+  if (!Number.isFinite(withheld) || withheld < 0) {
+    throw new ValidationError('trade withheld shares must be zero or more');
+  }
+  if (type !== 'vest' && withheld !== 0) {
+    throw new ValidationError('only a vest withholds shares');
   }
 }
 

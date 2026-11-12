@@ -45,6 +45,20 @@ Money moving into the account is an ordinary [transfer](../transactions/transfer
 
 Dividends are also ordinary transactions. Add one to the account as a deposit when you receive it.
 
+### Stock You Receive as Pay
+
+If your employer pays you in shares, such as RSUs, record each vest as a trade:
+
+1. Click **Add trade** and choose **Vest**.
+2. Enter the vest date and the symbol.
+3. Under **Vested**, enter all the shares that vested. Under **Withheld**, enter any shares your employer held back for tax.
+4. Enter the price on the vest date. Your vest statement shows it, and if you have set up price updates, Actual fills in that day's closing price.
+5. Click **Save**.
+
+Only the shares that reach your account are added, and no cash leaves the account. Their cost is the price on the vest date, which is also what your gain or loss is worked out from when you sell. Below the fields, Actual shows the shares you received, the pay the vest is worth, and how much of that was withheld for tax.
+
+Shares you receive as pay don't affect your budget until you sell them and move the cash to a budget account, since you can't spend them before then. Shares that haven't vested yet aren't yours, so don't record them until they vest.
+
 ## Reading the Holdings Table
 
 | Column          | What It Shows                                                        |
