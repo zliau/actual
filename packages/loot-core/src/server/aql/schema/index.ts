@@ -136,6 +136,15 @@ export const schema = {
     status: f('string', { required: true }),
     tombstone: f('boolean'),
   },
+  dividend_suggestions: {
+    id: f('id'),
+    account: f('id', { ref: 'accounts', required: true }),
+    security: f('id', { ref: 'securities', required: true }),
+    date: f('date', { required: true }),
+    per_share: f('float', { required: true }),
+    status: f('string', { required: true }),
+    tombstone: f('boolean'),
+  },
   trades: {
     id: f('id'),
     account: f('id', { ref: 'accounts', required: true }),

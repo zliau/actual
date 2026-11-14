@@ -25,6 +25,7 @@ import type {
   UpdateSecurityPricesResult,
 } from '#types/models';
 
+import { suggestDividend } from './dividends';
 import { updateMarketValue } from './market-value';
 import { getConfirmedSplits, suggestSecuritySplit } from './splits';
 import { storeSecurityPrice } from './store-price';
@@ -230,7 +231,12 @@ export async function updateSecurityPrices(): Promise<UpdateSecurityPricesResult
   if ('count' in result && result.count > 0) {
     connection.send('sync-event', {
       type: 'success',
-      tables: ['security_prices', 'security_splits', 'transactions'],
+      tables: [
+        'security_prices',
+        'security_splits',
+        'dividend_suggestions',
+        'transactions',
+      ],
     });
   }
 
@@ -314,7 +320,12 @@ async function fetchSecurityPrices({
       continue;
     }
 
-    let prices: Array<{ date: string; close: number; splitFactor?: number }>;
+    let prices: Array<{
+      date: string;
+      close: number;
+      splitFactor?: number;
+      dividend?: number;
+    }>;
     try {
       ({ prices } = await post(
         `${url}/prices`,
@@ -356,6 +367,19 @@ async function fetchSecurityPrices({
             security: security.id,
             date,
             ratio: splitFactor,
+          });
+        }
+      }
+      // Only dividends since the last fetch are suggested, so ones paid before
+      // a security's prices were first fetched, or for days fetched again for
+      // a backdated trade, are left for the user to enter
+      const latestFetched = toDate(security.latest_fetched);
+      for (const { date, dividend } of prices) {
+        if (dividend != null && latestFetched != null && date > latestFetched) {
+          await suggestDividend({
+            security: security.id,
+            date,
+            perShare: dividend,
           });
         }
       }

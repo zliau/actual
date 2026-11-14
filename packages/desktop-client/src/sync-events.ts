@@ -167,6 +167,7 @@ export function listenForSyncEvent(store: AppStore, queryClient: QueryClient) {
         tables.includes('trades') ||
         tables.includes('security_prices') ||
         tables.includes('security_splits') ||
+        tables.includes('dividend_suggestions') ||
         tables.includes('securities') ||
         tables.includes('transactions')
       ) {

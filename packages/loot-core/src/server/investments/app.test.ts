@@ -692,6 +692,7 @@ describe('holdings-get', () => {
       holdings: [],
       cash: 0,
       suggestedSplits: [],
+      suggestedDividends: [],
     });
   });
 });

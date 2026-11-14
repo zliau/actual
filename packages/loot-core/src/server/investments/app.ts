@@ -30,6 +30,7 @@ import type {
   TradeType,
 } from '#types/models';
 
+import { answerDividendSuggestion, getSuggestedDividends } from './dividends';
 import { updateMarketValue, updateMarketValueOfHolders } from './market-value';
 import { getInvestmentPerformance } from './performance';
 import {
@@ -58,6 +59,7 @@ export type InvestmentsHandlers = {
   'security-split-set': typeof setSecuritySplit;
   'security-split-dismiss': typeof dismissSecuritySplit;
   'security-split-delete': typeof deleteSecuritySplit;
+  'dividend-suggestion-answer': typeof answerDividendSuggestion;
   'trades-get': typeof getTrades;
   'trade-create': typeof createTrade;
   'trade-update': typeof updateTrade;
@@ -80,6 +82,10 @@ app.method('security-splits-get', getSecuritySplits);
 app.method('security-split-set', mutator(undoable(setSecuritySplit)));
 app.method('security-split-dismiss', mutator(undoable(dismissSecuritySplit)));
 app.method('security-split-delete', mutator(undoable(deleteSecuritySplit)));
+app.method(
+  'dividend-suggestion-answer',
+  mutator(undoable(answerDividendSuggestion)),
+);
 app.method('trades-get', getTrades);
 app.method('trade-create', mutator(undoable(createTrade)));
 app.method('trade-update', mutator(undoable(updateTrade)));
@@ -635,6 +641,12 @@ async function getHoldings({
       return split.status === 'suggested' && holding
         ? [{ ...split, symbol: holding.symbol }]
         : [];
+    }),
+    suggestedDividends: await getSuggestedDividends({
+      account,
+      trades,
+      splits: allSplits,
+      securities: tradedSecurities,
     }),
   };
 }

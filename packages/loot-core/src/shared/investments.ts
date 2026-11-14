@@ -342,6 +342,19 @@ export function getMoveInCosts(
   return costs;
 }
 
+// The shares held when a dividend's ex-date begins, which are the ones it pays
+// on: those from trades before that day, after any split up to it
+export function getSharesBeforeExDate(
+  trades: HoldingTrade[],
+  splits: Split[],
+  exDate: string,
+): number {
+  return getPosition(
+    trades.filter(trade => trade.date < exDate),
+    splits.filter(split => split.date <= exDate),
+  ).quantity;
+}
+
 // Works out a position from all of a security's trades in an account. The
 // price is the latest close, or the latest trade's price when that is newer,
 // adjusted for any split since then.

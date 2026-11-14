@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import { send } from '@actual-app/core/platform/client/connection';
 import type {
+  DividendSuggestion,
   SecurityExchange,
   SecurityPriceEntity,
   SecuritySplitEntity,
@@ -29,6 +30,8 @@ type SaveTradePayload =
       name?: string | null;
       // For a move out: the account the shares go to
       transfer_account?: TradeEntity['account'];
+      // The suggested dividend the trade records
+      dividend?: DividendSuggestion['id'];
     } & TradeFields)
   | ({ id: TradeEntity['id'] } & TradeFields);
 
@@ -86,10 +89,27 @@ export function useSaveTradeMutation() {
       return;
     }
 
-    const { symbol, exchange, name, ...trade } = payload;
+    const { symbol, exchange, name, dividend, ...trade } = payload;
     const security = await send('security-create', { symbol, exchange, name });
     await send('trade-create', { ...trade, security });
+    if (dividend) {
+      await send('dividend-suggestion-answer', {
+        id: dividend,
+        status: 'recorded',
+      });
+    }
   }, t('There was an error saving the trade. Please try again.'));
+}
+
+// Leaves a suggested dividend unrecorded, and stops it from being suggested
+export function useDismissDividendMutation() {
+  const { t } = useTranslation();
+
+  return useInvestmentMutation(
+    ({ id }: Pick<DividendSuggestion, 'id'>) =>
+      send('dividend-suggestion-answer', { id, status: 'dismissed' }),
+    t('There was an error ignoring the dividend. Please try again.'),
+  );
 }
 
 export function useDeleteTradeMutation() {

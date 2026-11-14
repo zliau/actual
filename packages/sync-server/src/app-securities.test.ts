@@ -120,6 +120,22 @@ describe('app-securities', () => {
       ]);
     });
 
+    it('reports a dividend on its ex-date', async () => {
+      vi.mocked(undici.fetch).mockResolvedValue(
+        jsonResponse(200, [
+          { date: '2026-01-02T00:00:00.000Z', close: 400, divCash: 0 },
+          { date: '2026-01-05T00:00:00.000Z', close: 399, divCash: 0.26 },
+        ]),
+      );
+
+      const res = await prices('US', 'AAPL');
+
+      expect(res.body.data.prices).toEqual([
+        { date: '2026-01-02', close: 400 },
+        { date: '2026-01-05', close: 399, dividend: 0.26 },
+      ]);
+    });
+
     it('writes share classes the way Tiingo does', async () => {
       vi.mocked(undici.fetch).mockResolvedValue(jsonResponse(200, []));
       await prices('US', 'BRK.B');
@@ -198,7 +214,7 @@ describe('app-securities', () => {
 
     // Yahoo divides what came before each split by its ratio: these traded at
     // 800, 808, 404 and 100, with a 2-for-1 split on Jan 6 and a 4-for-1 on
-    // Mar 2
+    // Mar 2, and the dividend paid 0.8 a share
     const chart = (meta: object = {}) => ({
       chart: {
         result: [
@@ -211,6 +227,7 @@ describe('app-securities', () => {
                 [JAN_6]: { date: JAN_6, numerator: 2, denominator: 1 },
                 [MAR_2]: { date: MAR_2, numerator: 4, denominator: 1 },
               },
+              dividends: { [JAN_5]: { date: JAN_5, amount: 0.1 } },
             },
           },
         ],
@@ -218,18 +235,18 @@ describe('app-securities', () => {
       },
     });
 
-    it('returns as-traded closes and splits in the range', async () => {
+    it('returns as-traded closes, splits and dividends in the range', async () => {
       vi.mocked(undici.fetch).mockResolvedValue(jsonResponse(200, chart()));
 
       const res = await prices('TSX', 'SHOP');
 
       expect(res.body.data.prices).toEqual([
         { date: '2026-01-02', close: 800 },
-        { date: '2026-01-05', close: 808 },
+        { date: '2026-01-05', close: 808, dividend: 0.8 },
         { date: '2026-01-06', close: 404, splitFactor: 2 },
       ]);
       expect(fetchedUrl()).toContain('/v8/finance/chart/SHOP.TO?');
-      expect(fetchedUrl()).toContain('events=split');
+      expect(fetchedUrl()).toContain('events=div%7Csplit');
       expect(vi.mocked(undici.fetch).mock.calls[0][1]?.headers).toMatchObject({
         'User-Agent': expect.any(String),
       });

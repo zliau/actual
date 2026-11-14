@@ -8,6 +8,7 @@ import { View } from '@actual-app/components/view';
 import type { AccountEntity } from '@actual-app/core/types/models';
 import { useQuery } from '@tanstack/react-query';
 
+import { HoldingsDividendSuggestion } from '#components/accounts/HoldingsDividendSuggestion';
 import { HoldingsSplitSuggestion } from '#components/accounts/HoldingsSplitSuggestion';
 import { FinancialText } from '#components/FinancialText';
 import { PrivacyFilter } from '#components/PrivacyFilter';
@@ -76,6 +77,15 @@ export function MobileHoldings({ account }: MobileHoldingsProps) {
       {data?.suggestedSplits.map(split => (
         <HoldingsSplitSuggestion key={split.id} split={split} />
       ))}
+
+      {!isReadOnly &&
+        data?.suggestedDividends.map(dividend => (
+          <HoldingsDividendSuggestion
+            key={dividend.id}
+            dividend={dividend}
+            currency={currency}
+          />
+        ))}
 
       {data && data.holdings.length > 0 && (
         <View

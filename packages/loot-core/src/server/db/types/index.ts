@@ -88,6 +88,16 @@ export type DbSecuritySplit = {
   tombstone: 1 | 0;
 };
 
+export type DbDividendSuggestion = {
+  id: string;
+  account: DbAccount['id'];
+  security: DbSecurity['id'];
+  date: number;
+  per_share: number;
+  status: 'suggested' | 'dismissed' | 'recorded';
+  tombstone: 1 | 0;
+};
+
 export type DbTrade = {
   id: string;
   account: DbAccount['id'];

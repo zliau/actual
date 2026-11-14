@@ -104,12 +104,33 @@ export type Holding = {
   dividends: number;
 };
 
+export type DividendSuggestionStatus = 'suggested' | 'dismissed' | 'recorded';
+
+// A dividend a provider reported for a security an account held, waiting to be
+// recorded or ignored. It is the gross amount, before any tax withheld.
+export type DividendSuggestion = {
+  id: string;
+  account: string;
+  security: SecurityEntity['id'];
+  symbol: string;
+  // The ex-dividend date: shares held when it begins are paid
+  date: string;
+  // Per share, in whole units of the security's currency
+  perShare: number;
+  shares: number;
+  // shares × perShare, in cents
+  amount: number;
+  // Whether the account's last dividend from this security was reinvested
+  wasLastReinvested: boolean;
+};
+
 export type AccountHoldings = {
   holdings: Holding[];
   // The account's transactions added up without its market value, in cents
   cash: number;
   // Splits a provider reported for what the account holds, waiting for an answer
   suggestedSplits: Array<SecuritySplitEntity & { symbol: string }>;
+  suggestedDividends: DividendSuggestion[];
 };
 
 export type SecuritySearchResult = {

@@ -6,6 +6,7 @@ import type {
   BankSyncCredentialSource,
   CategoryEntity,
   CategoryGroupEntity,
+  DividendSuggestion,
   ExchangeRateEntity,
   GoCardlessToken,
   NewRuleEntity,
@@ -107,6 +108,9 @@ export type Modal =
         trade?: TradeEntity;
         // The symbol of the trade, fixed once it is stored
         symbol?: string;
+        // A suggested dividend to record, as cash or reinvested
+        dividend?: DividendSuggestion;
+        type?: 'dividend' | 'reinvested-dividend';
       };
     }
   | {

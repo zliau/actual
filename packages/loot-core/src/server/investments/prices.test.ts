@@ -4,6 +4,7 @@ import * as db from '#server/db';
 import { loadMappings } from '#server/db/mappings';
 import { PostError } from '#server/errors';
 import { app } from '#server/investments/app';
+import { forgetAttemptedFetches } from '#server/investments/prices';
 import { handlers as mockServerHandlers } from '#server/tests/mockSyncServer';
 import {
   getLatestClosingDay,
@@ -610,6 +611,211 @@ describe('splits', () => {
     await expect(set({ security, date: 'soon', ratio: 2 })).rejects.toThrow(
       'invalid date',
     );
+  });
+});
+
+describe('dividends', () => {
+  beforeEach(async () => {
+    await global.emptyDatabase()();
+    await loadMappings();
+    vi.mocked(asyncStorage.getItem).mockResolvedValue('token');
+  });
+
+  afterEach(() => {
+    delete handlers['/securities/prices'];
+    vi.mocked(asyncStorage.getItem).mockReset();
+  });
+
+  // Holds 10 AAPL from 2016-10-15, with closes fetched up to 2016-11-30
+  async function setUp() {
+    const account = await accountsApp.handlers['account-create']({
+      name: 'Brokerage',
+      currency: 'USD',
+      investment: true,
+    });
+    const security = await app.handlers['security-create']({
+      symbol: 'AAPL',
+      exchange: 'US',
+    });
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-10-15',
+      type: 'buy',
+      quantity: 10,
+      price: 100,
+    });
+    handlers['/securities/prices'] = () => ({
+      prices: [
+        // History goes back to the first trade, as a provider's does, so the
+        // next fetch only asks for the days since this one
+        { date: '2016-10-17', close: 100 },
+        // Paid before the first fetch, so left alone
+        { date: '2016-11-10', close: 100, dividend: 0.5 },
+        { date: '2016-11-30', close: 100 },
+      ],
+    });
+    await app.handlers['security-prices-update']();
+    return { account, security };
+  }
+
+  async function reportDividend(date = '2016-12-15', dividend = 0.5) {
+    handlers['/securities/prices'] = () => ({
+      prices: [
+        { date, close: 100, dividend },
+        { date: '2016-12-30', close: 100 },
+      ],
+    });
+    await app.handlers['security-prices-update']();
+  }
+
+  const suggested = async (account: string) =>
+    (await app.handlers['holdings-get']({ account })).suggestedDividends;
+
+  it('suggests only dividends since the last fetch, before tax', async () => {
+    const { account, security } = await setUp();
+    expect(await suggested(account)).toEqual([]);
+
+    await reportDividend();
+
+    expect(await suggested(account)).toEqual([
+      {
+        id: `${account}-${security}-2016-12-15`,
+        account,
+        security,
+        symbol: 'AAPL',
+        date: '2016-12-15',
+        perShare: 0.5,
+        shares: 10,
+        amount: 500,
+        wasLastReinvested: false,
+      },
+    ]);
+  });
+
+  it('suggests Toronto dividends', async () => {
+    const account = await accountsApp.handlers['account-create']({
+      name: 'TFSA',
+      currency: 'CAD',
+      investment: true,
+    });
+    const security = await app.handlers['security-create']({
+      symbol: 'RY',
+      exchange: 'TSX',
+    });
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-11-15',
+      type: 'buy',
+      quantity: 20,
+      price: 80,
+    });
+    handlers['/securities/prices'] = () => ({
+      prices: [
+        { date: '2016-11-20', close: 80, dividend: 0.81 },
+        { date: '2016-11-30', close: 80 },
+      ],
+    });
+    await app.handlers['security-prices-update']();
+    expect(await suggested(account)).toEqual([]);
+
+    handlers['/securities/prices'] = () => ({
+      prices: [
+        { date: '2016-12-22', close: 80, dividend: 0.81 },
+        { date: '2016-12-30', close: 80 },
+      ],
+    });
+    await app.handlers['security-prices-update']();
+
+    expect(await suggested(account)).toEqual([
+      expect.objectContaining({
+        symbol: 'RY',
+        date: '2016-12-22',
+        shares: 20,
+        amount: 1620,
+      }),
+    ]);
+  });
+
+  it('counts the shares held before the ex-date, after splits', async () => {
+    const { account, security } = await setUp();
+    await app.handlers['security-split-set']({
+      security,
+      date: '2016-12-01',
+      ratio: 2,
+    });
+    // Bought on the ex-date, so not paid
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-12-15',
+      type: 'buy',
+      quantity: 5,
+      price: 50,
+    });
+
+    await reportDividend();
+
+    expect(await suggested(account)).toEqual([
+      expect.objectContaining({ shares: 20, amount: 1000 }),
+    ]);
+  });
+
+  it('leaves out an account that sold its shares before the ex-date', async () => {
+    const { account, security } = await setUp();
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-12-01',
+      type: 'sell',
+      quantity: 10,
+      price: 100,
+    });
+
+    await reportDividend();
+
+    expect(await suggested(account)).toEqual([]);
+  });
+
+  it('stops suggesting a dividend once recorded or ignored', async () => {
+    const { account, security } = await setUp();
+    await reportDividend();
+    const [dividend] = await suggested(account);
+
+    await app.handlers['dividend-suggestion-answer']({
+      id: dividend.id,
+      status: 'dismissed',
+    });
+    // Fetched again from where the first fetch left off, as on a later day
+    const refetch = async (date?: string) => {
+      await db.run('DELETE FROM security_prices WHERE date > ?', [20161130]);
+      forgetAttemptedFetches();
+      await reportDividend(date);
+    };
+    await refetch();
+    expect(await suggested(account)).toEqual([]);
+
+    await refetch('2016-12-20');
+    const [next] = await suggested(account);
+    await app.handlers['trade-create']({
+      account,
+      security,
+      date: '2016-12-20',
+      type: 'reinvested-dividend',
+      quantity: 0.05,
+      price: 100,
+    });
+    await app.handlers['dividend-suggestion-answer']({
+      id: next.id,
+      status: 'recorded',
+    });
+    expect(await suggested(account)).toEqual([]);
+
+    await refetch('2016-12-29');
+    expect(await suggested(account)).toEqual([
+      expect.objectContaining({ wasLastReinvested: true }),
+    ]);
   });
 });
 

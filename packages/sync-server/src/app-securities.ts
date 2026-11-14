@@ -13,8 +13,8 @@ import {
 const TIINGO_URL = 'https://api.tiingo.com/tiingo';
 // Toronto stocks, which Tiingo doesn't have. Yahoo has no official API, so this
 // is the data its own site uses: it needs no key and goes back as far as
-// needed, but can change or be blocked without notice. Its closes are adjusted
-// for later splits, so they are turned back into as traded.
+// needed, but can change or be blocked without notice. Its closes and dividends
+// are adjusted for later splits, so they are turned back into as traded.
 const YAHOO_CHART_URL = 'https://query1.finance.yahoo.com/v8/finance/chart';
 const YAHOO_SEARCH_URL = 'https://query2.finance.yahoo.com/v1/finance/search';
 // Yahoo turns away requests without a browser's user agent
@@ -32,8 +32,14 @@ const MAX_QUERY_LENGTH = 50;
 const MAX_SEARCH_RESULTS = 20;
 
 type Exchange = 'US' | 'TSX';
-// `splitFactor` is only there on the day of a split
-type Price = { date: string; close: number; splitFactor?: number };
+// `splitFactor` is only there on the day of a split, and `dividend` on the
+// ex-date of a dividend, as cash per share before any tax
+type Price = {
+  date: string;
+  close: number;
+  splitFactor?: number;
+  dividend?: number;
+};
 type SearchResult = { symbol: string; name: string };
 type FailureReason =
   | 'not-configured'
@@ -75,8 +81,9 @@ app.post('/status', (_req, res) => {
   });
 });
 
-// Returns the closes of a security from `start` to `end`, as traded. Days
-// without trading are missing. A split is on the first day at its new price.
+// Returns the closes of a security from `start` to `end`. Days without trading
+// are missing. A split is on the first day at its new price, and a dividend on
+// its ex-date, as cash per share before any tax.
 app.post('/prices', async (req, res) => {
   const { exchange, symbol, start, end } = req.body || {};
   if (
@@ -229,12 +236,19 @@ function getTiingoPrices(symbol: string, start: string, end: string) {
         throw new ProviderError('prices-unavailable');
       }
       return (
-        body as Array<{ date: string; close: number; splitFactor?: number }>
+        body as Array<{
+          date: string;
+          close: number;
+          splitFactor?: number;
+          divCash?: number;
+        }>
       ).map(row => ({
         date: row.date.slice(0, 10),
         close: row.close,
         ...(row.splitFactor != null &&
           row.splitFactor !== 1 && { splitFactor: row.splitFactor }),
+        ...(row.divCash != null &&
+          row.divCash > 0 && { dividend: row.divCash }),
       }));
     },
   );
@@ -271,6 +285,7 @@ type YahooChart = {
       string,
       { date: number; numerator: number; denominator: number }
     >;
+    dividends?: Record<string, { date: number; amount: number }>;
   };
   meta?: { currentTradingPeriod?: { regular?: { end?: number } } };
 };
@@ -291,7 +306,7 @@ async function loadYahooPrices(
   const period1 = Date.parse(`${start}T00:00:00Z`) / 1000;
   const body = await getYahooJson(
     `${YAHOO_CHART_URL}/${getYahooTicker(symbol)}` +
-      `?period1=${period1}&period2=${now}&interval=1d&events=split`,
+      `?period1=${period1}&period2=${now}&interval=1d&events=div%7Csplit`,
   );
   const chart = body['chart'] as
     | { result?: YahooChart[] | null; error?: { code?: string } | null }
@@ -311,6 +326,12 @@ async function loadYahooPrices(
       date: toTorontoDate(split.date),
       ratio: split.numerator / split.denominator,
     }));
+  const dividends = new Map(
+    Object.values(result.events?.dividends ?? {}).map(dividend => [
+      toTorontoDate(dividend.date),
+      dividend.amount,
+    ]),
+  );
   // Yahoo divides what came before a split by its ratio
   const unadjust = (date: string, value: number) =>
     roundPrice(
@@ -341,11 +362,14 @@ async function loadYahooPrices(
       return [];
     }
     const split = splits.find(split => split.date === date);
+    const dividend = dividends.get(date);
     return [
       {
         date,
         close: unadjust(date, close),
         ...(split && split.ratio !== 1 && { splitFactor: split.ratio }),
+        ...(dividend != null &&
+          dividend > 0 && { dividend: unadjust(date, dividend) }),
       },
     ];
   });

@@ -23,6 +23,7 @@ import {
 import { pushModal } from '#modals/modalsSlice';
 import { useDispatch } from '#redux';
 
+import { HoldingsDividendSuggestion } from './HoldingsDividendSuggestion';
 import { HoldingsNumberCell as NumberCell } from './HoldingsNumberCell';
 import { HoldingsPriceUpdate } from './HoldingsPriceUpdate';
 import { HoldingsRow as Row } from './HoldingsRow';
@@ -134,6 +135,15 @@ export function Holdings({ account }: HoldingsProps) {
       {data?.suggestedSplits.map(split => (
         <HoldingsSplitSuggestion key={split.id} split={split} />
       ))}
+
+      {!isReadOnly &&
+        data?.suggestedDividends.map(dividend => (
+          <HoldingsDividendSuggestion
+            key={dividend.id}
+            dividend={dividend}
+            currency={currency}
+          />
+        ))}
 
       <View
         style={{

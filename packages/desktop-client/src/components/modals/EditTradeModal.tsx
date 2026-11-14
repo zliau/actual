@@ -30,7 +30,11 @@ import {
   amountToInteger,
   currencyToAmount,
 } from '@actual-app/core/shared/util';
-import type { TradeEntity, TradeType } from '@actual-app/core/types/models';
+import type {
+  DividendSuggestion,
+  TradeEntity,
+  TradeType,
+} from '@actual-app/core/types/models';
 import { useQuery } from '@tanstack/react-query';
 
 import {
@@ -65,6 +69,9 @@ type EditTradeModalProps = {
   currency: string;
   trade?: TradeEntity;
   symbol?: string;
+  // A suggested dividend to record, as cash or reinvested
+  dividend?: DividendSuggestion;
+  type?: 'dividend' | 'reinvested-dividend';
 };
 
 export function EditTradeModal({
@@ -72,6 +79,8 @@ export function EditTradeModal({
   currency,
   trade,
   symbol: initialSymbol,
+  dividend,
+  type: initialType,
 }: EditTradeModalProps) {
   const { t } = useTranslation();
   const format = useFormat();
@@ -80,8 +89,12 @@ export function EditTradeModal({
   const saveTrade = useSaveTradeMutation();
   const deleteTrade = useDeleteTradeMutation();
 
-  const [type, setType] = useState<TradeType>(trade?.type ?? 'buy');
-  const [date, setDate] = useState(trade?.date ?? currentDay());
+  const [type, setType] = useState<TradeType>(
+    trade?.type ?? initialType ?? 'buy',
+  );
+  const [date, setDate] = useState(
+    trade?.date ?? dividend?.date ?? currentDay(),
+  );
   const [symbol, setSymbol] = useState(initialSymbol ?? '');
   const [name, setName] = useState<string | null>(null);
   // A vest's shares are entered as all that vested, withheld ones included
@@ -98,8 +111,13 @@ export function EditTradeModal({
     trade && trade.fee > 0 ? formatSharePrice(trade.fee / 100) : '',
   );
   const [amountText, setAmountText] = useState(
-    trade && trade.amount > 0 ? formatSharePrice(trade.amount / 100) : '',
+    trade && trade.amount > 0
+      ? formatSharePrice(trade.amount / 100)
+      : dividend
+        ? formatSharePrice(dividend.amount / 100)
+        : '',
   );
+  const [isQuantityEdited, setIsQuantityEdited] = useState(false);
   const [toAccount, setToAccount] = useState('');
   const [error, setError] = useState<string | null>(null);
   // Looked up once typing in the symbol is done, so each keystroke doesn't use
@@ -130,12 +148,27 @@ export function EditTradeModal({
   const shownPriceText =
     close && !isPriceEdited ? formatSharePrice(close.close) : priceText;
 
+  // A reinvested dividend bought as many shares as its cash paid for at the
+  // price, until the shares are typed in
+  const dividendShares =
+    dividend && type === 'reinvested-dividend' && !isQuantityEdited
+      ? parseExchangeRate(shownPriceText)
+      : null;
+  const shownQuantityText =
+    dividend && dividendShares != null && dividendShares > 0
+      ? formatShares(
+          Math.round((dividend.amount / 100 / dividendShares) * 10000) / 10000,
+        )
+      : quantityText;
+
   const isVest = type === 'vest';
   // Dividends and returns of capital only have an amount
   const isCashOnlyType = isCashOnly(type);
   const isMoveTrade = isMove(type);
   const hasFee = type === 'buy' || type === 'sell';
-  const enteredQuantity = isCashOnlyType ? 0 : parseExchangeRate(quantityText);
+  const enteredQuantity = isCashOnlyType
+    ? 0
+    : parseExchangeRate(shownQuantityText);
   const price = isCashOnlyType ? 0 : parseExchangeRate(shownPriceText);
   const feeAmount = feeText.trim() === '' ? 0 : currencyToAmount(feeText);
   const fee = !hasFee
@@ -235,6 +268,7 @@ export function EditTradeModal({
         name,
         ...fields,
         ...(type === 'move-out' && { transfer_account: toAccount }),
+        ...(dividend && { dividend: dividend.id }),
       });
     }
     close();
@@ -341,7 +375,7 @@ export function EditTradeModal({
                 aria-label={t('Symbol')}
                 value={symbol}
                 // A stored trade keeps its security, so delete it to change this
-                disabled={!!trade}
+                disabled={!!trade || !!dividend}
                 onChangeValue={value => {
                   setSymbol(value.toUpperCase());
                   setName(null);
@@ -351,7 +385,7 @@ export function EditTradeModal({
                 style={{ flex: 1 }}
               />
             </InlineField>
-            {!trade && exchange && (
+            {!trade && !dividend && exchange && (
               <TradeSymbolSearch
                 exchange={exchange}
                 query={symbol}
@@ -379,9 +413,10 @@ export function EditTradeModal({
               <NumberField
                 label={isVest ? t('Vested') : t('Shares')}
                 name="quantity"
-                value={quantityText}
+                value={shownQuantityText}
                 onChange={value => {
                   setQuantityText(value);
+                  setIsQuantityEdited(true);
                   clearError();
                 }}
               />
@@ -430,6 +465,22 @@ export function EditTradeModal({
                   clearError();
                 }}
               />
+            )}
+
+            {dividend && (
+              <Text style={{ color: theme.pageTextLight, marginTop: 10 }}>
+                {type === 'reinvested-dividend' ? (
+                  <Trans>
+                    The date is the ex-dividend date. Change it to the day the
+                    shares were bought, and enter the shares your broker shows.
+                  </Trans>
+                ) : (
+                  <Trans>
+                    The date is the ex-dividend date. Change it to the day the
+                    cash arrived if you like. The amount is before any tax.
+                  </Trans>
+                )}
+              </Text>
             )}
 
             {error && <FormError style={{ marginTop: 5 }}>{error}</FormError>}

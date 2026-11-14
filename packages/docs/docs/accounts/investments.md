@@ -70,6 +70,18 @@ The dividend adds its cash to the account, and it counts toward the stock's retu
 
 If you have already entered dividends as deposits, delete them and record them as dividends instead, so that they count toward the stock's return.
 
+#### Suggested Dividends
+
+Actual shows a message when a stock you hold pays a dividend, once price updates are set up. It shows the amount per share, the shares you held on the ex-dividend date, and what that comes to before tax. Dividends paid before the stock's prices were first downloaded are not suggested, so enter those yourself.
+
+- Click **Record as cash** to add the dividend. The form opens filled in, with the ex-dividend date as the date. Change it to the day the cash arrived if you like, then click **Save**.
+- Click **Record reinvested** if the dividend bought more shares. Change the date to the day the shares were bought and enter the shares your broker shows, then click **Save**.
+- Click **Ignore** if you don't want to record it.
+
+The amount is before tax. If tax was withheld, change the amount to what you received.
+
+Dividends of Toronto stocks come from Yahoo Finance, like their prices.
+
 #### Reinvested Dividends
 
 If a dividend bought more shares instead of paying you cash, as with a dividend reinvestment plan (DRIP), record it as a reinvested dividend:
@@ -143,7 +155,7 @@ The key is stored on your server and applies to all the budgets on it, so it can
 Actual then fetches closing prices when you open a budget and every hour while it stays open. To fetch them right away, click **Update prices**.
 
 :::note
-Yahoo Finance doesn't offer its prices officially, so Toronto prices may stop updating at any time. If they do, enter prices yourself, and enter Toronto splits yourself too.
+Yahoo Finance doesn't offer its prices officially, so Toronto prices may stop updating at any time. If they do, enter prices yourself, and enter Toronto splits and dividends yourself too.
 :::
 
 ### Entering Prices by Hand
